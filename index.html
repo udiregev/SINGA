@@ -356,15 +356,13 @@ And one more line to check scrolling works well</textarea>
     recognition.lang = 'en-US';
 
     recognition.onresult = (event) => {
-      let finalChunk = '';
-      let interimChunk = '';
+      // Process every result (interim AND final) so words paint live as they're
+      // recognized, instead of waiting for Android to "finalize" a whole phrase.
+      let combinedChunk = '';
       for (let i = event.resultIndex; i < event.results.length; i++) {
-        const res = event.results[i];
-        if (res.isFinal) finalChunk += res[0].transcript + ' ';
-        else interimChunk += res[0].transcript + ' ';
+        combinedChunk += event.results[i][0].transcript + ' ';
       }
-      if (finalChunk) handleTranscript(finalChunk);
-      else if (interimChunk) transcriptText.textContent = interimChunk;
+      if (combinedChunk) handleTranscript(combinedChunk);
     };
 
     recognition.onerror = (e) => {
