@@ -16,6 +16,7 @@
     --accent: #e8b34c;
     --accent-dim: #6b5a2e;
     --danger: #d9634c;
+    --row-h: 44px;
   }
   * { box-sizing: border-box; }
   html, body {
@@ -31,7 +32,6 @@
     height: 100%;
   }
 
-  /* --- Header --- */
   header {
     padding: 14px 18px 10px;
     border-bottom: 1px solid var(--line);
@@ -50,7 +50,6 @@
     margin-top: 2px;
   }
 
-  /* --- Setup panel --- */
   #setup {
     padding: 16px 18px;
     overflow-y: auto;
@@ -100,7 +99,6 @@
   }
   button.primary:active { opacity: 0.85; }
 
-  /* --- Stage view --- */
   #stage { display: none; flex: 1; flex-direction: column; overflow: hidden; }
   #stage.active { display: flex; }
   #setup.hidden { display: none; }
@@ -133,24 +131,43 @@
     font-size: 12px;
   }
 
-  #lyrics-scroll {
+  /* --- Fixed-viewport, row-locked lyric scroller --- */
+  #lyrics-viewport {
     flex: 1;
-    overflow-y: auto;
-    padding: 40vh 20px;
-    scroll-behavior: smooth;
+    overflow: hidden;
+    position: relative;
+    padding: 0 20px;
+  }
+  #lyrics-scroll {
+    position: absolute;
+    top: 0; left: 20px; right: 20px;
+    transition: transform 0.3s ease;
+    will-change: transform;
   }
   .line {
+    height: var(--row-h);
+    line-height: var(--row-h);
     font-size: 22px;
-    line-height: 1.7;
-    color: var(--text-dim);
-    transition: color 0.25s ease, transform 0.25s ease;
-    margin: 6px 0;
+    color: var(--text-upcoming);
+    white-space: nowrap;
+    overflow: hidden;
     text-align: center;
   }
-  .line.upcoming { color: var(--text-upcoming); }
-  .line.current { color: var(--text-current); font-weight: 700; font-size: 26px; }
-  .word { transition: color 0.15s ease; }
-  .word.sung { color: var(--sung); }
+  .line.current { color: var(--text-current); }
+
+  .word { position: relative; display: inline-block; white-space: pre; }
+  .word-fill {
+    position: absolute;
+    top: 0; left: 0;
+    color: var(--sung);
+    white-space: pre;
+    pointer-events: none;
+    clip-path: inset(0 100% 0 0);
+  }
+  .word.sung .word-fill {
+    clip-path: inset(0 0% 0 0);
+    transition: clip-path 0.35s ease;
+  }
 
   #transcript-box {
     flex-shrink: 0;
@@ -214,7 +231,9 @@ And one more line to check scrolling works well</textarea>
       <div id="status-text">Idle</div>
       <button id="stop-btn">Stop</button>
     </div>
-    <div id="lyrics-scroll"></div>
+    <div id="lyrics-viewport">
+      <div id="lyrics-scroll"></div>
+    </div>
     <div id="transcript-box">
       <span class="label">Heard</span>
       <span id="transcript-text">—</span>
@@ -224,6 +243,8 @@ And one more line to check scrolling works well</textarea>
 
 <script>
 (function() {
+  const ROW_HEIGHT = 44; // must match --row-h in CSS
+
   const setupEl = document.getElementById('setup');
   const stageEl = document.getElementById('stage');
   const startBtn = document.getElementById('start-btn');
@@ -282,9 +303,9 @@ And one more line to check scrolling works well</textarea>
 
   let recognition = null;
   let lineEls = [];
-  let wordTokens = [];   // flat list: {lineIdx, wordIdx, norm, el}
-  let cursor = 0;        // index into wordTokens — next word we expect to hear
-  let restarting = false;
+  let wordTokens = [];   // flat list: {lineIdx, norm, el}
+  let searchCursor = 0;  // next wordTokens index to search a match from
+  let litUpTo = -1;      // highest index already painted green (lags one behind the match)
   let shouldBeListening = false;
 
   function normalize(w) {
@@ -295,33 +316,41 @@ And one more line to check scrolling works well</textarea>
     lyricsScroll.innerHTML = '';
     lineEls = [];
     wordTokens = [];
-    cursor = 0;
+    searchCursor = 0;
+    litUpTo = -1;
 
     const lines = raw.split('\n').map(l => l.trim()).filter(l => l.length > 0);
     lines.forEach((lineText, lineIdx) => {
       const lineDiv = document.createElement('div');
-      lineDiv.className = 'line' + (lineIdx === 0 ? ' current' : '');
+      lineDiv.className = 'line';
       const words = lineText.split(/\s+/);
       words.forEach((w, wordIdx) => {
-        const span = document.createElement('span');
-        span.className = 'word';
-        span.textContent = w + (wordIdx < words.length - 1 ? ' ' : '');
-        lineDiv.appendChild(span);
-        wordTokens.push({ lineIdx, norm: normalize(w), el: span });
+        const displayText = w + (wordIdx < words.length - 1 ? ' ' : '');
+        const wrap = document.createElement('span');
+        wrap.className = 'word';
+        const base = document.createElement('span');
+        base.className = 'word-base';
+        base.textContent = displayText;
+        const fill = document.createElement('span');
+        fill.className = 'word-fill';
+        fill.textContent = displayText;
+        wrap.appendChild(base);
+        wrap.appendChild(fill);
+        lineDiv.appendChild(wrap);
+        wordTokens.push({ lineIdx, norm: normalize(w), el: wrap });
       });
       lyricsScroll.appendChild(lineDiv);
       lineEls.push(lineDiv);
     });
+
+    setCurrentLine(0);
   }
 
   function setCurrentLine(lineIdx) {
-    lineEls.forEach((el, i) => {
-      el.classList.remove('current', 'upcoming');
-      if (i === lineIdx) el.classList.add('current');
-      else if (i === lineIdx + 1 || i === lineIdx - 1) el.classList.add('upcoming');
-    });
-    const target = lineEls[lineIdx];
-    if (target) target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    lineEls.forEach((el, i) => el.classList.toggle('current', i === lineIdx));
+    // Lock the current line to the 2nd row of the viewport; everything scrolls as one block.
+    const offset = -(lineIdx - 1) * ROW_HEIGHT;
+    lyricsScroll.style.transform = `translateY(${offset}px)`;
   }
 
   // Try to match a spoken word against the next expected words,
@@ -329,15 +358,16 @@ And one more line to check scrolling works well</textarea>
   function consumeSpokenWord(spokenNorm) {
     if (!spokenNorm) return;
     const LOOKAHEAD = 4;
-    for (let i = cursor; i < Math.min(cursor + LOOKAHEAD, wordTokens.length); i++) {
+    for (let i = searchCursor; i < Math.min(searchCursor + LOOKAHEAD, wordTokens.length); i++) {
       if (wordTokens[i].norm === spokenNorm || wordTokens[i].norm.startsWith(spokenNorm) || spokenNorm.startsWith(wordTokens[i].norm)) {
-        // mark everything up to and including this token as sung
-        for (let j = cursor; j <= i; j++) {
+        // Paint everything up to (but not including) this match — stays one word
+        // behind what was just recognized, to compensate for recognition latency.
+        for (let j = litUpTo + 1; j < i; j++) {
           wordTokens[j].el.classList.add('sung');
         }
-        cursor = i + 1;
-        const newLine = wordTokens[i].lineIdx;
-        setCurrentLine(newLine);
+        litUpTo = i - 1;
+        searchCursor = i + 1;
+        setCurrentLine(wordTokens[i].lineIdx);
         return;
       }
     }
@@ -356,8 +386,6 @@ And one more line to check scrolling works well</textarea>
     recognition.lang = 'en-US';
 
     recognition.onresult = (event) => {
-      // Process every result (interim AND final) so words paint live as they're
-      // recognized, instead of waiting for Android to "finalize" a whole phrase.
       let combinedChunk = '';
       for (let i = event.resultIndex; i < event.results.length; i++) {
         combinedChunk += event.results[i][0].transcript + ' ';
@@ -371,9 +399,7 @@ And one more line to check scrolling works well</textarea>
     };
 
     recognition.onend = () => {
-      // Android Chrome auto-stops after silence; restart if we're still supposed to be listening
       if (shouldBeListening) {
-        restarting = true;
         setTimeout(() => { if (shouldBeListening) recognition.start(); }, 250);
       } else {
         statusDot.className = '';
