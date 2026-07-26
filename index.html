@@ -26,76 +26,28 @@
     font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
     overflow: hidden;
   }
-  #app {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-  }
+  #app { display: flex; flex-direction: column; height: 100%; }
 
-  header {
-    padding: 14px 18px 10px;
-    border-bottom: 1px solid var(--line);
-    flex-shrink: 0;
-  }
-  .brand {
-    font-size: 13px;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--accent);
-    font-weight: 600;
-  }
-  .subtitle {
-    font-size: 12px;
-    color: var(--text-dim);
-    margin-top: 2px;
-  }
+  header { padding: 14px 18px 10px; border-bottom: 1px solid var(--line); flex-shrink: 0; }
+  .brand { font-size: 13px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); font-weight: 600; }
+  .subtitle { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
 
-  #setup {
-    padding: 16px 18px;
-    overflow-y: auto;
-    flex: 1;
-  }
+  #setup { padding: 16px 18px; overflow-y: auto; flex: 1; }
   #setup label {
-    display: block;
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--text-dim);
-    margin-bottom: 6px;
-    margin-top: 16px;
+    display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--text-dim); margin-bottom: 6px; margin-top: 16px;
   }
   #setup label:first-of-type { margin-top: 0; }
   textarea {
-    width: 100%;
-    min-height: 160px;
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    color: var(--text-upcoming);
-    font-size: 15px;
-    line-height: 1.5;
-    padding: 12px;
-    font-family: inherit;
-    resize: vertical;
+    width: 100%; min-height: 160px; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 8px; color: var(--text-upcoming); font-size: 15px; line-height: 1.5;
+    padding: 12px; font-family: inherit; resize: vertical;
   }
   textarea:focus { outline: 1px solid var(--accent); }
-  .hint {
-    font-size: 12px;
-    color: var(--text-dim);
-    margin-top: 6px;
-    line-height: 1.4;
-  }
+  .hint { font-size: 12px; color: var(--text-dim); margin-top: 6px; line-height: 1.4; }
   button.primary {
-    margin-top: 22px;
-    width: 100%;
-    padding: 14px;
-    border-radius: 10px;
-    border: none;
-    background: var(--accent);
-    color: #1a1204;
-    font-size: 16px;
-    font-weight: 700;
-    letter-spacing: 0.01em;
+    margin-top: 22px; width: 100%; padding: 14px; border-radius: 10px; border: none;
+    background: var(--accent); color: #1a1204; font-size: 16px; font-weight: 700; letter-spacing: 0.01em;
   }
   button.primary:active { opacity: 0.85; }
 
@@ -104,99 +56,43 @@
   #setup.hidden { display: none; }
 
   #status-bar {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 18px;
-    border-bottom: 1px solid var(--line);
-    flex-shrink: 0;
-    font-size: 12px;
-    color: var(--text-dim);
+    display: flex; align-items: center; gap: 8px; padding: 10px 18px;
+    border-bottom: 1px solid var(--line); flex-shrink: 0; font-size: 12px; color: var(--text-dim);
   }
-  #dot {
-    width: 8px; height: 8px; border-radius: 50%;
-    background: var(--text-dim);
-    flex-shrink: 0;
-  }
+  #dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-dim); flex-shrink: 0; }
   #dot.listening { background: var(--sung); box-shadow: 0 0 8px var(--sung); animation: pulse 1.4s infinite; }
   #dot.error { background: var(--danger); }
   @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
   #status-text { flex: 1; }
-  #stop-btn {
-    background: none;
-    border: 1px solid var(--line);
-    color: var(--text-upcoming);
-    border-radius: 6px;
-    padding: 5px 10px;
-    font-size: 12px;
-  }
+  #stop-btn { background: none; border: 1px solid var(--line); color: var(--text-upcoming); border-radius: 6px; padding: 5px 10px; font-size: 12px; }
 
-  /* --- Fixed-viewport, row-locked lyric scroller --- */
-  #lyrics-viewport {
-    flex: 1;
-    overflow: hidden;
-    position: relative;
-    padding: 0 20px;
-  }
-  #lyrics-scroll {
-    position: absolute;
-    top: 0; left: 20px; right: 20px;
-    transition: transform 0.3s ease;
-    will-change: transform;
-  }
+  #lyrics-viewport { flex: 1; overflow: hidden; position: relative; padding: 0 20px; }
+  #lyrics-scroll { position: absolute; top: 0; left: 20px; right: 20px; transition: transform 0.3s ease; will-change: transform; }
   .line {
-    height: var(--row-h);
-    line-height: var(--row-h);
-    font-size: 22px;
-    color: var(--text-upcoming);
-    white-space: nowrap;
-    overflow: hidden;
-    text-align: center;
+    height: var(--row-h); line-height: var(--row-h); font-size: 22px; color: var(--text-upcoming);
+    white-space: nowrap; overflow: hidden; text-align: center;
   }
   .line.current { color: var(--text-current); }
 
   .word { position: relative; display: inline-block; white-space: pre; }
   .word-fill {
-    position: absolute;
-    top: 0; left: 0;
-    color: var(--sung);
-    white-space: pre;
-    pointer-events: none;
-    clip-path: inset(0 100% 0 0);
+    position: absolute; top: 0; left: 0; color: var(--sung); white-space: pre;
+    pointer-events: none; clip-path: inset(0 100% 0 0);
   }
-  .word.sung .word-fill {
-    clip-path: inset(0 0% 0 0);
-    transition: clip-path 0.35s ease;
-  }
+  /* Confirmed words snap to fully revealed instantly — no transition, so a burst of
+     confirmations never looks like a simultaneous animated block-fill. */
+  .word.sung-instant .word-fill { clip-path: inset(0 0 0 0); }
 
   #transcript-box {
-    flex-shrink: 0;
-    border-top: 1px solid var(--line);
-    padding: 10px 18px 16px;
-    font-size: 12px;
-    color: var(--text-dim);
-    max-height: 70px;
-    overflow-y: auto;
+    flex-shrink: 0; border-top: 1px solid var(--line); padding: 10px 18px 16px;
+    font-size: 12px; color: var(--text-dim); max-height: 70px; overflow-y: auto;
   }
-  #transcript-box .label {
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    font-size: 10px;
-    color: var(--accent-dim);
-    display: block;
-    margin-bottom: 3px;
-  }
+  #transcript-box .label { text-transform: uppercase; letter-spacing: 0.08em; font-size: 10px; color: var(--accent-dim); display: block; margin-bottom: 3px; }
 
   #unsupported {
-    display: none;
-    margin: 16px 18px;
-    padding: 14px;
-    border-radius: 8px;
-    background: rgba(217, 99, 76, 0.12);
-    border: 1px solid var(--danger);
-    color: #f0a99b;
-    font-size: 13px;
-    line-height: 1.5;
+    display: none; margin: 16px 18px; padding: 14px; border-radius: 8px;
+    background: rgba(217, 99, 76, 0.12); border: 1px solid var(--danger); color: #f0a99b;
+    font-size: 13px; line-height: 1.5;
   }
 </style>
 </head>
@@ -217,7 +113,7 @@ This is just a placeholder line for testing
 Replace this text with your own song's lyrics
 Line four goes here for the sync demo
 And one more line to check scrolling works well</textarea>
-    <div class="hint">One line per lyric line. Keep punctuation simple — the matcher ignores case and punctuation anyway. Tap "Start Test" and sing or speak the words at your own pace.</div>
+    <div class="hint">One line per lyric line. Tap "Start Test" and sing or speak the words at your own pace.</div>
 
     <button class="primary" id="connect-mic-btn" style="background:#3a4048; color:#fff;">Connect Microphone</button>
     <div id="mic-status" class="hint" style="min-height:34px;"></div>
@@ -244,6 +140,7 @@ And one more line to check scrolling works well</textarea>
 <script>
 (function() {
   const ROW_HEIGHT = 44; // must match --row-h in CSS
+  const DEFAULT_WORD_MS = 420; // initial guess before we've learned the real tempo
 
   const setupEl = document.getElementById('setup');
   const stageEl = document.getElementById('stage');
@@ -269,9 +166,8 @@ And one more line to check scrolling works well</textarea>
   connectMicBtn.addEventListener('click', async () => {
     micStatus.textContent = 'Requesting mic access…';
     micStatus.style.color = '';
-
     if (!window.isSecureContext) {
-      micStatus.textContent = 'This page is not running on HTTPS (or localhost), so Chrome blocks microphone access entirely for it — that\'s almost certainly why nothing shows up in your site permissions. This file needs to be hosted, not opened directly.';
+      micStatus.textContent = 'This page is not running on HTTPS (or localhost), so Chrome blocks microphone access entirely for it. This file needs to be hosted, not opened directly.';
       micStatus.style.color = '#f0a99b';
       return;
     }
@@ -280,7 +176,6 @@ And one more line to check scrolling works well</textarea>
       micStatus.style.color = '#f0a99b';
       return;
     }
-
     try {
       micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
       micStatus.textContent = 'Microphone connected. You can start the test.';
@@ -291,7 +186,7 @@ And one more line to check scrolling works well</textarea>
       startBtn.style.opacity = 1;
     } catch (err) {
       if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-        micStatus.textContent = 'Permission denied. Check Chrome menu (⋮) → Settings → Site settings → Microphone, or the site info icon next to the address bar.';
+        micStatus.textContent = 'Permission denied. Check Chrome menu (⋮) → Settings → Site settings → Microphone.';
       } else if (err.name === 'NotFoundError') {
         micStatus.textContent = 'No microphone was found on this device.';
       } else {
@@ -303,13 +198,21 @@ And one more line to check scrolling works well</textarea>
 
   let recognition = null;
   let lineEls = [];
-  let wordTokens = [];   // flat list: {lineIdx, norm, el}
-  let searchCursor = 0;  // next wordTokens index to search a match from
-  let litUpTo = -1;      // highest index already painted green (lags one behind the match)
+  let wordTokens = [];      // flat list: {lineIdx, norm, el}
+  let searchCursor = 0;     // next wordTokens index to search a match from
+  let litThroughIndex = -1; // all indices <= this are confirmed + instantly lit
   let shouldBeListening = false;
+  let isRTL = false;
+
+  // --- Tempo-driven single-word sweep state ---
+  let currentAnimIndex = null; // the word currently being predictively swept (last matched + 1)
+  let animStartTime = null;
+  let estWordDurationMs = DEFAULT_WORD_MS;
+  let lastMatchTime = null;
+  let lastMatchedIndex = -1;
 
   function normalize(w) {
-    return w.toLowerCase().replace(/[^a-z0-9']/g, '');
+    return w.toLowerCase().replace(/[^a-z0-9'\u0590-\u05FF\u0600-\u06FF]/g, '');
   }
 
   function buildLyrics(raw) {
@@ -317,12 +220,20 @@ And one more line to check scrolling works well</textarea>
     lineEls = [];
     wordTokens = [];
     searchCursor = 0;
-    litUpTo = -1;
+    litThroughIndex = -1;
+    currentAnimIndex = null;
+    animStartTime = null;
+    estWordDurationMs = DEFAULT_WORD_MS;
+    lastMatchTime = null;
+    lastMatchedIndex = -1;
+
+    isRTL = /[\u0590-\u05FF\u0600-\u06FF]/.test(raw);
 
     const lines = raw.split('\n').map(l => l.trim()).filter(l => l.length > 0);
     lines.forEach((lineText, lineIdx) => {
       const lineDiv = document.createElement('div');
       lineDiv.className = 'line';
+      if (isRTL) lineDiv.dir = 'rtl';
       const words = lineText.split(/\s+/);
       words.forEach((w, wordIdx) => {
         const displayText = w + (wordIdx < words.length - 1 ? ' ' : '');
@@ -348,26 +259,55 @@ And one more line to check scrolling works well</textarea>
 
   function setCurrentLine(lineIdx) {
     lineEls.forEach((el, i) => el.classList.toggle('current', i === lineIdx));
-    // Lock the current line to the 2nd row of the viewport; everything scrolls as one block.
     const offset = -(lineIdx - 1) * ROW_HEIGHT;
     lyricsScroll.style.transform = `translateY(${offset}px)`;
   }
 
-  // Try to match a spoken word against the next expected words,
-  // looking a few tokens ahead so a missed/misheard word doesn't stall it.
+  function finalizeWordInstantly(idx) {
+    const fillEl = wordTokens[idx].el.querySelector('.word-fill');
+    fillEl.style.transition = '';
+    fillEl.style.clipPath = '';
+    wordTokens[idx].el.classList.add('sung-instant');
+  }
+
   function consumeSpokenWord(spokenNorm) {
     if (!spokenNorm) return;
     const LOOKAHEAD = 4;
     for (let i = searchCursor; i < Math.min(searchCursor + LOOKAHEAD, wordTokens.length); i++) {
-      if (wordTokens[i].norm === spokenNorm || wordTokens[i].norm.startsWith(spokenNorm) || spokenNorm.startsWith(wordTokens[i].norm)) {
-        // Paint everything up to (but not including) this match — stays one word
-        // behind what was just recognized, to compensate for recognition latency.
-        for (let j = litUpTo + 1; j < i; j++) {
-          wordTokens[j].el.classList.add('sung');
+      const tok = wordTokens[i];
+      if (tok.norm === spokenNorm || tok.norm.startsWith(spokenNorm) || spokenNorm.startsWith(tok.norm)) {
+        const now = performance.now();
+
+        // Learn the real tempo from the gap between confirmed words.
+        if (lastMatchTime !== null) {
+          const wordsAdvanced = Math.max(1, i - lastMatchedIndex);
+          const intervalMs = now - lastMatchTime;
+          if (intervalMs > 50 && intervalMs < 4000) {
+            const perWordMs = intervalMs / wordsAdvanced;
+            estWordDurationMs = estWordDurationMs * 0.6 + perWordMs * 0.4;
+          }
         }
-        litUpTo = i - 1;
+        lastMatchTime = now;
+        lastMatchedIndex = i;
+
+        // Everything through this word is confirmed — snap instantly, no animation.
+        for (let j = litThroughIndex + 1; j <= i; j++) {
+          finalizeWordInstantly(j);
+        }
+        litThroughIndex = i;
+
+        // Predict ahead: sweep the word AFTER the one just confirmed, since by the
+        // time recognition catches up you're almost certainly already singing it.
+        const nextIdx = i + 1;
+        if (nextIdx < wordTokens.length) {
+          currentAnimIndex = nextIdx;
+          animStartTime = now;
+        } else {
+          currentAnimIndex = null;
+        }
+
+        setCurrentLine(tok.lineIdx);
         searchCursor = i + 1;
-        setCurrentLine(wordTokens[i].lineIdx);
         return;
       }
     }
@@ -378,6 +318,23 @@ And one more line to check scrolling works well</textarea>
     const words = text.split(/\s+/).map(normalize).filter(Boolean);
     words.forEach(consumeSpokenWord);
   }
+
+  // Continuous rAF sweep for the single "predicted current" word.
+  function animFrame() {
+    if (currentAnimIndex !== null && currentAnimIndex < wordTokens.length) {
+      const elapsed = performance.now() - animStartTime;
+      const fraction = Math.min(0.96, elapsed / estWordDurationMs);
+      const fillEl = wordTokens[currentAnimIndex].el.querySelector('.word-fill');
+      fillEl.style.transition = 'none';
+      if (isRTL) {
+        fillEl.style.clipPath = `inset(0 0 0 ${(1 - fraction) * 100}%)`;
+      } else {
+        fillEl.style.clipPath = `inset(0 ${(1 - fraction) * 100}% 0 0)`;
+      }
+    }
+    requestAnimationFrame(animFrame);
+  }
+  requestAnimationFrame(animFrame);
 
   function startRecognition() {
     recognition = new SpeechRecognition();
