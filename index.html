@@ -50,10 +50,15 @@
     background: var(--accent); color: #1a1204; font-size: 16px; font-weight: 700; letter-spacing: 0.01em;
   }
   button.primary:active { opacity: 0.85; }
+  button.secondary {
+    margin-top: 10px; width: 100%; padding: 12px; border-radius: 10px; border: 1px solid var(--line);
+    background: none; color: var(--text-upcoming); font-size: 14px; font-weight: 600;
+  }
+
+  #setup.hidden, #stage.hidden, #debug.hidden { display: none !important; }
 
   #stage { display: none; flex: 1; flex-direction: column; overflow: hidden; }
   #stage.active { display: flex; }
-  #setup.hidden { display: none; }
 
   #status-bar {
     display: flex; align-items: center; gap: 8px; padding: 10px 18px;
@@ -79,8 +84,6 @@
     position: absolute; top: 0; left: 0; color: var(--sung); white-space: pre;
     pointer-events: none; clip-path: inset(0 100% 0 0);
   }
-  /* Confirmed words snap to fully revealed instantly — no transition, so a burst of
-     confirmations never looks like a simultaneous animated block-fill. */
   .word.sung-instant .word-fill { clip-path: inset(0 0 0 0); }
 
   #transcript-box {
@@ -94,6 +97,26 @@
     background: rgba(217, 99, 76, 0.12); border: 1px solid var(--danger); color: #f0a99b;
     font-size: 13px; line-height: 1.5;
   }
+
+  /* --- Debug view --- */
+  #debug { display: none; flex: 1; flex-direction: column; overflow: hidden; }
+  #debug.active { display: flex; }
+  #debug-header { padding: 12px 18px; border-bottom: 1px solid var(--line); flex-shrink: 0; }
+  #debug-header h2 { margin: 0 0 6px; font-size: 15px; color: var(--text-current); }
+  #debug-legend { font-size: 11px; color: var(--text-dim); }
+  #debug-legend .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
+  #debug-body { flex: 1; overflow-y: auto; padding: 12px 18px; }
+  #debug audio { width: 100%; margin-bottom: 10px; }
+  #waveform-wrap { position: relative; margin-bottom: 4px; }
+  #waveform { width: 100%; height: 120px; display: block; border-radius: 6px; background: var(--panel); }
+  #playhead { position: absolute; top: 0; bottom: 0; width: 2px; background: #fff; left: 0; pointer-events: none; }
+  #event-log { margin-top: 14px; font-size: 12px; }
+  #event-log table { width: 100%; border-collapse: collapse; }
+  #event-log th, #event-log td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line); }
+  #event-log th { color: var(--text-dim); font-weight: 600; text-transform: uppercase; font-size: 10px; }
+  .tag-match { color: var(--sung); }
+  .tag-predict { color: var(--accent); }
+  #debug-footer { padding: 12px 18px 18px; flex-shrink: 0; }
 </style>
 </head>
 <body>
@@ -125,7 +148,7 @@ And one more line to check scrolling works well</textarea>
     <div id="status-bar">
       <div id="dot"></div>
       <div id="status-text">Idle</div>
-      <button id="stop-btn">Stop</button>
+      <button id="stop-btn">Stop &amp; Analyze</button>
     </div>
     <div id="lyrics-viewport">
       <div id="lyrics-scroll"></div>
@@ -133,6 +156,34 @@ And one more line to check scrolling works well</textarea>
     <div id="transcript-box">
       <span class="label">Heard</span>
       <span id="transcript-text">—</span>
+    </div>
+  </div>
+
+  <div id="debug">
+    <div id="debug-header">
+      <h2>Recognition vs. Audio Timeline</h2>
+      <div id="debug-legend">
+        <span class="swatch" style="background:#4dd88a;"></span>Confirmed match
+        &nbsp;&nbsp;
+        <span class="swatch" style="background:#e8b34c;"></span>Predicted-word sweep started
+      </div>
+    </div>
+    <div id="debug-body">
+      <audio id="debug-audio" controls></audio>
+      <div id="waveform-wrap">
+        <canvas id="waveform" width="800" height="120"></canvas>
+        <div id="playhead"></div>
+      </div>
+      <div class="hint">Play the recording and watch the white playhead cross the colored marks. A green mark should land right where you actually finished saying that word; an orange mark shows where the (predicted) next word started animating.</div>
+      <div id="event-log">
+        <table>
+          <thead><tr><th>Time</th><th>Event</th><th>Word</th><th>Index</th></tr></thead>
+          <tbody id="event-log-body"></tbody>
+        </table>
+      </div>
+    </div>
+    <div id="debug-footer">
+      <button class="primary" id="back-to-setup-btn">Back to Setup</button>
     </div>
   </div>
 </div>
@@ -144,10 +195,12 @@ And one more line to check scrolling works well</textarea>
 
   const setupEl = document.getElementById('setup');
   const stageEl = document.getElementById('stage');
+  const debugEl = document.getElementById('debug');
   const startBtn = document.getElementById('start-btn');
   const connectMicBtn = document.getElementById('connect-mic-btn');
   const micStatus = document.getElementById('mic-status');
   const stopBtn = document.getElementById('stop-btn');
+  const backToSetupBtn = document.getElementById('back-to-setup-btn');
   let micStream = null;
   const lyricsInput = document.getElementById('lyrics-input');
   const lyricsScroll = document.getElementById('lyrics-scroll');
@@ -155,6 +208,11 @@ And one more line to check scrolling works well</textarea>
   const statusDot = document.getElementById('dot');
   const transcriptText = document.getElementById('transcript-text');
   const unsupportedBox = document.getElementById('unsupported');
+
+  const debugAudio = document.getElementById('debug-audio');
+  const waveformCanvas = document.getElementById('waveform');
+  const playheadEl = document.getElementById('playhead');
+  const eventLogBody = document.getElementById('event-log-body');
 
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) {
@@ -205,11 +263,17 @@ And one more line to check scrolling works well</textarea>
   let isRTL = false;
 
   // --- Tempo-driven single-word sweep state ---
-  let currentAnimIndex = null; // the word currently being predictively swept (last matched + 1)
+  let currentAnimIndex = null;
   let animStartTime = null;
   let estWordDurationMs = DEFAULT_WORD_MS;
   let lastMatchTime = null;
   let lastMatchedIndex = -1;
+
+  // --- Debug recording state ---
+  let mediaRecorder = null;
+  let recordedChunks = [];
+  let recordStartTime = null;
+  let debugEvents = []; // {t (ms since recordStartTime), type: 'match'|'predict', index, word}
 
   function normalize(w) {
     return w.toLowerCase().replace(/[^a-z0-9'\u0590-\u05FF\u0600-\u06FF]/g, '');
@@ -226,6 +290,7 @@ And one more line to check scrolling works well</textarea>
     estWordDurationMs = DEFAULT_WORD_MS;
     lastMatchTime = null;
     lastMatchedIndex = -1;
+    debugEvents = [];
 
     isRTL = /[\u0590-\u05FF\u0600-\u06FF]/.test(raw);
 
@@ -248,7 +313,7 @@ And one more line to check scrolling works well</textarea>
         wrap.appendChild(base);
         wrap.appendChild(fill);
         lineDiv.appendChild(wrap);
-        wordTokens.push({ lineIdx, norm: normalize(w), el: wrap });
+        wordTokens.push({ lineIdx, norm: normalize(w), raw: w, el: wrap });
       });
       lyricsScroll.appendChild(lineDiv);
       lineEls.push(lineDiv);
@@ -277,8 +342,8 @@ And one more line to check scrolling works well</textarea>
       const tok = wordTokens[i];
       if (tok.norm === spokenNorm || tok.norm.startsWith(spokenNorm) || spokenNorm.startsWith(tok.norm)) {
         const now = performance.now();
+        const tRel = recordStartTime !== null ? (now - recordStartTime) : now;
 
-        // Learn the real tempo from the gap between confirmed words.
         if (lastMatchTime !== null) {
           const wordsAdvanced = Math.max(1, i - lastMatchedIndex);
           const intervalMs = now - lastMatchTime;
@@ -290,18 +355,18 @@ And one more line to check scrolling works well</textarea>
         lastMatchTime = now;
         lastMatchedIndex = i;
 
-        // Everything through this word is confirmed — snap instantly, no animation.
         for (let j = litThroughIndex + 1; j <= i; j++) {
           finalizeWordInstantly(j);
         }
         litThroughIndex = i;
 
-        // Predict ahead: sweep the word AFTER the one just confirmed, since by the
-        // time recognition catches up you're almost certainly already singing it.
+        debugEvents.push({ t: tRel, type: 'match', index: i, word: tok.raw });
+
         const nextIdx = i + 1;
         if (nextIdx < wordTokens.length) {
           currentAnimIndex = nextIdx;
           animStartTime = now;
+          debugEvents.push({ t: tRel, type: 'predict', index: nextIdx, word: wordTokens[nextIdx].raw });
         } else {
           currentAnimIndex = null;
         }
@@ -319,7 +384,6 @@ And one more line to check scrolling works well</textarea>
     words.forEach(consumeSpokenWord);
   }
 
-  // Continuous rAF sweep for the single "predicted current" word.
   function animFrame() {
     if (currentAnimIndex !== null && currentAnimIndex < wordTokens.length) {
       const elapsed = performance.now() - animStartTime;
@@ -373,18 +437,136 @@ And one more line to check scrolling works well</textarea>
     recognition.start();
   }
 
+  function startRecording() {
+    recordedChunks = [];
+    try {
+      mediaRecorder = new MediaRecorder(micStream);
+    } catch (e) {
+      mediaRecorder = null;
+      return;
+    }
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) recordedChunks.push(e.data);
+    };
+    mediaRecorder.start();
+    recordStartTime = performance.now();
+  }
+
+  function stopRecordingAndShowDebug() {
+    if (!mediaRecorder) {
+      showDebugView(null);
+      return;
+    }
+    mediaRecorder.onstop = async () => {
+      const blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+      showDebugView(blob);
+    };
+    mediaRecorder.stop();
+  }
+
+  async function showDebugView(blob) {
+    stageEl.classList.remove('active');
+    debugEl.classList.add('active');
+
+    eventLogBody.innerHTML = '';
+    debugEvents.forEach(ev => {
+      const tr = document.createElement('tr');
+      const cls = ev.type === 'match' ? 'tag-match' : 'tag-predict';
+      const label = ev.type === 'match' ? 'Confirmed' : 'Predict start';
+      tr.innerHTML = `<td>${(ev.t/1000).toFixed(2)}s</td><td class="${cls}">${label}</td><td>${ev.word}</td><td>${ev.index}</td>`;
+      eventLogBody.appendChild(tr);
+    });
+
+    if (!blob) {
+      const ctx = waveformCanvas.getContext('2d');
+      ctx.fillStyle = '#14171b';
+      ctx.fillRect(0, 0, waveformCanvas.width, waveformCanvas.height);
+      ctx.fillStyle = '#9aa4b0';
+      ctx.font = '13px sans-serif';
+      ctx.fillText('Recording unavailable on this browser.', 12, 60);
+      return;
+    }
+
+    const url = URL.createObjectURL(blob);
+    debugAudio.src = url;
+
+    try {
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const arrayBuffer = await blob.arrayBuffer();
+      const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+      const channelData = audioBuffer.getChannelData(0);
+      const durationSec = audioBuffer.duration;
+      drawWaveform(channelData, durationSec);
+
+      debugAudio.addEventListener('timeupdate', () => {
+        const frac = debugAudio.currentTime / durationSec;
+        playheadEl.style.left = (frac * waveformCanvas.getBoundingClientRect().width) + 'px';
+      });
+    } catch (e) {
+      const ctx = waveformCanvas.getContext('2d');
+      ctx.fillStyle = '#14171b';
+      ctx.fillRect(0, 0, waveformCanvas.width, waveformCanvas.height);
+      ctx.fillStyle = '#f0a99b';
+      ctx.font = '13px sans-serif';
+      ctx.fillText('Could not decode audio for waveform (playback still works below).', 12, 60);
+    }
+  }
+
+  function drawWaveform(channelData, durationSec) {
+    const canvas = waveformCanvas;
+    const w = canvas.width, h = canvas.height;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#14171b';
+    ctx.fillRect(0, 0, w, h);
+
+    ctx.strokeStyle = '#5b6470';
+    ctx.beginPath();
+    const step = Math.max(1, Math.floor(channelData.length / w));
+    const amp = h / 2;
+    for (let x = 0; x < w; x++) {
+      let min = 1.0, max = -1.0;
+      const start = x * step;
+      for (let j = 0; j < step; j++) {
+        const idx = start + j;
+        if (idx < channelData.length) {
+          const v = channelData[idx];
+          if (v < min) min = v;
+          if (v > max) max = v;
+        }
+      }
+      ctx.moveTo(x, (1 + min) * amp);
+      ctx.lineTo(x, (1 + max) * amp);
+    }
+    ctx.stroke();
+
+    debugEvents.forEach(ev => {
+      const x = (ev.t / 1000 / durationSec) * w;
+      ctx.strokeStyle = ev.type === 'match' ? '#4dd88a' : '#e8b34c';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, h);
+      ctx.stroke();
+    });
+  }
+
   startBtn.addEventListener('click', () => {
     buildLyrics(lyricsInput.value);
     setupEl.classList.add('hidden');
     stageEl.classList.add('active');
     startRecognition();
+    startRecording();
   });
 
   stopBtn.addEventListener('click', () => {
     shouldBeListening = false;
     if (recognition) recognition.stop();
+    stopRecordingAndShowDebug();
+  });
+
+  backToSetupBtn.addEventListener('click', () => {
+    debugEl.classList.remove('active');
     setupEl.classList.remove('hidden');
-    stageEl.classList.remove('active');
   });
 })();
 </script>
