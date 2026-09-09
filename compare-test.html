@@ -8,7 +8,7 @@
   :root {
     --bg: #0b0d10; --panel: #14171b; --line: #2a2f36;
     --text-dim: #5b6470; --text-upcoming: #9aa4b0; --text-current: #ffffff;
-    --sung: #4dd88a; --accent: #e8b34c; --danger: #d9634c; --row-h: 46px;
+    --sung: #4dd88a; --accent: #e8b34c; --danger: #d9634c; --row-h: 40px;
   }
   * { box-sizing: border-box; }
   html, body { margin:0; padding:0; min-height:100%; background:var(--bg); color:var(--text-upcoming);
@@ -35,12 +35,13 @@
   #stage.active { display:flex; }
   #status-bar {
     display:flex; align-items:center; gap:8px; padding:10px 18px; border-bottom:1px solid var(--line);
-    font-size:12px; color:var(--text-dim);
+    font-size:12px; color:var(--text-dim); flex-wrap:wrap;
   }
   #dot { width:8px; height:8px; border-radius:50%; background:var(--text-dim); flex-shrink:0; }
   #dot.listening { background:var(--sung); box-shadow:0 0 8px var(--sung); animation:pulse 1.4s infinite; }
   @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:.35;} }
-  #status-text { flex:1; }
+  #status-text { flex:1; min-width:120px; }
+  #tempo-readout { font-family: monospace; color: var(--accent); }
   #stop-btn { background:none; border:1px solid var(--line); color:var(--text-upcoming); border-radius:6px; padding:5px 10px; font-size:12px; }
   #transcript-box { padding:8px 18px; font-size:11px; color:var(--text-dim); border-bottom:1px solid var(--line); }
 
@@ -51,26 +52,25 @@
   .panel-note { font-size:11px; color:var(--text-dim); margin-top:2px; line-height:1.4; }
   .panel-body { padding:18px; }
 
-  /* Option A: static 4-line page */
   #panelA-lines .a-line {
     font-size:20px; line-height:1.6; color:var(--text-upcoming); text-align:center; padding:2px 0;
   }
 
-  /* Option B: row-locked scroll, current line always top row */
-  #panelB-viewport { height: calc(var(--row-h) * 4); overflow:hidden; position:relative; }
-  #panelB-scroll { position:absolute; top:0; left:0; right:0; transition: transform .35s ease; }
+  /* Option B: 6-row window, current line pinned to the 2nd row */
+  #panelB-viewport { height: calc(var(--row-h) * 6); overflow:hidden; position:relative; }
+  #panelB-scroll { position:absolute; top:0; left:0; right:0; transition: transform .3s ease; }
   .b-line {
-    height:var(--row-h); line-height:var(--row-h); font-size:20px; color:var(--text-upcoming);
+    height:var(--row-h); line-height:var(--row-h); font-size:18px; color:var(--text-upcoming);
     text-align:center; white-space:nowrap; overflow:hidden; transition: color .3s ease;
   }
-  .b-line.current { color:var(--text-current); font-weight:600; }
+  .b-line.current { color:var(--text-current); font-weight:600; font-size:19px; }
   .b-line.done { color: var(--sung); }
 </style>
 </head>
 <body>
   <header>
     <div class="brand">Singa</div>
-    <div class="subtitle">Comparing two lower-precision sync approaches, side by side</div>
+    <div class="subtitle">Tempo-calibrated timing (checkpoint-corrected every 4th word)</div>
   </header>
 
   <div id="setup">
@@ -83,6 +83,7 @@ Line five for the demo, keep it going
 Line six to give us two full pages
 Line seven continues the second page
 Line eight wraps up this little test</textarea>
+    <p class="hint">The first two lines are used to learn your pace. After that, the display auto-advances on a timer, and only checks in with recognition every 4th confirmed word to correct for drift or jumps.</p>
     <button class="primary" id="connect-mic-btn" style="background:#3a4048; color:#fff;">Connect Microphone</button>
     <div id="mic-status" class="hint" style="min-height:34px;"></div>
     <button class="primary" id="start-btn" disabled style="opacity:.4;">Start Test</button>
@@ -92,6 +93,7 @@ Line eight wraps up this little test</textarea>
     <div id="status-bar">
       <div id="dot"></div>
       <div id="status-text">Idle</div>
+      <div id="tempo-readout">calibrating…</div>
       <button id="stop-btn">Stop</button>
     </div>
     <div id="transcript-box">Heard: <span id="transcript-text">—</span></div>
@@ -100,7 +102,7 @@ Line eight wraps up this little test</textarea>
       <div class="panel">
         <div class="panel-header">
           <div class="panel-title">A — Page Turn Only</div>
-          <div class="panel-note">No coloring at all. Shows 4 lines; jumps to the next 4 once recognition confirms you've moved past this group.</div>
+          <div class="panel-note">No coloring. Shows 4 lines; page turns driven by the calibrated timer.</div>
         </div>
         <div class="panel-body">
           <div id="panelA-lines"></div>
@@ -110,7 +112,7 @@ Line eight wraps up this little test</textarea>
       <div class="panel">
         <div class="panel-header">
           <div class="panel-title">B — Line-by-line Scroll</div>
-          <div class="panel-note">Whole line turns green when confirmed done, then the block scrolls up one line, always keeping 4 lines visible.</div>
+          <div class="panel-note">6 lines visible; current line pinned to the 2nd row (1 past line stays visible above), driven by the calibrated timer.</div>
         </div>
         <div class="panel-body">
           <div id="panelB-viewport">
@@ -123,8 +125,9 @@ Line eight wraps up this little test</textarea>
 
 <script>
 (function() {
-  const ROW_HEIGHT = 46; // must match --row-h
+  const ROW_HEIGHT = 40; // must match --row-h
   const PAGE_SIZE = 4;
+  const CHECKPOINT_EVERY = 4;
 
   const setupEl = document.getElementById('setup');
   const stageEl = document.getElementById('stage');
@@ -134,6 +137,7 @@ Line eight wraps up this little test</textarea>
   const stopBtn = document.getElementById('stop-btn');
   const statusDot = document.getElementById('dot');
   const statusText = document.getElementById('status-text');
+  const tempoReadout = document.getElementById('tempo-readout');
   const transcriptText = document.getElementById('transcript-text');
   const lyricsInput = document.getElementById('lyrics-input');
 
@@ -168,11 +172,21 @@ Line eight wraps up this little test</textarea>
 
   let recognition = null;
   let shouldBeListening = false;
-  let lines = [];         // array of raw line strings
-  let wordTokens = [];    // {lineIdx, norm}
+  let lines = [];
+  let wordTokens = [];      // {lineIdx, norm}
   let searchCursor = 0;
   let currentLine = 0;
-  let displayedPage = -1; // for panel A
+  let displayedPage = -1;
+
+  // --- Calibration + timed-mode state ---
+  let calibrationWordCount = 0;
+  let calibrating = true;
+  let calibStartTime = null;   // set on first confirmed match
+  let timePerWord = null;      // ms per word, learned then corrected
+  let referenceWordIndex = 0;
+  let referenceTime = null;
+  let matchCountSinceCalib = 0;
+  let rafId = null;
 
   function normalize(w) { return w.toLowerCase().replace(/[^a-z0-9']/g, ''); }
 
@@ -185,6 +199,14 @@ Line eight wraps up this little test</textarea>
     searchCursor = 0;
     currentLine = 0;
     displayedPage = -1;
+    calibrationWordCount = wordTokens.filter(t => t.lineIdx <= 1).length;
+    calibrating = true;
+    calibStartTime = null;
+    timePerWord = null;
+    referenceWordIndex = 0;
+    referenceTime = null;
+    matchCountSinceCalib = 0;
+    tempoReadout.textContent = 'calibrating…';
     renderPanelA();
     renderPanelB(true);
   }
@@ -214,21 +236,64 @@ Line eight wraps up this little test</textarea>
         panelBScroll.appendChild(div);
       });
     }
-    // mark completed / current
     Array.from(panelBScroll.children).forEach(el => {
       const idx = parseInt(el.dataset.idx, 10);
       el.classList.toggle('done', idx < currentLine);
       el.classList.toggle('current', idx === currentLine);
     });
-    // current line pinned to top row
-    panelBScroll.style.transform = `translateY(${-(currentLine) * ROW_HEIGHT}px)`;
+    // current line pinned to the 2nd row (index 1) — one past line stays visible above
+    panelBScroll.style.transform = `translateY(${-(currentLine - 1) * ROW_HEIGHT}px)`;
   }
 
-  function advanceToLine(newLine) {
+  function setCurrentLine(newLine) {
+    newLine = Math.max(0, Math.min(newLine, lines.length - 1));
     if (newLine === currentLine) return;
     currentLine = newLine;
     renderPanelA();
     renderPanelB(false);
+  }
+
+  function endCalibration(atTime, atGlobalIndex) {
+    calibrating = false;
+    const elapsed = atTime - calibStartTime;
+    timePerWord = Math.max(150, elapsed / calibrationWordCount); // floor to avoid absurd speeds
+    referenceWordIndex = atGlobalIndex;
+    referenceTime = atTime;
+    matchCountSinceCalib = 0;
+    tempoReadout.textContent = (60000/ (timePerWord)).toFixed(0) + ' wpm (timed mode)';
+    startTimedLoop();
+  }
+
+  function checkpointCorrect(actualIdx, tActual) {
+    // Predict where the timer thought we were at this same moment, before updating.
+    const predictedIdx = referenceWordIndex + (tActual - referenceTime) / timePerWord;
+    const diff = actualIdx - predictedIdx; // + = ahead of timer, - = behind (delay)
+
+    // Re-estimate pace using the interval since the last checkpoint.
+    const elapsedSinceRef = tActual - referenceTime;
+    const wordsSinceRef = actualIdx - referenceWordIndex;
+    if (wordsSinceRef > 0 && elapsedSinceRef > 200 && elapsedSinceRef < 15000) {
+      const freshEstimate = elapsedSinceRef / wordsSinceRef;
+      timePerWord = timePerWord * 0.5 + freshEstimate * 0.5;
+    }
+    referenceWordIndex = actualIdx;
+    referenceTime = tActual;
+
+    tempoReadout.textContent = (60000/timePerWord).toFixed(0) + ' wpm · correction ' + (diff>=0?'+':'') + diff.toFixed(1) + ' words';
+  }
+
+  function startTimedLoop() {
+    function tick() {
+      if (!calibrating && timePerWord) {
+        const now = performance.now();
+        const estIndex = referenceWordIndex + (now - referenceTime) / timePerWord;
+        const clamped = Math.max(0, Math.min(Math.round(estIndex), wordTokens.length - 1));
+        const line = wordTokens[clamped] ? wordTokens[clamped].lineIdx : currentLine;
+        setCurrentLine(line);
+      }
+      rafId = requestAnimationFrame(tick);
+    }
+    if (!rafId) rafId = requestAnimationFrame(tick);
   }
 
   function consumeSpokenWord(spokenNorm) {
@@ -238,7 +303,18 @@ Line eight wraps up this little test</textarea>
       const tok = wordTokens[i];
       if (tok.norm === spokenNorm || tok.norm.startsWith(spokenNorm) || spokenNorm.startsWith(tok.norm)) {
         searchCursor = i + 1;
-        if (tok.lineIdx > currentLine) advanceToLine(tok.lineIdx);
+        const now = performance.now();
+
+        if (calibrating) {
+          if (calibStartTime === null) calibStartTime = now;
+          if (tok.lineIdx > currentLine) setCurrentLine(tok.lineIdx);
+          if (currentLine >= 2) endCalibration(now, i);
+        } else {
+          matchCountSinceCalib++;
+          if (matchCountSinceCalib % CHECKPOINT_EVERY === 0) {
+            checkpointCorrect(i, now);
+          }
+        }
         return;
       }
     }
@@ -289,6 +365,7 @@ Line eight wraps up this little test</textarea>
   stopBtn.addEventListener('click', () => {
     shouldBeListening = false;
     if (recognition) recognition.stop();
+    if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
     stageEl.classList.remove('active');
     setupEl.classList.remove('hidden');
   });
