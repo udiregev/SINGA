@@ -84,9 +84,7 @@ Line six to give us two full pages
 Line seven continues the second page
 Line eight wraps up this little test</textarea>
     <p class="hint">The first two lines are used to learn your pace. After that, the display auto-advances on a timer, and only checks in with recognition every 4th confirmed word to correct for drift or jumps.</p>
-    <button class="primary" id="connect-mic-btn" style="background:#3a4048; color:#fff;">Connect Microphone</button>
-    <div id="mic-status" class="hint" style="min-height:34px;"></div>
-    <button class="primary" id="start-btn" disabled style="opacity:.4;">Start Test</button>
+    <button class="primary" id="start-btn">Start Test</button>
   </div>
 
   <div id="stage">
@@ -131,8 +129,6 @@ Line eight wraps up this little test</textarea>
 
   const setupEl = document.getElementById('setup');
   const stageEl = document.getElementById('stage');
-  const connectMicBtn = document.getElementById('connect-mic-btn');
-  const micStatus = document.getElementById('mic-status');
   const startBtn = document.getElementById('start-btn');
   const stopBtn = document.getElementById('stop-btn');
   const statusDot = document.getElementById('dot');
@@ -144,36 +140,10 @@ Line eight wraps up this little test</textarea>
   const panelALines = document.getElementById('panelA-lines');
   const panelBScroll = document.getElementById('panelB-scroll');
 
-  let micStream = null;
-
-  connectMicBtn.addEventListener('click', async () => {
-    micStatus.textContent = 'Requesting mic access…';
-    micStatus.style.color = '';
-    if (!window.isSecureContext) {
-      micStatus.textContent = 'Not running on HTTPS — mic access is blocked.';
-      micStatus.style.color = '#f0a99b';
-      return;
-    }
-    try {
-      micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      // We only needed this to trigger/confirm the permission prompt — SpeechRecognition
-      // opens its own internal audio channel, and holding this stream open causes it to
-      // collide with that and throw "aborted" errors. Release it immediately.
-      micStream.getTracks().forEach(t => t.stop());
-      micStream = null;
-      micStatus.textContent = 'Microphone connected. You can start.';
-      micStatus.style.color = '#4dd88a';
-      connectMicBtn.textContent = 'Microphone Connected ✓';
-      connectMicBtn.style.background = '#25402f';
-      startBtn.disabled = false;
-      startBtn.style.opacity = 1;
-    } catch (err) {
-      micStatus.textContent = 'Mic error: ' + err.name + ' — ' + err.message;
-      micStatus.style.color = '#f0a99b';
-    }
-  });
-
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    statusText.textContent = 'This browser doesn\'t support Speech Recognition — try Chrome.';
+  }
 
   let recognition = null;
   let shouldBeListening = false;
@@ -346,14 +316,17 @@ Line eight wraps up this little test</textarea>
     recognition.onerror = (e) => {
       statusDot.className = 'error';
       statusText.textContent = 'Mic error: ' + e.error;
+      console.error('[Singa] recognition error:', e.error);
     };
     recognition.onend = () => {
+      console.log('[Singa] recognition ended, shouldBeListening=', shouldBeListening);
       if (shouldBeListening) setTimeout(() => { if (shouldBeListening) recognition.start(); }, 250);
       else { statusDot.className = ''; statusText.textContent = 'Stopped'; }
     };
     recognition.onstart = () => {
       statusDot.className = 'listening';
       statusText.textContent = 'Listening…';
+      console.log('[Singa] recognition started');
     };
 
     shouldBeListening = true;
