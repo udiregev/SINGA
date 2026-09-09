@@ -116,6 +116,8 @@
   #event-log th { color: var(--text-dim); font-weight: 600; text-transform: uppercase; font-size: 10px; }
   .tag-match { color: var(--sung); }
   .tag-predict { color: var(--accent); }
+  .tag-error { color: var(--danger); font-weight: 700; }
+  .tag-muted { color: var(--text-dim); }
   #debug-footer { padding: 12px 18px 18px; flex-shrink: 0; }
 </style>
 </head>
@@ -411,15 +413,24 @@ And one more line to check scrolling works well</textarea>
       for (let i = event.resultIndex; i < event.results.length; i++) {
         combinedChunk += event.results[i][0].transcript + ' ';
       }
+      const now = performance.now();
+      const tRel = recordStartTime !== null ? (now - recordStartTime) : now;
+      debugEvents.push({ t: tRel, type: 'heard', word: combinedChunk.trim() || '(empty)' });
       if (combinedChunk) handleTranscript(combinedChunk);
     };
 
     recognition.onerror = (e) => {
       statusDot.className = 'error';
       statusText.textContent = 'Mic error: ' + e.error;
+      const now = performance.now();
+      const tRel = recordStartTime !== null ? (now - recordStartTime) : now;
+      debugEvents.push({ t: tRel, type: 'error', word: e.error });
     };
 
     recognition.onend = () => {
+      const now = performance.now();
+      const tRel = recordStartTime !== null ? (now - recordStartTime) : now;
+      debugEvents.push({ t: tRel, type: 'engine-end', word: '' });
       if (shouldBeListening) {
         setTimeout(() => { if (shouldBeListening) recognition.start(); }, 250);
       } else {
@@ -431,6 +442,27 @@ And one more line to check scrolling works well</textarea>
     recognition.onstart = () => {
       statusDot.className = 'listening';
       statusText.textContent = 'Listening…';
+      const now = performance.now();
+      const tRel = recordStartTime !== null ? (now - recordStartTime) : now;
+      debugEvents.push({ t: tRel, type: 'engine-start', word: '' });
+    };
+
+    recognition.onnomatch = () => {
+      const now = performance.now();
+      const tRel = recordStartTime !== null ? (now - recordStartTime) : now;
+      debugEvents.push({ t: tRel, type: 'no-match', word: '' });
+    };
+
+    recognition.onspeechstart = () => {
+      const now = performance.now();
+      const tRel = recordStartTime !== null ? (now - recordStartTime) : now;
+      debugEvents.push({ t: tRel, type: 'speech-detected', word: '' });
+    };
+
+    recognition.onaudiostart = () => {
+      const now = performance.now();
+      const tRel = recordStartTime !== null ? (now - recordStartTime) : now;
+      debugEvents.push({ t: tRel, type: 'audio-start', word: '' });
     };
 
     shouldBeListening = true;
@@ -469,13 +501,31 @@ And one more line to check scrolling works well</textarea>
     debugEl.classList.add('active');
 
     eventLogBody.innerHTML = '';
-    debugEvents.forEach(ev => {
+    const LABELS = {
+      'match': ['Confirmed', 'tag-match'],
+      'predict': ['Predict start', 'tag-predict'],
+      'heard': ['Raw recognition result', ''],
+      'error': ['ENGINE ERROR', 'tag-error'],
+      'engine-start': ['Recognizer started', 'tag-muted'],
+      'engine-end': ['Recognizer ended', 'tag-muted'],
+      'no-match': ['No match', 'tag-error'],
+      'speech-detected': ['Speech detected (raw audio)', 'tag-muted'],
+      'audio-start': ['Audio capture started', 'tag-muted']
+    };
+    debugEvents
+      .slice()
+      .sort((a,b) => a.t - b.t)
+      .forEach(ev => {
+        const [label, cls] = LABELS[ev.type] || [ev.type, ''];
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${(ev.t/1000).toFixed(2)}s</td><td class="${cls}">${label}</td><td>${ev.word || ''}</td><td>${ev.index ?? ''}</td>`;
+        eventLogBody.appendChild(tr);
+      });
+    if (debugEvents.length === 0) {
       const tr = document.createElement('tr');
-      const cls = ev.type === 'match' ? 'tag-match' : 'tag-predict';
-      const label = ev.type === 'match' ? 'Confirmed' : 'Predict start';
-      tr.innerHTML = `<td>${(ev.t/1000).toFixed(2)}s</td><td class="${cls}">${label}</td><td>${ev.word}</td><td>${ev.index}</td>`;
+      tr.innerHTML = `<td colspan="4" style="color:#f0a99b;">No events of any kind were logged — the recognizer never called onstart, onresult, or onerror. This points to the recognition engine never actually initializing, not just failing to match words.</td>`;
       eventLogBody.appendChild(tr);
-    });
+    }
 
     if (!blob) {
       const ctx = waveformCanvas.getContext('2d');
