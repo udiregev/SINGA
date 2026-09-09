@@ -156,6 +156,11 @@ Line eight wraps up this little test</textarea>
     }
     try {
       micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // We only needed this to trigger/confirm the permission prompt — SpeechRecognition
+      // opens its own internal audio channel, and holding this stream open causes it to
+      // collide with that and throw "aborted" errors. Release it immediately.
+      micStream.getTracks().forEach(t => t.stop());
+      micStream = null;
       micStatus.textContent = 'Microphone connected. You can start.';
       micStatus.style.color = '#4dd88a';
       connectMicBtn.textContent = 'Microphone Connected ✓';
