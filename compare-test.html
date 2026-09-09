@@ -66,7 +66,7 @@
 
   /* Option B: 6-row window, current line pinned to the 2nd row */
   #panelB-viewport { height: calc(var(--row-h) * 6); overflow:hidden; position:relative; }
-  #panelB-scroll { position:absolute; top:0; left:0; right:0; transition: transform .3s ease; }
+  #panelB-scroll { position:absolute; top:0; left:0; right:0; }
   .b-line {
     height:var(--row-h); line-height:var(--row-h); font-size:18px; color:var(--text-upcoming);
     text-align:center; white-space:nowrap; overflow:hidden; transition: color .3s ease;
@@ -179,6 +179,8 @@ Line eight wraps up this little test</textarea>
   let calibrationWordCount = 0;
   let calibrating = true;
   let calibStartTime = null;   // set on first confirmed match
+  let calibStartIndex = null;  // global word index of that first match
+  const MIN_CALIB_MS = 1800;   // don't trust a calibration window shorter than this — likely a burst
   let timePerWord = null;      // ms per word, learned then corrected
   let referenceWordIndex = 0;
   let referenceTime = null;
@@ -187,11 +189,17 @@ Line eight wraps up this little test</textarea>
 
   function normalize(w) { return w.toLowerCase().replace(/[^a-z0-9']/g, ''); }
 
+  let lineBounds = []; // [{start, end}] per line, for continuous scroll interpolation
+
   function buildLyrics(raw) {
     lines = raw.split('\n').map(l => l.trim()).filter(l => l.length > 0);
     wordTokens = [];
     lines.forEach((lineText, lineIdx) => {
       lineText.split(/\s+/).forEach(w => wordTokens.push({ lineIdx, norm: normalize(w) }));
+    });
+    lineBounds = lines.map((_, lineIdx) => {
+      const idxs = wordTokens.reduce((acc, t, i) => { if (t.lineIdx === lineIdx) acc.push(i); return acc; }, []);
+      return { start: idxs[0], end: idxs[idxs.length - 1] };
     });
     searchCursor = 0;
     currentLine = 0;
@@ -199,6 +207,7 @@ Line eight wraps up this little test</textarea>
     calibrationWordCount = wordTokens.filter(t => t.lineIdx <= 1).length;
     calibrating = true;
     calibStartTime = null;
+    calibStartIndex = null;
     timePerWord = null;
     referenceWordIndex = 0;
     referenceTime = null;
@@ -223,7 +232,7 @@ Line eight wraps up this little test</textarea>
     }
   }
 
-  function renderPanelB(rebuildAll) {
+  function renderPanelB(rebuildAll, continuousPos) {
     if (rebuildAll) {
       panelBScroll.innerHTML = '';
       lines.forEach((lineText, idx) => {
@@ -240,7 +249,20 @@ Line eight wraps up this little test</textarea>
       el.classList.toggle('current', idx === currentLine);
     });
     // current line pinned to the 2nd row (index 1) — one past line stays visible above
-    panelBScroll.style.transform = `translateY(${-(currentLine - 1) * ROW_HEIGHT}px)`;
+    const pos = (continuousPos !== undefined) ? continuousPos : currentLine;
+    panelBScroll.style.transform = `translateY(${-(pos - 1) * ROW_HEIGHT}px)`;
+  }
+
+  function continuousLinePosition(estIndexFloat) {
+    const clamped = Math.max(0, Math.min(estIndexFloat, wordTokens.length - 1));
+    const idx = Math.floor(clamped);
+    const frac = clamped - idx;
+    const tok = wordTokens[idx];
+    if (!tok) return 0;
+    const b = lineBounds[tok.lineIdx];
+    const lineWordCount = b.end - b.start + 1;
+    const posInLine = (idx - b.start + frac) / lineWordCount;
+    return tok.lineIdx + posInLine;
   }
 
   function setCurrentLine(newLine) {
@@ -251,15 +273,15 @@ Line eight wraps up this little test</textarea>
     renderPanelB(false);
   }
 
-  function endCalibration(atTime, atGlobalIndex) {
+  function endCalibration(atTime, atGlobalIndex, wordsCounted) {
     calibrating = false;
     const elapsed = atTime - calibStartTime;
-    timePerWord = Math.max(150, elapsed / calibrationWordCount); // floor to avoid absurd speeds
+    timePerWord = Math.min(900, Math.max(250, elapsed / wordsCounted)); // clamp to a believable singing-pace range
     referenceWordIndex = atGlobalIndex;
     referenceTime = atTime;
     matchCountSinceCalib = 0;
     tempoReadout.textContent = (60000/ (timePerWord)).toFixed(0) + ' wpm (timed mode)';
-    dlog(`>>> CALIBRATION DONE: ${timePerWord.toFixed(0)}ms/word, starting timed loop at wordIdx ${atGlobalIndex}`, 'info');
+    dlog(`>>> CALIBRATION DONE: ${wordsCounted} words in ${elapsed.toFixed(0)}ms = ${timePerWord.toFixed(0)}ms/word`, 'info');
     startTimedLoop();
   }
 
@@ -289,6 +311,7 @@ Line eight wraps up this little test</textarea>
         const clamped = Math.max(0, Math.min(Math.round(estIndex), wordTokens.length - 1));
         const line = wordTokens[clamped] ? wordTokens[clamped].lineIdx : currentLine;
         setCurrentLine(line);
+        renderPanelB(false, continuousLinePosition(estIndex)); // smooth, word-level scroll
       }
       rafId = requestAnimationFrame(tick);
     }
@@ -306,9 +329,12 @@ Line eight wraps up this little test</textarea>
         dlog(`✓ "${spokenNorm}" matched idx ${i} (line ${tok.lineIdx}) [cursor now ${searchCursor}]`, 'ok');
 
         if (calibrating) {
-          if (calibStartTime === null) calibStartTime = now;
+          if (calibStartTime === null) { calibStartTime = now; calibStartIndex = i; }
           if (tok.lineIdx > currentLine) setCurrentLine(tok.lineIdx);
-          if (currentLine >= 2) endCalibration(now, i);
+          const elapsedSoFar = now - calibStartTime;
+          if (currentLine >= 2 && elapsedSoFar >= MIN_CALIB_MS) {
+            endCalibration(now, i, i - calibStartIndex + 1);
+          }
         } else {
           matchCountSinceCalib++;
           if (matchCountSinceCalib % CHECKPOINT_EVERY === 0) {
