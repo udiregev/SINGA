@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Singa — Page Turn vs. Line Scroll</title>
+<style>
+  :root {
+    --bg: #0b0d10; --panel: #14171b; --line: #2a2f36;
+    --text-dim: #5b6470; --text-upcoming: #9aa4b0; --text-current: #ffffff;
+    --sung: #4dd88a; --accent: #e8b34c; --danger: #d9634c; --row-h: 46px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin:0; padding:0; min-height:100%; background:var(--bg); color:var(--text-upcoming);
+    font-family:-apple-system,"Segoe UI",Roboto,sans-serif; }
+  header { padding:14px 18px 10px; border-bottom:1px solid var(--line); }
+  .brand { font-size:13px; letter-spacing:.14em; text-transform:uppercase; color:var(--accent); font-weight:600; }
+  .subtitle { font-size:12px; color:var(--text-dim); margin-top:2px; }
+
+  #setup { padding:16px 18px; }
+  .hint { font-size:12px; color:var(--text-dim); margin-top:6px; line-height:1.4; }
+  textarea {
+    width:100%; min-height:150px; background:var(--panel); border:1px solid var(--line);
+    border-radius:8px; color:var(--text-upcoming); font-size:15px; line-height:1.5;
+    padding:12px; font-family:inherit; resize:vertical;
+  }
+  button.primary {
+    margin-top:14px; width:100%; padding:14px; border-radius:10px; border:none;
+    background:var(--accent); color:#1a1204; font-size:16px; font-weight:700;
+  }
+  button.primary:active { opacity:.85; }
+  #setup.hidden, #stage.hidden { display:none !important; }
+
+  #stage { display:none; flex-direction:column; }
+  #stage.active { display:flex; }
+  #status-bar {
+    display:flex; align-items:center; gap:8px; padding:10px 18px; border-bottom:1px solid var(--line);
+    font-size:12px; color:var(--text-dim);
+  }
+  #dot { width:8px; height:8px; border-radius:50%; background:var(--text-dim); flex-shrink:0; }
+  #dot.listening { background:var(--sung); box-shadow:0 0 8px var(--sung); animation:pulse 1.4s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:.35;} }
+  #status-text { flex:1; }
+  #stop-btn { background:none; border:1px solid var(--line); color:var(--text-upcoming); border-radius:6px; padding:5px 10px; font-size:12px; }
+  #transcript-box { padding:8px 18px; font-size:11px; color:var(--text-dim); border-bottom:1px solid var(--line); }
+
+  #panels { display:flex; flex-wrap:wrap; gap:1px; background:var(--line); }
+  .panel { flex:1 1 320px; background:var(--bg); min-width:280px; display:flex; flex-direction:column; }
+  .panel-header { padding:10px 16px; border-bottom:1px solid var(--line); }
+  .panel-title { font-size:12px; font-weight:700; color:var(--accent); text-transform:uppercase; letter-spacing:.06em; }
+  .panel-note { font-size:11px; color:var(--text-dim); margin-top:2px; line-height:1.4; }
+  .panel-body { padding:18px; }
+
+  /* Option A: static 4-line page */
+  #panelA-lines .a-line {
+    font-size:20px; line-height:1.6; color:var(--text-upcoming); text-align:center; padding:2px 0;
+  }
+
+  /* Option B: row-locked scroll, current line always top row */
+  #panelB-viewport { height: calc(var(--row-h) * 4); overflow:hidden; position:relative; }
+  #panelB-scroll { position:absolute; top:0; left:0; right:0; transition: transform .35s ease; }
+  .b-line {
+    height:var(--row-h); line-height:var(--row-h); font-size:20px; color:var(--text-upcoming);
+    text-align:center; white-space:nowrap; overflow:hidden; transition: color .3s ease;
+  }
+  .b-line.current { color:var(--text-current); font-weight:600; }
+  .b-line.done { color: var(--sung); }
+</style>
+</head>
+<body>
+  <header>
+    <div class="brand">Singa</div>
+    <div class="subtitle">Comparing two lower-precision sync approaches, side by side</div>
+  </header>
+
+  <div id="setup">
+    <label class="hint" style="text-transform:uppercase; letter-spacing:.08em; display:block; margin-bottom:6px;">Lyrics to test (one line per lyric line)</label>
+    <textarea id="lyrics-input">All I wanna do is have some fun
+I've got a feeling I'm not the only one
+This is just a placeholder line for testing
+Replace this text with your own song's lyrics
+Line five for the demo, keep it going
+Line six to give us two full pages
+Line seven continues the second page
+Line eight wraps up this little test</textarea>
+    <button class="primary" id="connect-mic-btn" style="background:#3a4048; color:#fff;">Connect Microphone</button>
+    <div id="mic-status" class="hint" style="min-height:34px;"></div>
+    <button class="primary" id="start-btn" disabled style="opacity:.4;">Start Test</button>
+  </div>
+
+  <div id="stage">
+    <div id="status-bar">
+      <div id="dot"></div>
+      <div id="status-text">Idle</div>
+      <button id="stop-btn">Stop</button>
+    </div>
+    <div id="transcript-box">Heard: <span id="transcript-text">—</span></div>
+
+    <div id="panels">
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">A — Page Turn Only</div>
+          <div class="panel-note">No coloring at all. Shows 4 lines; jumps to the next 4 once recognition confirms you've moved past this group.</div>
+        </div>
+        <div class="panel-body">
+          <div id="panelA-lines"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">B — Line-by-line Scroll</div>
+          <div class="panel-note">Whole line turns green when confirmed done, then the block scrolls up one line, always keeping 4 lines visible.</div>
+        </div>
+        <div class="panel-body">
+          <div id="panelB-viewport">
+            <div id="panelB-scroll"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+(function() {
+  const ROW_HEIGHT = 46; // must match --row-h
+  const PAGE_SIZE = 4;
+
+  const setupEl = document.getElementById('setup');
+  const stageEl = document.getElementById('stage');
+  const connectMicBtn = document.getElementById('connect-mic-btn');
+  const micStatus = document.getElementById('mic-status');
+  const startBtn = document.getElementById('start-btn');
+  const stopBtn = document.getElementById('stop-btn');
+  const statusDot = document.getElementById('dot');
+  const statusText = document.getElementById('status-text');
+  const transcriptText = document.getElementById('transcript-text');
+  const lyricsInput = document.getElementById('lyrics-input');
+
+  const panelALines = document.getElementById('panelA-lines');
+  const panelBScroll = document.getElementById('panelB-scroll');
+
+  let micStream = null;
+
+  connectMicBtn.addEventListener('click', async () => {
+    micStatus.textContent = 'Requesting mic access…';
+    micStatus.style.color = '';
+    if (!window.isSecureContext) {
+      micStatus.textContent = 'Not running on HTTPS — mic access is blocked.';
+      micStatus.style.color = '#f0a99b';
+      return;
+    }
+    try {
+      micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      micStatus.textContent = 'Microphone connected. You can start.';
+      micStatus.style.color = '#4dd88a';
+      connectMicBtn.textContent = 'Microphone Connected ✓';
+      connectMicBtn.style.background = '#25402f';
+      startBtn.disabled = false;
+      startBtn.style.opacity = 1;
+    } catch (err) {
+      micStatus.textContent = 'Mic error: ' + err.name + ' — ' + err.message;
+      micStatus.style.color = '#f0a99b';
+    }
+  });
+
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  let recognition = null;
+  let shouldBeListening = false;
+  let lines = [];         // array of raw line strings
+  let wordTokens = [];    // {lineIdx, norm}
+  let searchCursor = 0;
+  let currentLine = 0;
+  let displayedPage = -1; // for panel A
+
+  function normalize(w) { return w.toLowerCase().replace(/[^a-z0-9']/g, ''); }
+
+  function buildLyrics(raw) {
+    lines = raw.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    wordTokens = [];
+    lines.forEach((lineText, lineIdx) => {
+      lineText.split(/\s+/).forEach(w => wordTokens.push({ lineIdx, norm: normalize(w) }));
+    });
+    searchCursor = 0;
+    currentLine = 0;
+    displayedPage = -1;
+    renderPanelA();
+    renderPanelB(true);
+  }
+
+  function renderPanelA() {
+    const page = Math.floor(currentLine / PAGE_SIZE);
+    if (page === displayedPage) return;
+    displayedPage = page;
+    panelALines.innerHTML = '';
+    const start = page * PAGE_SIZE;
+    for (let i = start; i < start + PAGE_SIZE; i++) {
+      const div = document.createElement('div');
+      div.className = 'a-line';
+      div.textContent = lines[i] || '';
+      panelALines.appendChild(div);
+    }
+  }
+
+  function renderPanelB(rebuildAll) {
+    if (rebuildAll) {
+      panelBScroll.innerHTML = '';
+      lines.forEach((lineText, idx) => {
+        const div = document.createElement('div');
+        div.className = 'b-line';
+        div.textContent = lineText;
+        div.dataset.idx = idx;
+        panelBScroll.appendChild(div);
+      });
+    }
+    // mark completed / current
+    Array.from(panelBScroll.children).forEach(el => {
+      const idx = parseInt(el.dataset.idx, 10);
+      el.classList.toggle('done', idx < currentLine);
+      el.classList.toggle('current', idx === currentLine);
+    });
+    // current line pinned to top row
+    panelBScroll.style.transform = `translateY(${-(currentLine) * ROW_HEIGHT}px)`;
+  }
+
+  function advanceToLine(newLine) {
+    if (newLine === currentLine) return;
+    currentLine = newLine;
+    renderPanelA();
+    renderPanelB(false);
+  }
+
+  function consumeSpokenWord(spokenNorm) {
+    if (!spokenNorm) return;
+    const LOOKAHEAD = 4;
+    for (let i = searchCursor; i < Math.min(searchCursor + LOOKAHEAD, wordTokens.length); i++) {
+      const tok = wordTokens[i];
+      if (tok.norm === spokenNorm || tok.norm.startsWith(spokenNorm) || spokenNorm.startsWith(tok.norm)) {
+        searchCursor = i + 1;
+        if (tok.lineIdx > currentLine) advanceToLine(tok.lineIdx);
+        return;
+      }
+    }
+  }
+
+  function handleTranscript(text) {
+    transcriptText.textContent = text || '—';
+    text.split(/\s+/).map(normalize).filter(Boolean).forEach(consumeSpokenWord);
+  }
+
+  function startRecognition() {
+    recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+
+    recognition.onresult = (event) => {
+      let combined = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        combined += event.results[i][0].transcript + ' ';
+      }
+      if (combined) handleTranscript(combined);
+    };
+    recognition.onerror = (e) => {
+      statusDot.className = 'error';
+      statusText.textContent = 'Mic error: ' + e.error;
+    };
+    recognition.onend = () => {
+      if (shouldBeListening) setTimeout(() => { if (shouldBeListening) recognition.start(); }, 250);
+      else { statusDot.className = ''; statusText.textContent = 'Stopped'; }
+    };
+    recognition.onstart = () => {
+      statusDot.className = 'listening';
+      statusText.textContent = 'Listening…';
+    };
+
+    shouldBeListening = true;
+    recognition.start();
+  }
+
+  startBtn.addEventListener('click', () => {
+    buildLyrics(lyricsInput.value);
+    setupEl.classList.add('hidden');
+    stageEl.classList.add('active');
+    startRecognition();
+  });
+
+  stopBtn.addEventListener('click', () => {
+    shouldBeListening = false;
+    if (recognition) recognition.stop();
+    stageEl.classList.remove('active');
+    setupEl.classList.remove('hidden');
+  });
+})();
+</script>
+</body>
+</html>
