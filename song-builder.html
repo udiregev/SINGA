@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Singa — Song Builder</title>
+<style>
+  :root {
+    --bg:#0b0d10; --panel:#14171b; --line:#2a2f36; --text-dim:#5b6470; --text-upcoming:#9aa4b0;
+    --text-current:#ffffff; --sung:#4dd88a; --accent:#e8b34c; --danger:#d9634c; --row-h:40px;
+  }
+  * { box-sizing:border-box; }
+  html, body { margin:0; padding:0; min-height:100%; background:var(--bg); color:var(--text-upcoming);
+    font-family:-apple-system,"Segoe UI",Roboto,sans-serif; }
+  header { padding:14px 18px 10px; border-bottom:1px solid var(--line); }
+  .brand { font-size:13px; letter-spacing:.14em; text-transform:uppercase; color:var(--accent); font-weight:600; }
+  .subtitle { font-size:12px; color:var(--text-dim); margin-top:2px; }
+
+  #tabs { display:flex; border-bottom:1px solid var(--line); }
+  .tab-btn {
+    flex:1; padding:12px 6px; background:none; border:none; color:var(--text-dim); font-size:12px;
+    font-weight:700; text-transform:uppercase; letter-spacing:.05em; border-bottom:2px solid transparent;
+  }
+  .tab-btn.active { color:var(--accent); border-bottom-color:var(--accent); }
+  .tab-btn:disabled { opacity:.35; }
+
+  .screen { display:none; padding:16px 18px 40px; }
+  .screen.active { display:block; }
+
+  textarea {
+    width:100%; min-height:200px; background:var(--panel); border:1px solid var(--line);
+    border-radius:8px; color:var(--text-upcoming); font-size:15px; line-height:1.5;
+    padding:12px; font-family:inherit; resize:vertical;
+  }
+  .hint { font-size:12px; color:var(--text-dim); margin-top:6px; line-height:1.4; }
+  button.primary {
+    margin-top:14px; padding:12px 20px; border-radius:10px; border:none;
+    background:var(--accent); color:#1a1204; font-size:14px; font-weight:700;
+  }
+  button.secondary {
+    margin-top:14px; padding:12px 20px; border-radius:10px; border:1px solid var(--line);
+    background:none; color:var(--text-upcoming); font-size:14px; font-weight:600; margin-left:8px;
+  }
+  button.danger { border-color: var(--danger); color: var(--danger); }
+  .row { display:flex; flex-wrap:wrap; align-items:center; }
+
+  /* --- Chord editor --- */
+  #chord-lyrics-preview {
+    background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:14px;
+    font-size:15px; line-height:1.9; color:var(--text-upcoming); white-space:pre-wrap; margin-bottom:14px;
+    max-height:220px; overflow-y:auto;
+  }
+  #timeline-wrap { margin-top:8px; }
+  #timeline-track {
+    position:relative; height:56px; background:var(--panel); border:1px solid var(--line);
+    border-radius:8px; overflow:hidden; cursor:copy;
+  }
+  .segment {
+    position:absolute; top:0; bottom:0; border-right:1px solid var(--bg);
+    background:#2a2410; display:flex; align-items:center; justify-content:center;
+  }
+  .segment input {
+    width:80%; text-align:center; background:none; border:none; color:var(--accent);
+    font-weight:700; font-size:14px; outline:none;
+  }
+  .divider {
+    position:absolute; top:0; bottom:0; width:10px; margin-left:-5px; cursor:ew-resize; z-index:5;
+  }
+  .divider::after {
+    content:''; position:absolute; left:4px; top:0; bottom:0; width:2px; background:var(--danger);
+  }
+  #timeline-ruler { display:flex; justify-content:space-between; font-size:10px; color:var(--text-dim); margin-top:4px; }
+
+  /* --- Recorder --- */
+  #rec-status { font-size:13px; color:var(--text-dim); margin:12px 0; }
+  #rec-dot { display:inline-block; width:10px; height:10px; border-radius:50%; background:var(--danger); margin-right:6px; }
+  #rec-dot.live { animation:pulse 1s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:.3;} }
+  audio { width:100%; margin-top:10px; }
+
+  /* --- Perform --- */
+  #perform-status { padding:10px 18px; border-bottom:1px solid var(--line); font-size:13px; color:var(--text-dim); }
+  #chord-display {
+    text-align:center; padding:18px; font-size:40px; font-weight:800; color:var(--accent);
+    border-bottom:1px solid var(--line); min-height:70px;
+  }
+  #lyrics-viewport { height: calc(var(--row-h) * 6); overflow:hidden; position:relative; padding:0 18px; }
+  #lyrics-scroll { position:absolute; top:0; left:18px; right:18px; }
+  .p-line {
+    height:var(--row-h); line-height:var(--row-h); font-size:19px; color:var(--text-upcoming);
+    text-align:center; white-space:nowrap; overflow:hidden; transition: color .3s ease;
+  }
+  .p-line.current { color:var(--text-current); font-weight:700; }
+  .p-line.done { color:var(--sung); }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="brand">Singa — Song Builder</div>
+    <div class="subtitle">Lyrics → Chords → Record → Perform</div>
+  </header>
+
+  <div id="tabs">
+    <button class="tab-btn active" data-tab="lyrics">1. Lyrics</button>
+    <button class="tab-btn" data-tab="chords" disabled>2. Chords</button>
+    <button class="tab-btn" data-tab="record" disabled>3. Record</button>
+    <button class="tab-btn" data-tab="perform" disabled>4. Perform</button>
+  </div>
+
+  <!-- 1. LYRICS -->
+  <div class="screen active" id="screen-lyrics">
+    <label class="hint" style="text-transform:uppercase; letter-spacing:.06em;">Type your lyrics — one line per lyric line</label>
+    <textarea id="lyrics-input" placeholder="All I wanna do is have some fun
+I've got a feeling I'm not the only one
+..."></textarea>
+    <div class="hint">You can come back and edit this any time before recording.</div>
+    <button class="primary" id="lyrics-continue-btn">Save &amp; Continue to Chords</button>
+  </div>
+
+  <!-- 2. CHORDS -->
+  <div class="screen" id="screen-chords">
+    <div class="hint" style="text-transform:uppercase; letter-spacing:.06em; margin-bottom:8px;">Your lyrics (reference)</div>
+    <div id="chord-lyrics-preview"></div>
+
+    <div class="hint" style="text-transform:uppercase; letter-spacing:.06em;">Chord timeline</div>
+    <p class="hint">Tap anywhere on the bar to add a chord section. Tap a chord label to rename it. Drag a red divider to resize sections; tap a divider to remove it.</p>
+    <div id="timeline-wrap">
+      <div id="timeline-track"></div>
+      <div id="timeline-ruler"><span>Start</span><span>End</span></div>
+    </div>
+    <div class="row">
+      <button class="primary" id="chords-continue-btn">Continue to Record</button>
+      <button class="secondary" id="chords-back-btn">Back to Lyrics</button>
+    </div>
+  </div>
+
+  <!-- 3. RECORD -->
+  <div class="screen" id="screen-record">
+    <p class="hint">Record yourself singing/playing the song. This becomes the reference track your performance will sync to.</p>
+    <div class="row">
+      <button class="primary" id="record-start-btn">● Record</button>
+      <button class="secondary" id="record-stop-btn" style="display:none;">■ Stop</button>
+    </div>
+    <div id="rec-status"><span id="rec-dot"></span><span id="rec-status-text">Not recording</span></div>
+    <audio id="record-preview" controls style="display:none;"></audio>
+    <div class="row" id="record-actions" style="display:none;">
+      <button class="primary" id="record-use-btn">Use This Recording</button>
+      <button class="secondary danger" id="record-again-btn">Re-record</button>
+    </div>
+    <div class="hint" id="record-error" style="color:#f0a99b;"></div>
+  </div>
+
+  <!-- 4. PERFORM -->
+  <div class="screen" id="screen-perform">
+    <div id="perform-setup" style="padding:16px 18px;">
+      <p class="hint">When you tap Start, the app listens for the moment you begin singing/playing, then times the lyric scroll and chord display to match your reference recording's length — no continuous listening after that.</p>
+      <button class="primary" id="perform-start-btn">Start — Listen For My Cue</button>
+      <div class="hint" id="perform-status-pre"></div>
+    </div>
+    <div id="perform-live" style="display:none;">
+      <div id="perform-status">Waiting for you to start…</div>
+      <div id="chord-display">—</div>
+      <div id="lyrics-viewport"><div id="lyrics-scroll"></div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  const ROW_HEIGHT = 40;
+
+  // ---------- Shared song state ----------
+  const song = {
+    lines: [],           // [string]
+    wordTokens: [],       // [{lineIdx, word}]
+    cutPoints: [],         // sorted array of fractions (0,1) excluding 0/1
+    chordSegments: [],     // computed: [{start, end, chord}]
+    audioBlob: null,
+    audioUrl: null,
+    audioDurationSec: null
+  };
+
+  function recomputeSegments() {
+    const bounds = [0, ...song.cutPoints, 1];
+    const prevSegs = song.chordSegments;
+    song.chordSegments = [];
+    for (let i = 0; i < bounds.length - 1; i++) {
+      const start = bounds[i], end = bounds[i+1];
+      const existing = prevSegs.find(s => Math.abs(s.start - start) < 1e-6);
+      song.chordSegments.push({ start, end, chord: existing ? existing.chord : '' });
+    }
+  }
+  recomputeSegments();
+
+  // ---------- Tab navigation ----------
+  const tabButtons = Array.from(document.querySelectorAll('.tab-btn'));
+  const screens = {
+    lyrics: document.getElementById('screen-lyrics'),
+    chords: document.getElementById('screen-chords'),
+    record: document.getElementById('screen-record'),
+    perform: document.getElementById('screen-perform')
+  };
+  function showTab(name) {
+    tabButtons.forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+    Object.keys(screens).forEach(k => screens[k].classList.toggle('active', k === name));
+  }
+  tabButtons.forEach(b => b.addEventListener('click', () => { if (!b.disabled) showTab(b.dataset.tab); }));
+  function enableTab(name) { tabButtons.find(b => b.dataset.tab === name).disabled = false; }
+
+  // ---------- 1. LYRICS ----------
+  const lyricsInput = document.getElementById('lyrics-input');
+  document.getElementById('lyrics-continue-btn').addEventListener('click', () => {
+    song.lines = lyricsInput.value.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    if (song.lines.length === 0) { alert('Type some lyrics first.'); return; }
+    song.wordTokens = [];
+    song.lines.forEach((lineText, lineIdx) => {
+      lineText.split(/\s+/).forEach(w => song.wordTokens.push({ lineIdx, word: w }));
+    });
+    renderChordLyricsPreview();
+    renderTimeline();
+    enableTab('chords');
+    showTab('chords');
+  });
+
+  // ---------- 2. CHORDS ----------
+  const chordLyricsPreview = document.getElementById('chord-lyrics-preview');
+  const timelineTrack = document.getElementById('timeline-track');
+
+  function renderChordLyricsPreview() {
+    chordLyricsPreview.textContent = song.lines.join('\n');
+  }
+
+  function renderTimeline() {
+    recomputeSegments();
+    timelineTrack.innerHTML = '';
+    const w = timelineTrack.clientWidth || 700;
+    song.chordSegments.forEach((seg) => {
+      const div = document.createElement('div');
+      div.className = 'segment';
+      div.style.left = (seg.start * 100) + '%';
+      div.style.width = ((seg.end - seg.start) * 100) + '%';
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.placeholder = 'chord';
+      input.value = seg.chord;
+      input.addEventListener('click', e => e.stopPropagation());
+      input.addEventListener('input', () => { seg.chord = input.value; });
+      div.appendChild(input);
+      timelineTrack.appendChild(div);
+    });
+    // dividers for each internal cut point
+    song.cutPoints.forEach((cp) => {
+      const d = document.createElement('div');
+      d.className = 'divider';
+      d.style.left = (cp * 100) + '%';
+      let dragging = false;
+      d.addEventListener('pointerdown', (e) => { dragging = true; e.stopPropagation(); d.setPointerCapture(e.pointerId); });
+      d.addEventListener('pointermove', (e) => {
+        if (!dragging) return;
+        const rect = timelineTrack.getBoundingClientRect();
+        let frac = (e.clientX - rect.left) / rect.width;
+        frac = Math.max(0.01, Math.min(0.99, frac));
+        const idx = song.cutPoints.indexOf(cp);
+        const lo = idx > 0 ? song.cutPoints[idx-1] + 0.01 : 0.01;
+        const hi = idx < song.cutPoints.length-1 ? song.cutPoints[idx+1] - 0.01 : 0.99;
+        song.cutPoints[idx] = Math.max(lo, Math.min(hi, frac));
+        renderTimeline();
+      });
+      d.addEventListener('pointerup', () => { dragging = false; });
+      d.addEventListener('click', (e) => {
+        if (dragging) return;
+        e.stopPropagation();
+        song.cutPoints = song.cutPoints.filter(x => x !== cp);
+        renderTimeline();
+      });
+      timelineTrack.appendChild(d);
+    });
+  }
+
+  timelineTrack.addEventListener('click', (e) => {
+    const rect = timelineTrack.getBoundingClientRect();
+    const frac = (e.clientX - rect.left) / rect.width;
+    if (song.cutPoints.some(cp => Math.abs(cp - frac) < 0.02)) return;
+    song.cutPoints.push(frac);
+    song.cutPoints.sort((a,b) => a-b);
+    renderTimeline();
+  });
+
+  document.getElementById('chords-back-btn').addEventListener('click', () => showTab('lyrics'));
+  document.getElementById('chords-continue-btn').addEventListener('click', () => {
+    enableTab('record');
+    showTab('record');
+  });
+
+  // ---------- 3. RECORD ----------
+  let mediaRecorder = null;
+  let recordedChunks = [];
+  let micStream = null;
+  const recStartBtn = document.getElementById('record-start-btn');
+  const recStopBtn = document.getElementById('record-stop-btn');
+  const recDot = document.getElementById('rec-dot');
+  const recStatusText = document.getElementById('rec-status-text');
+  const recPreview = document.getElementById('record-preview');
+  const recActions = document.getElementById('record-actions');
+  const recError = document.getElementById('record-error');
+
+  recStartBtn.addEventListener('click', async () => {
+    recError.textContent = '';
+    try {
+      micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (err) {
+      recError.textContent = 'Mic error: ' + err.name + ' — ' + err.message;
+      return;
+    }
+    recordedChunks = [];
+    mediaRecorder = new MediaRecorder(micStream);
+    mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
+    mediaRecorder.onstop = () => {
+      const blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+      song.audioBlob = blob;
+      song.audioUrl = URL.createObjectURL(blob);
+      recPreview.src = song.audioUrl;
+      recPreview.style.display = 'block';
+      recActions.style.display = 'flex';
+      micStream.getTracks().forEach(t => t.stop());
+    };
+    mediaRecorder.start();
+    recDot.classList.add('live');
+    recStatusText.textContent = 'Recording…';
+    recStartBtn.style.display = 'none';
+    recStopBtn.style.display = 'inline-block';
+    recPreview.style.display = 'none';
+    recActions.style.display = 'none';
+  });
+
+  recStopBtn.addEventListener('click', () => {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+    recDot.classList.remove('live');
+    recStatusText.textContent = 'Stopped';
+    recStopBtn.style.display = 'none';
+    recStartBtn.style.display = 'inline-block';
+  });
+
+  document.getElementById('record-again-btn').addEventListener('click', () => {
+    song.audioBlob = null;
+    song.audioUrl = null;
+    song.audioDurationSec = null;
+    recPreview.style.display = 'none';
+    recActions.style.display = 'none';
+    recStatusText.textContent = 'Not recording';
+  });
+
+  document.getElementById('record-use-btn').addEventListener('click', async () => {
+    try {
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const arrayBuffer = await song.audioBlob.arrayBuffer();
+      const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+      song.audioDurationSec = audioBuffer.duration;
+    } catch (e) {
+      recError.textContent = 'Could not read recording duration: ' + e.message;
+      return;
+    }
+    enableTab('perform');
+    showTab('perform');
+  });
+
+  // ---------- 4. PERFORM ----------
+  const performStartBtn = document.getElementById('perform-start-btn');
+  const performSetup = document.getElementById('perform-setup');
+  const performLive = document.getElementById('perform-live');
+  const performStatus = document.getElementById('perform-status');
+  const chordDisplay = document.getElementById('chord-display');
+  const lyricsScrollEl = document.getElementById('lyrics-scroll');
+  const performStatusPre = document.getElementById('perform-status-pre');
+
+  let perfLineEls = [];
+  let perfLineBounds = []; // [{start,end}] word index bounds per line, for continuous interpolation
+
+  function buildPerformLyrics() {
+    lyricsScrollEl.innerHTML = '';
+    perfLineEls = [];
+    song.lines.forEach((lineText, idx) => {
+      const div = document.createElement('div');
+      div.className = 'p-line';
+      div.textContent = lineText;
+      lyricsScrollEl.appendChild(div);
+      perfLineEls.push(div);
+    });
+    perfLineBounds = song.lines.map((_, lineIdx) => {
+      const idxs = song.wordTokens.reduce((acc, t, i) => { if (t.lineIdx === lineIdx) acc.push(i); return acc; }, []);
+      return { start: idxs[0], end: idxs[idxs.length - 1] };
+    });
+  }
+
+  function continuousLinePosition(estWordIndexFloat) {
+    const totalWords = song.wordTokens.length;
+    const clamped = Math.max(0, Math.min(estWordIndexFloat, totalWords - 1));
+    const idx = Math.floor(clamped);
+    const frac = clamped - idx;
+    const tok = song.wordTokens[idx];
+    const b = perfLineBounds[tok.lineIdx];
+    const lineWordCount = b.end - b.start + 1;
+    const posInLine = (idx - b.start + frac) / lineWordCount;
+    return tok.lineIdx + posInLine;
+  }
+
+  function chordForFraction(frac) {
+    const seg = song.chordSegments.find(s => frac >= s.start && frac < s.end);
+    return seg && seg.chord ? seg.chord : '—';
+  }
+
+  let onsetAudioCtx, analyser, dataArray, energyHistory = [];
+  const HISTORY_LEN = 43, THRESHOLD_MULT = 1.6, MIN_ENERGY_FLOOR = 12, REFRACTORY_MS = 180;
+  let listening = false;
+  let triggered = false;
+  let triggerTime = null;
+  let rafId = null;
+
+  function average(arr) { return arr.reduce((a,b)=>a+b,0)/arr.length; }
+  function stddev(arr, mean) { return Math.sqrt(arr.reduce((a,b)=>a+(b-mean)*(b-mean),0)/arr.length); }
+
+  async function startListeningForCue() {
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (err) {
+      performStatusPre.textContent = 'Mic error: ' + err.name + ' — ' + err.message;
+      performStatusPre.style.color = '#f0a99b';
+      return;
+    }
+    onsetAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const source = onsetAudioCtx.createMediaStreamSource(stream);
+    analyser = onsetAudioCtx.createAnalyser();
+    analyser.fftSize = 1024;
+    analyser.smoothingTimeConstant = 0.2;
+    source.connect(analyser);
+    dataArray = new Uint8Array(analyser.frequencyBinCount);
+    energyHistory = [];
+    listening = true;
+    triggered = false;
+
+    performSetup.style.display = 'none';
+    performLive.style.display = 'block';
+    buildPerformLyrics();
+    performStatus.textContent = 'Waiting for you to start singing…';
+
+    let lastOnsetTime = 0;
+    function tick() {
+      analyser.getByteFrequencyData(dataArray);
+      const binStart = Math.floor(dataArray.length * 0.02);
+      const binEnd = Math.floor(dataArray.length * 0.5);
+      let sum = 0;
+      for (let i = binStart; i < binEnd; i++) sum += dataArray[i];
+      const energy = sum / (binEnd - binStart);
+      energyHistory.push(energy);
+      if (energyHistory.length > HISTORY_LEN) energyHistory.shift();
+      const mean = average(energyHistory);
+      const std = stddev(energyHistory, mean);
+      const threshold = Math.max(MIN_ENERGY_FLOOR, mean + THRESHOLD_MULT * std);
+      const now = performance.now();
+
+      if (!triggered && listening && energy > threshold && energy > MIN_ENERGY_FLOOR && (now - lastOnsetTime) > REFRACTORY_MS && energyHistory.length >= 15) {
+        lastOnsetTime = now;
+        triggered = true;
+        triggerTime = now;
+        performStatus.textContent = 'Cue detected — performing…';
+      }
+
+      if (triggered) {
+        const elapsedSec = (now - triggerTime) / 1000;
+        const frac = Math.max(0, Math.min(1, elapsedSec / song.audioDurationSec));
+        const estWordIndex = frac * (song.wordTokens.length - 1);
+        const linePos = continuousLinePosition(estWordIndex);
+        lyricsScrollEl.style.transform = `translateY(${-(linePos - 1) * ROW_HEIGHT}px)`;
+        perfLineEls.forEach((el, i) => {
+          el.classList.toggle('done', i < Math.floor(linePos));
+          el.classList.toggle('current', i === Math.floor(linePos));
+        });
+        chordDisplay.textContent = chordForFraction(frac);
+        if (frac >= 1) {
+          performStatus.textContent = 'Done.';
+          listening = false;
+          stream.getTracks().forEach(t => t.stop());
+          if (onsetAudioCtx) onsetAudioCtx.close();
+          return;
+        }
+      }
+      if (listening) rafId = requestAnimationFrame(tick);
+    }
+    rafId = requestAnimationFrame(tick);
+  }
+
+  performStartBtn.addEventListener('click', startListeningForCue);
+})();
+</script>
+</body>
+</html>
