@@ -149,6 +149,11 @@ I've got a feeling I'm not the only one
       <button class="secondary danger" id="record-again-btn">Re-record</button>
     </div>
     <div class="hint" id="record-error" style="color:#f0a99b;"></div>
+
+    <div id="processing-panel" style="display:none; margin-top:18px; border-top:1px solid var(--line); padding-top:14px;">
+      <div class="hint" style="text-transform:uppercase; letter-spacing:.06em;">Aligning lyrics to your recording</div>
+      <div id="processing-status" class="hint" style="color:var(--accent); margin-top:4px;">Starting…</div>
+    </div>
   </div>
 
   <!-- 4. PERFORM -->
@@ -178,7 +183,8 @@ I've got a feeling I'm not the only one
     chordSegments: [],     // computed: [{start, end, chord}]
     audioBlob: null,
     audioUrl: null,
-    audioDurationSec: null
+    audioDurationSec: null,
+    wordTimestamps: null // [sec] one per wordTokens entry, from forced alignment; null = fallback to even distribution
   };
 
   function recomputeSegments() {
@@ -346,10 +352,113 @@ I've got a feeling I'm not the only one
     song.audioBlob = null;
     song.audioUrl = null;
     song.audioDurationSec = null;
+    song.wordTimestamps = null;
     recPreview.style.display = 'none';
     recActions.style.display = 'none';
     recStatusText.textContent = 'Not recording';
+    processingPanel.style.display = 'none';
   });
+
+  const processingPanel = document.getElementById('processing-panel');
+  const processingStatus = document.getElementById('processing-status');
+
+  function normalizeForAlign(w) {
+    return w.toLowerCase().replace(/[^a-z0-9']/g, '');
+  }
+
+  // DP sequence alignment (Levenshtein-style) between our known lyric words and
+  // Whisper's recognized words, so we can borrow Whisper's timestamps even when
+  // it mis-heard a few words.
+  function alignSequences(refWords, hypWords) {
+    const n = refWords.length, m = hypWords.length;
+    const dp = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+    for (let i = 0; i <= n; i++) dp[i][0] = i;
+    for (let j = 0; j <= m; j++) dp[0][j] = j;
+    for (let i = 1; i <= n; i++) {
+      for (let j = 1; j <= m; j++) {
+        const cost = refWords[i-1] === hypWords[j-1].word ? 0 : 1;
+        dp[i][j] = Math.min(dp[i-1][j-1] + cost, dp[i-1][j] + 1, dp[i][j-1] + 1);
+      }
+    }
+    const mapping = new Array(n).fill(null);
+    let i = n, j = m;
+    while (i > 0 && j > 0) {
+      const cost = refWords[i-1] === hypWords[j-1].word ? 0 : 1;
+      if (dp[i][j] === dp[i-1][j-1] + cost) { mapping[i-1] = j-1; i--; j--; }
+      else if (dp[i][j] === dp[i-1][j] + 1) { i--; }
+      else { j--; }
+    }
+    return mapping;
+  }
+
+  function fillTimestamps(mapping, hypWords, totalDuration, refCount) {
+    const times = new Array(refCount).fill(null);
+    mapping.forEach((hi, k) => { if (hi !== null) times[k] = hypWords[hi].start; });
+    let lastKnown = null, lastIdx = -1;
+    for (let k = 0; k < refCount; k++) {
+      if (times[k] !== null) {
+        if (lastKnown === null && k > 0) {
+          for (let x = 0; x < k; x++) times[x] = (times[k] / k) * x;
+        } else if (lastIdx >= 0 && k > lastIdx + 1) {
+          const span = times[k] - lastKnown, steps = k - lastIdx;
+          for (let x = lastIdx + 1; x < k; x++) times[x] = lastKnown + span * ((x - lastIdx) / steps);
+        }
+        lastKnown = times[k]; lastIdx = k;
+      }
+    }
+    if (lastIdx < refCount - 1) {
+      const remain = refCount - 1 - lastIdx;
+      for (let x = lastIdx + 1; x < refCount; x++) {
+        times[x] = lastKnown + (totalDuration - lastKnown) * ((x - lastIdx) / (remain + 1));
+      }
+    }
+    if (times[0] === null) times[0] = 0;
+    return times;
+  }
+
+  async function decodeToFloat32Mono16k(blob) {
+    const arrayBuffer = await blob.arrayBuffer();
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+    const targetRate = 16000;
+    const offlineCtx = new OfflineAudioContext(1, Math.ceil(audioBuffer.duration * targetRate), targetRate);
+    const source = offlineCtx.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(offlineCtx.destination);
+    source.start();
+    const rendered = await offlineCtx.startRendering();
+    return rendered.getChannelData(0);
+  }
+
+  async function runForcedAlignment() {
+    processingPanel.style.display = 'block';
+    processingStatus.textContent = 'Loading speech model (first run only, may take a bit)…';
+    try {
+      const { pipeline } = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2');
+      const transcriber = await pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny.en');
+
+      processingStatus.textContent = 'Analyzing your recording…';
+      const audioData = await decodeToFloat32Mono16k(song.audioBlob);
+      const output = await transcriber(audioData, {
+        return_timestamps: 'word',
+        chunk_length_s: 30,
+        stride_length_s: 5
+      });
+
+      processingStatus.textContent = 'Matching recognized words to your lyrics…';
+      const hypWords = (output.chunks || [])
+        .map(c => ({ word: normalizeForAlign(c.text), start: c.timestamp[0] }))
+        .filter(h => h.word.length > 0);
+      const refWords = song.wordTokens.map(t => normalizeForAlign(t.word));
+
+      const mapping = alignSequences(refWords, hypWords);
+      song.wordTimestamps = fillTimestamps(mapping, hypWords, song.audioDurationSec, refWords.length);
+      processingStatus.textContent = 'Done — timing attached.';
+    } catch (err) {
+      processingStatus.textContent = 'Could not run automatic alignment (' + err.message + ') — using even timing as a fallback.';
+      song.wordTimestamps = null;
+    }
+  }
 
   document.getElementById('record-use-btn').addEventListener('click', async () => {
     try {
@@ -361,6 +470,7 @@ I've got a feeling I'm not the only one
       recError.textContent = 'Could not read recording duration: ' + e.message;
       return;
     }
+    await runForcedAlignment();
     enableTab('perform');
     showTab('perform');
   });
@@ -408,6 +518,24 @@ I've got a feeling I'm not the only one
   function chordForFraction(frac) {
     const seg = song.chordSegments.find(s => frac >= s.start && frac < s.end);
     return seg && seg.chord ? seg.chord : '—';
+  }
+
+  // Uses real per-word timestamps from forced alignment when available; otherwise
+  // falls back to assuming words are evenly spaced across the recording's duration.
+  function estimateWordIndex(elapsedSec, frac) {
+    const ts = song.wordTimestamps;
+    if (!ts || ts.length < 2) return frac * (song.wordTokens.length - 1);
+    const n = ts.length;
+    if (elapsedSec <= ts[0]) return 0;
+    if (elapsedSec >= ts[n-1]) return n - 1;
+    for (let i = 0; i < n - 1; i++) {
+      if (elapsedSec >= ts[i] && elapsedSec <= ts[i+1]) {
+        const span = ts[i+1] - ts[i];
+        const f = span > 0 ? (elapsedSec - ts[i]) / span : 0;
+        return i + f;
+      }
+    }
+    return n - 1;
   }
 
   let onsetAudioCtx, analyser, dataArray, energyHistory = [];
@@ -470,7 +598,7 @@ I've got a feeling I'm not the only one
       if (triggered) {
         const elapsedSec = (now - triggerTime) / 1000;
         const frac = Math.max(0, Math.min(1, elapsedSec / song.audioDurationSec));
-        const estWordIndex = frac * (song.wordTokens.length - 1);
+        const estWordIndex = estimateWordIndex(elapsedSec, frac);
         const linePos = continuousLinePosition(estWordIndex);
         lyricsScrollEl.style.transform = `translateY(${-(linePos - 1) * ROW_HEIGHT}px)`;
         perfLineEls.forEach((el, i) => {
