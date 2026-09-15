@@ -58,6 +58,14 @@
   button.danger-solid { background: var(--danger); color:#fff; border:none; }
   .row { display:flex; flex-wrap:wrap; align-items:center; }
 
+  /* --- Chord mode toggle --- */
+  .mode-toggle { display:inline-flex; border:1px solid var(--line); border-radius:8px; overflow:hidden; margin-bottom:12px; }
+  .mode-btn {
+    background:none; border:none; color:var(--text-dim); font-size:13px; font-weight:700;
+    padding:8px 18px; cursor:pointer;
+  }
+  .mode-btn.active { background:var(--accent); color:#1a1204; }
+
   /* --- Chord editor (per-line chips) --- */
   .chord-line { margin-bottom:14px; }
   .chip-row { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:4px; min-height:30px; align-items:center; }
@@ -73,6 +81,20 @@
     width:28px; height:28px; font-size:15px; cursor:pointer;
   }
   .chord-line-text { font-size:16px; color:var(--text-upcoming); }
+
+  /* --- Suggested ("ghost") chord chip, shown before the user has entered one --- */
+  .chip-ghost {
+    display:flex; align-items:center; background:none; border:1px dashed var(--line); border-radius:6px;
+    padding:4px 10px; color:#5b6470; font-weight:700; font-size:13px; cursor:pointer;
+  }
+  .chip-ghost:hover { color:#8a94a0; border-color:#3a414b; }
+  .chip-ghost::after { content:'  (suggested — click to accept)'; font-weight:400; font-size:10px; color:var(--text-dim); }
+
+  /* --- Auto chord-placement panel --- */
+  #auto-chords-input {
+    width:100%; background:var(--panel); border:1px solid var(--line); border-radius:8px;
+    color:var(--text-upcoming); font-size:15px; padding:12px; font-family:inherit;
+  }
 
   /* --- Chord sheet (chords inline over lyrics) --- */
   .chordsheet { line-height:1.3; }
@@ -93,6 +115,7 @@
   /* --- Test performance (after Finish) --- */
   #perform-wrap { display:none; margin-top:20px; border-top:1px solid var(--line); padding-top:16px; }
   #perform-status { font-size:13px; color:var(--text-dim); margin-bottom:8px; }
+  #guide-status { font-size:12px; color:var(--text-dim); margin:4px 0 10px; min-height:14px; }
   #chord-display {
     text-align:center; padding:18px; font-size:40px; font-weight:800; color:var(--accent);
     border-bottom:1px solid var(--line); min-height:70px;
@@ -152,21 +175,42 @@ Cool wind in my hair
 
       <!-- CHORDS -->
       <div class="screen" id="screen-chords">
-        <p class="hint">Tap + to add a chord above a line. You can add more than one chord per line — they'll split evenly across that line during sync.</p>
-        <div id="chord-lines"></div>
+        <div class="mode-toggle" role="group" aria-label="Chord entry mode">
+          <button class="mode-btn active" id="mode-manual-btn" data-mode="manual" type="button">Manual</button>
+          <button class="mode-btn" id="mode-auto-btn" data-mode="auto" type="button">Auto</button>
+        </div>
 
-        <div class="hint" style="text-transform:uppercase; letter-spacing:.06em; margin-top:18px;">Preview</div>
-        <div id="chordsheet-chords" class="chordsheet"></div>
+        <!-- MANUAL: per-line chip editor -->
+        <div id="chords-manual-panel">
+          <p class="hint">Tap + to add a chord above a line. You can add more than one chord per line — they'll split evenly across that line during sync. Chords shown in grey are suggestions based on the song's pattern — click one to accept it, or add your own instead.</p>
+          <div id="chord-lines"></div>
 
-        <div class="row">
-          <button class="primary" id="chords-continue-btn">Continue to Sync</button>
-          <button class="secondary" id="chords-back-btn">Back to Lyrics</button>
+          <div class="hint" style="text-transform:uppercase; letter-spacing:.06em; margin-top:18px;">Preview</div>
+          <div id="chordsheet-chords" class="chordsheet"></div>
+
+          <div class="row">
+            <button class="primary" id="chords-continue-btn">Continue to Sync</button>
+            <button class="secondary" id="chords-back-btn">Back to Lyrics</button>
+          </div>
+        </div>
+
+        <!-- AUTO: chord pool + record-to-place -->
+        <div id="chords-auto-panel" style="display:none;">
+          <p class="hint">List every chord used in the song, in any order. When you record your sync track, Singa will place these chords onto your lyrics automatically from that recording.</p>
+          <label class="hint" style="text-transform:uppercase; letter-spacing:.06em;">Chords used in this song</label>
+          <input type="text" id="auto-chords-input" placeholder="e.g. Am F C G">
+          <div class="hint" id="auto-chords-error" style="color:#f0a99b;"></div>
+          <div class="row">
+            <button class="primary" id="auto-place-btn">Place</button>
+            <button class="secondary" id="auto-chords-back-btn">Back to Lyrics</button>
+          </div>
         </div>
       </div>
 
       <!-- SYNC -->
       <div class="screen" id="screen-sync">
         <div class="hint" style="text-transform:uppercase; letter-spacing:.06em;">Chord sheet</div>
+        <div class="hint" id="auto-sync-hint" style="display:none;">Auto mode — chords aren't placed yet. Record below and Singa will place them from your recording.</div>
         <div id="chordsheet-sync" class="chordsheet" style="margin-bottom:16px;"></div>
 
         <p class="hint">Record yourself singing/playing the song. This becomes the reference track your live performance will sync to.</p>
@@ -195,6 +239,8 @@ Cool wind in my hair
 
         <div id="perform-wrap">
           <div class="hint" style="text-transform:uppercase; letter-spacing:.06em; margin-bottom:8px;">Test your synced performance</div>
+          <button class="secondary" id="play-guide-btn">▶ Play Guide</button>
+          <div id="guide-status"></div>
           <button class="primary" id="perform-start-btn">Start — Listen For My Cue</button>
           <div id="perform-status">Waiting for you to start…</div>
           <div id="chord-display">—</div>
@@ -215,10 +261,15 @@ Cool wind in my hair
       lines: [],
       wordTokens: [],
       lineChords: [],       // [ [chordStr, ...] per line ]
+      chordMode: 'manual',  // 'manual' | 'auto'
+      chordPool: [],        // auto mode: flat list of chord names typed by the user
       audioBlob: null,
       audioUrl: null,
       audioDurationSec: null,
-      wordTimestamps: null
+      wordTimestamps: null,
+      pcm16k: null,         // cached decoded mono 16kHz samples, reused for pitch analysis
+      pitchTrack: null,     // cached { time, freq, energy }[] once analyzed
+      guideTrack: null      // cached generated chiptune guide { notes, keyName, bpm }
     };
   }
   let song = freshSong();
@@ -248,6 +299,11 @@ Cool wind in my hair
     document.getElementById('perform-wrap').style.display = 'none';
     document.getElementById('processing-panel').style.display = 'none';
     recStatusText.textContent = 'Not recording';
+    guideStatus.textContent = '';
+    playGuideBtn.textContent = '▶ Play Guide';
+    setChordMode('manual');
+    autoChordsInput.value = '';
+    autoChordsError.textContent = '';
     disableStep('chords');
     disableStep('sync');
     showStep('lyrics');
@@ -264,6 +320,7 @@ Cool wind in my hair
   }
 
   function normalizeWord(w) { return w.toLowerCase().replace(/[^a-z0-9']/g, ''); }
+  function normalizeLine(l) { return l.toLowerCase().replace(/[^a-z0-9' ]/g, '').replace(/\s+/g, ' ').trim(); }
 
   // Multiple chords on one line split evenly across that line's duration.
   function chordForLinePosition(linePosFloat) {
@@ -292,10 +349,120 @@ Cool wind in my hair
     showStep('chords');
   });
 
-  // ---------- 2. CHORDS (per-line chips) ----------
+  // ---------- 2. CHORDS ----------
   const chordLinesEl = document.getElementById('chord-lines');
   const chordsheetChordsEl = document.getElementById('chordsheet-chords');
   const chordsheetSyncEl = document.getElementById('chordsheet-sync');
+  const chordsManualPanel = document.getElementById('chords-manual-panel');
+  const chordsAutoPanel = document.getElementById('chords-auto-panel');
+  const modeManualBtn = document.getElementById('mode-manual-btn');
+  const modeAutoBtn = document.getElementById('mode-auto-btn');
+  const autoChordsInput = document.getElementById('auto-chords-input');
+  const autoChordsError = document.getElementById('auto-chords-error');
+  const autoSyncHint = document.getElementById('auto-sync-hint');
+
+  function setChordMode(mode) {
+    song.chordMode = mode;
+    modeManualBtn.classList.toggle('active', mode === 'manual');
+    modeAutoBtn.classList.toggle('active', mode === 'auto');
+    chordsManualPanel.style.display = mode === 'manual' ? 'block' : 'none';
+    chordsAutoPanel.style.display = mode === 'auto' ? 'block' : 'none';
+  }
+  modeManualBtn.addEventListener('click', () => setChordMode('manual'));
+  modeAutoBtn.addEventListener('click', () => setChordMode('auto'));
+
+  // ----- Chord symbol parsing (shared by auto-placement) -----
+  // Handles roots A-G with #/b, common qualities, and slash/compound chords like "Am/D" or "Fm G".
+  const NOTE_TO_PC = { C:0, D:2, E:4, F:5, G:7, A:9, B:11 };
+  const MAJOR_SCALE_STEPS = [0,2,4,5,7,9,11];
+  const MINOR_SCALE_STEPS = [0,2,3,5,7,8,10];
+
+  function parseChordSymbol(raw) {
+    if (!raw) return null;
+    const s = raw.trim();
+    const m = s.match(/^([A-Ga-g])([#b]?)([^\/]*)(?:\/([A-Ga-g])([#b]?))?$/);
+    if (!m) return null;
+    const rootLetter = m[1].toUpperCase();
+    let rootPc = NOTE_TO_PC[rootLetter];
+    if (m[2] === '#') rootPc = (rootPc + 1) % 12;
+    if (m[2] === 'b') rootPc = (rootPc + 11) % 12;
+    const qualityStr = (m[3] || '').toLowerCase();
+    let bassPc = null;
+    if (m[4]) {
+      bassPc = NOTE_TO_PC[m[4].toUpperCase()];
+      if (m[5] === '#') bassPc = (bassPc + 1) % 12;
+      if (m[5] === 'b') bassPc = (bassPc + 11) % 12;
+    }
+    let triad = [0, 4, 7]; // major default
+    const isMinor = /^m(?!aj)/.test(qualityStr);
+    if (/dim/.test(qualityStr)) triad = [0, 3, 6];
+    else if (/aug|\+/.test(qualityStr)) triad = [0, 4, 8];
+    else if (/sus2/.test(qualityStr)) triad = [0, 2, 7];
+    else if (/sus4/.test(qualityStr)) triad = [0, 5, 7];
+    else if (isMinor) triad = [0, 3, 7];
+    let tones = triad.slice();
+    if (/maj7/.test(qualityStr)) tones.push(11);
+    else if (/7/.test(qualityStr)) tones.push(isMinor ? 10 : 10);
+    const tonePcs = new Set(tones.map(t => (t + rootPc) % 12));
+    if (bassPc !== null) tonePcs.add(bassPc);
+    return { text: raw.trim(), rootPc, bassPc, tonePcs };
+  }
+
+  // ----- #3: pattern-based chord suggestions (manual mode, "ubiquitous" ghost chips) -----
+  function computeChordSuggestions() {
+    const n = song.lines.length;
+    const suggestions = new Array(n).fill(null);
+    if (n === 0) return suggestions;
+
+    // group lines by normalized text, so a repeated chorus/verse line inherits its chord
+    const groups = {};
+    song.lines.forEach((lineText, i) => {
+      const key = normalizeLine(lineText);
+      if (!key) return;
+      (groups[key] = groups[key] || []).push(i);
+    });
+
+    // sequence of lines that currently carry exactly one chord, for cycle detection
+    const known = [];
+    song.lines.forEach((_, i) => {
+      const chips = (song.lineChords[i] || []).filter(c => c && c.trim());
+      if (chips.length === 1) known.push({ i, chord: chips[0] });
+    });
+
+    let cycleLen = 0, cycleMap = {};
+    for (let len = 1; len <= Math.floor(known.length / 2); len++) {
+      const map = {};
+      let consistent = true, repeats = 0;
+      for (const { i, chord } of known) {
+        const pos = i % len;
+        if (map[pos] === undefined) map[pos] = chord;
+        else if (map[pos] !== chord) { consistent = false; break; }
+        else repeats++;
+      }
+      if (consistent && repeats >= len) { cycleLen = len; cycleMap = map; break; }
+    }
+
+    let lastChord = null;
+    for (let i = 0; i < n; i++) {
+      const chips = (song.lineChords[i] || []).filter(c => c && c.trim());
+      if (chips.length > 0) { lastChord = chips[chips.length - 1]; continue; }
+      const key = normalizeLine(song.lines[i]);
+      const groupMates = key ? groups[key] : null;
+      let suggestion = null;
+      if (groupMates) {
+        for (const gi of groupMates) {
+          const gChips = (song.lineChords[gi] || []).filter(c => c && c.trim());
+          if (gChips.length > 0) { suggestion = gChips[0]; break; }
+        }
+      }
+      if (!suggestion && cycleLen > 0 && cycleMap[i % cycleLen] !== undefined) {
+        suggestion = cycleMap[i % cycleLen];
+      }
+      if (!suggestion && lastChord) suggestion = lastChord;
+      suggestions[i] = suggestion;
+    }
+    return suggestions;
+  }
 
   function computeChordPositions(lineIdx) {
     const words = song.lines[lineIdx].split(/\s+/);
@@ -334,6 +501,7 @@ Cool wind in my hair
 
   function renderChordEditor() {
     chordLinesEl.innerHTML = '';
+    const suggestions = computeChordSuggestions();
     song.lines.forEach((lineText, lineIdx) => {
       const wrap = document.createElement('div');
       wrap.className = 'chord-line';
@@ -359,6 +527,19 @@ Cool wind in my hair
         chipsRow.appendChild(chip);
       });
 
+      // Ghost suggestion chip — only when this line has no chords entered yet.
+      if (song.lineChords[lineIdx].length === 0 && suggestions[lineIdx]) {
+        const ghost = document.createElement('div');
+        ghost.className = 'chip-ghost';
+        ghost.textContent = suggestions[lineIdx];
+        ghost.title = 'Suggested from the song\'s pattern — click to accept';
+        ghost.addEventListener('click', () => {
+          song.lineChords[lineIdx].push(suggestions[lineIdx]);
+          renderChordEditor();
+        });
+        chipsRow.appendChild(ghost);
+      }
+
       const addBtn = document.createElement('button');
       addBtn.className = 'chip-add';
       addBtn.textContent = '+';
@@ -379,6 +560,26 @@ Cool wind in my hair
   document.getElementById('chords-back-btn').addEventListener('click', () => showStep('lyrics'));
   document.getElementById('chords-continue-btn').addEventListener('click', () => {
     renderChordSheet(chordsheetSyncEl);
+    autoSyncHint.style.display = 'none';
+    enableStep('sync');
+    showStep('sync');
+  });
+
+  // ----- Auto chord-placement panel -----
+  document.getElementById('auto-chords-back-btn').addEventListener('click', () => showStep('lyrics'));
+  document.getElementById('auto-place-btn').addEventListener('click', () => {
+    const pool = autoChordsInput.value.split(/[,\s]+/).map(c => c.trim()).filter(Boolean);
+    if (pool.length === 0) {
+      autoChordsError.textContent = 'Enter at least one chord first (e.g. Am F C G).';
+      return;
+    }
+    autoChordsError.textContent = '';
+    song.chordPool = pool;
+    song.chordMode = 'auto';
+    // Chords aren't placed yet — clear any existing chips so the sheet shows lyrics only until we record.
+    song.lineChords = song.lines.map(() => []);
+    renderChordSheet(chordsheetSyncEl);
+    autoSyncHint.style.display = 'block';
     enableStep('sync');
     showStep('sync');
   });
@@ -411,6 +612,8 @@ Cool wind in my hair
     liveLineEls = [];
     liveSearchCursor = 0;
     liveCurrentLine = 0;
+    // Auto mode: chords aren't placed until after this recording is processed — show lyrics only.
+    liveChordEl.style.display = song.chordMode === 'auto' ? 'none' : 'block';
     song.lines.forEach((lineText) => {
       const div = document.createElement('div');
       div.className = 'p-line';
@@ -429,7 +632,7 @@ Cool wind in my hair
       el.classList.toggle('done', i < newLine);
       el.classList.toggle('current', i === newLine);
     });
-    liveChordEl.textContent = chordForLinePosition(newLine);
+    if (song.chordMode !== 'auto') liveChordEl.textContent = chordForLinePosition(newLine);
   }
 
   function consumeLiveWord(spokenNorm) {
@@ -523,6 +726,16 @@ Cool wind in my hair
     song.audioUrl = null;
     song.audioDurationSec = null;
     song.wordTimestamps = null;
+    song.pcm16k = null;
+    song.pitchTrack = null;
+    song.guideTrack = null;
+    guideStatus.textContent = '';
+    playGuideBtn.textContent = '▶ Play Guide';
+    if (song.chordMode === 'auto') {
+      song.lineChords = song.lines.map(() => []);
+      renderChordSheet(chordsheetSyncEl);
+      autoSyncHint.style.display = 'block';
+    }
     recPreview.style.display = 'none';
     syncActions.style.display = 'none';
     performWrap.style.display = 'none';
@@ -596,6 +809,110 @@ Cool wind in my hair
     return rendered.getChannelData(0);
   }
 
+  // ---------- Shared pitch tracking (used by #2 auto chord placement and #5 guide tune) ----------
+  const PITCH_SAMPLE_RATE = 16000;
+
+  function detectPitchACF(frame, sampleRate) {
+    const SIZE = frame.length;
+    let rms = 0;
+    for (let i = 0; i < SIZE; i++) rms += frame[i] * frame[i];
+    rms = Math.sqrt(rms / SIZE);
+    if (rms < 0.01) return { freq: null, energy: rms };
+    const MIN_FREQ = 70, MAX_FREQ = 1000;
+    const minOffset = Math.floor(sampleRate / MAX_FREQ);
+    const maxOffset = Math.min(SIZE - 1, Math.floor(sampleRate / MIN_FREQ));
+    let bestOffset = -1, bestCorr = 0;
+    for (let offset = minOffset; offset <= maxOffset; offset++) {
+      let corr = 0;
+      for (let i = 0; i < SIZE - offset; i++) corr += frame[i] * frame[i + offset];
+      corr = corr / (SIZE - offset);
+      if (corr > bestCorr) { bestCorr = corr; bestOffset = offset; }
+    }
+    if (bestOffset <= 0) return { freq: null, energy: rms };
+    const confidence = bestCorr / (rms * rms + 1e-9);
+    if (confidence < 0.3) return { freq: null, energy: rms };
+    return { freq: sampleRate / bestOffset, energy: rms, confidence };
+  }
+
+  function analyzePitchTrack(samples, sampleRate) {
+    const frameSize = 1024, hop = 512;
+    const track = [];
+    for (let start = 0; start + frameSize <= samples.length; start += hop) {
+      const frame = samples.subarray(start, start + frameSize);
+      const { freq, energy } = detectPitchACF(frame, sampleRate);
+      track.push({ time: start / sampleRate, freq, energy });
+    }
+    return track;
+  }
+
+  async function ensurePitchTrack() {
+    if (song.pitchTrack) return song.pitchTrack;
+    if (!song.pcm16k) {
+      if (!song.audioBlob) return null;
+      song.pcm16k = await decodeToFloat32Mono16k(song.audioBlob);
+    }
+    song.pitchTrack = analyzePitchTrack(song.pcm16k, PITCH_SAMPLE_RATE);
+    return song.pitchTrack;
+  }
+
+  function freqToPitchClass(freq) {
+    const midi = 69 + 12 * Math.log2(freq / 440);
+    return ((Math.round(midi) % 12) + 12) % 12;
+  }
+
+  // ---------- #2 (auto mode): place the user's chord pool onto lines using the recording ----------
+  function lineTimeBounds() {
+    computeLineBounds();
+    const ts = song.wordTimestamps;
+    return song.lines.map((_, lineIdx) => {
+      const b = lineBounds[lineIdx];
+      if (!b || !ts) return null;
+      const start = ts[b.start] != null ? ts[b.start] : 0;
+      const nextLineStart = (lineIdx + 1 < lineBounds.length && lineBounds[lineIdx + 1] && ts[lineBounds[lineIdx + 1].start] != null)
+        ? ts[lineBounds[lineIdx + 1].start] : song.audioDurationSec;
+      return { start, end: nextLineStart };
+    });
+  }
+
+  async function runAutoChordPlacement() {
+    const pool = song.chordPool.map(c => ({ raw: c, parsed: parseChordSymbol(c) })).filter(c => c.parsed);
+    if (pool.length === 0) return;
+    const pitchTrack = await ensurePitchTrack();
+    if (!pitchTrack) return;
+    const bounds = lineTimeBounds();
+
+    let lastPoolIdx = -1;
+    let lastAssigned = null;
+    song.lines.forEach((_, lineIdx) => {
+      const win = bounds[lineIdx];
+      if (!win) { if (lastAssigned) song.lineChords[lineIdx] = [lastAssigned]; return; }
+      const hist = new Array(12).fill(0);
+      pitchTrack.forEach(p => {
+        if (p.freq && p.time >= win.start && p.time < win.end && p.energy > 0.015) {
+          hist[freqToPitchClass(p.freq)] += p.energy;
+        }
+      });
+      const total = hist.reduce((a, b) => a + b, 0);
+      if (total === 0) { if (lastAssigned) song.lineChords[lineIdx] = [lastAssigned]; return; }
+      const dominantPc = hist.indexOf(Math.max(...hist));
+
+      const candidates = pool.filter(c => c.parsed.tonePcs.has(dominantPc));
+      let choice = null;
+      if (candidates.length === 0) {
+        choice = lastAssigned ? pool.find(c => c.raw === lastAssigned) : pool[0];
+      } else if (lastAssigned && candidates.some(c => c.raw === lastAssigned)) {
+        choice = candidates.find(c => c.raw === lastAssigned);
+      } else {
+        lastPoolIdx = (lastPoolIdx + 1) % candidates.length;
+        choice = candidates[lastPoolIdx % candidates.length];
+      }
+      if (choice) {
+        song.lineChords[lineIdx] = [choice.raw];
+        lastAssigned = choice.raw;
+      }
+    });
+  }
+
   async function processRecording() {
     try {
       const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -615,6 +932,7 @@ Cool wind in my hair
 
       processingStatus.textContent = 'Analyzing your recording…';
       const audioData = await decodeToFloat32Mono16k(song.audioBlob);
+      song.pcm16k = audioData; // cache for pitch analysis (chord placement / guide tune)
       const output = await transcriber(audioData, { return_timestamps: 'word', chunk_length_s: 30, stride_length_s: 5 });
 
       processingStatus.textContent = 'Matching recognized words to your lyrics…';
@@ -629,6 +947,18 @@ Cool wind in my hair
     } catch (err) {
       processingStatus.textContent = 'Could not run automatic alignment (' + err.message + ') — using even timing as a fallback.';
       song.wordTimestamps = null;
+    }
+
+    if (song.chordMode === 'auto' && song.chordPool.length) {
+      try {
+        processingStatus.textContent = 'Placing your chords from the recording…';
+        await runAutoChordPlacement();
+        processingStatus.textContent = 'Done — chords placed.';
+      } catch (err) {
+        processingStatus.textContent = 'Could not auto-place chords (' + err.message + ') — add them manually if needed.';
+      }
+      renderChordSheet(chordsheetSyncEl);
+      autoSyncHint.style.display = 'none';
     }
 
     recStatusText.textContent = 'Ready';
@@ -646,6 +976,8 @@ Cool wind in my hair
   const performStatus = document.getElementById('perform-status');
   const chordDisplay = document.getElementById('chord-display');
   const lyricsScrollEl = document.getElementById('lyrics-scroll');
+  const playGuideBtn = document.getElementById('play-guide-btn');
+  const guideStatus = document.getElementById('guide-status');
 
   let perfLineEls = [];
 
@@ -764,6 +1096,170 @@ Cool wind in my hair
   }
 
   performStartBtn.addEventListener('click', startListeningForCue);
+
+  // ---------- #5: chiptune "Play Guide" ----------
+  const KK_MAJOR = [6.35,2.23,3.48,2.33,4.38,4.09,2.52,5.19,2.39,3.66,2.29,2.88];
+  const KK_MINOR = [6.33,2.68,3.52,5.38,2.60,3.53,2.54,4.75,3.98,2.69,3.34,3.17];
+  const PITCH_CLASS_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+
+  function correlate(hist, profile) {
+    const meanH = hist.reduce((a,b)=>a+b,0) / 12;
+    const meanP = profile.reduce((a,b)=>a+b,0) / 12;
+    let num = 0, denH = 0, denP = 0;
+    for (let i = 0; i < 12; i++) {
+      const dh = hist[i] - meanH, dp = profile[i] - meanP;
+      num += dh * dp; denH += dh * dh; denP += dp * dp;
+    }
+    return num / (Math.sqrt(denH * denP) + 1e-9);
+  }
+
+  function estimateKey(pitchTrack) {
+    const hist = new Array(12).fill(0);
+    pitchTrack.forEach(p => { if (p.freq) hist[freqToPitchClass(p.freq)] += p.energy; });
+    let best = { corr: -Infinity, rootPc: 0, mode: 'major' };
+    for (let rootPc = 0; rootPc < 12; rootPc++) {
+      const rotatedMaj = hist.slice(rootPc).concat(hist.slice(0, rootPc));
+      const rotatedMin = rotatedMaj;
+      const cMaj = correlate(rotatedMaj, KK_MAJOR);
+      const cMin = correlate(rotatedMin, KK_MINOR);
+      if (cMaj > best.corr) best = { corr: cMaj, rootPc, mode: 'major' };
+      if (cMin > best.corr) best = { corr: cMin, rootPc, mode: 'minor' };
+    }
+    return best;
+  }
+
+  function estimateTempoGrid(pitchTrack, durationSec) {
+    // Coarse onset detection from the pitch track's energy, purely to get a rhythmic grid to snap notes to.
+    const onsets = [];
+    let prevEnergy = 0;
+    pitchTrack.forEach(p => {
+      if (p.energy > 0.02 && p.energy > prevEnergy * 1.5) onsets.push(p.time);
+      prevEnergy = p.energy;
+    });
+    if (onsets.length < 4) return null;
+    const intervals = [];
+    for (let i = 1; i < onsets.length; i++) {
+      const d = onsets[i] - onsets[i-1];
+      if (d > 0.1 && d < 2) intervals.push(d);
+    }
+    if (intervals.length < 3) return null;
+    intervals.sort((a,b) => a-b);
+    const median = intervals[Math.floor(intervals.length / 2)];
+    return Math.max(0.1, Math.min(0.6, median));
+  }
+
+  function midiToFreq(midi) { return 440 * Math.pow(2, (midi - 69) / 12); }
+
+  function quantizeToScale(midi, rootPc, scaleSteps) {
+    const pc = ((Math.round(midi) % 12) + 12) % 12;
+    const allowed = scaleSteps.map(s => (rootPc + s) % 12);
+    let bestPc = allowed[0], bestDist = 99;
+    allowed.forEach(a => {
+      const dist = Math.min(Math.abs(a - pc), 12 - Math.abs(a - pc));
+      if (dist < bestDist) { bestDist = dist; bestPc = a; }
+    });
+    let diff = bestPc - pc;
+    if (diff > 6) diff -= 12;
+    if (diff < -6) diff += 12;
+    return Math.round(midi) + diff;
+  }
+
+  async function buildGuideTrack() {
+    const pitchTrack = await ensurePitchTrack();
+    if (!pitchTrack) throw new Error('no recording to analyze');
+    const key = estimateKey(pitchTrack);
+    const scaleSteps = key.mode === 'major' ? MAJOR_SCALE_STEPS : MINOR_SCALE_STEPS;
+    const grid = estimateTempoGrid(pitchTrack, song.audioDurationSec);
+
+    // Convert voiced frames to quantized MIDI notes, then run-length encode into discrete notes.
+    const rawNotes = [];
+    pitchTrack.forEach(p => {
+      if (!p.freq || p.energy < 0.015) { rawNotes.push({ time: p.time, midi: null }); return; }
+      const midi = 69 + 12 * Math.log2(p.freq / 440);
+      rawNotes.push({ time: p.time, midi: quantizeToScale(midi, key.rootPc, scaleSteps) });
+    });
+
+    const notes = [];
+    let cur = null;
+    const hop = pitchTrack.length > 1 ? (pitchTrack[1].time - pitchTrack[0].time) : 0.032;
+    rawNotes.forEach((n, i) => {
+      if (n.midi === null) {
+        if (cur) { cur.end = n.time; notes.push(cur); cur = null; }
+        return;
+      }
+      if (cur && cur.midi === n.midi) { cur.end = n.time + hop; }
+      else { if (cur) notes.push(cur); cur = { midi: n.midi, start: n.time, end: n.time + hop }; }
+    });
+    if (cur) notes.push(cur);
+
+    const MIN_DUR = 0.09;
+    const merged = notes.filter(n => (n.end - n.start) >= MIN_DUR);
+
+    if (grid) {
+      merged.forEach(n => {
+        n.start = Math.round(n.start / grid) * grid;
+        n.end = Math.max(n.start + grid, Math.round(n.end / grid) * grid);
+      });
+    }
+
+    const bpm = grid ? Math.round(60 / grid) : null;
+    return {
+      notes: merged,
+      keyName: PITCH_CLASS_NAMES[key.rootPc] + ' ' + key.mode,
+      bpm
+    };
+  }
+
+  let guideAudioCtx = null;
+  let guidePlaying = false;
+
+  function stopGuidePlayback() {
+    guidePlaying = false;
+    if (guideAudioCtx) { guideAudioCtx.close(); guideAudioCtx = null; }
+    playGuideBtn.textContent = '▶ Play Guide';
+  }
+
+  function playGuideTrack(guide) {
+    guideAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const t0 = guideAudioCtx.currentTime + 0.1;
+    guide.notes.forEach(n => {
+      const osc = guideAudioCtx.createOscillator();
+      const gain = guideAudioCtx.createGain();
+      osc.type = 'square';
+      osc.frequency.value = midiToFreq(n.midi);
+      const dur = Math.max(0.05, n.end - n.start);
+      gain.gain.setValueAtTime(0, t0 + n.start);
+      gain.gain.linearRampToValueAtTime(0.18, t0 + n.start + 0.01);
+      gain.gain.setValueAtTime(0.18, t0 + n.start + Math.max(0.01, dur - 0.03));
+      gain.gain.linearRampToValueAtTime(0.0001, t0 + n.start + dur);
+      osc.connect(gain).connect(guideAudioCtx.destination);
+      osc.start(t0 + n.start);
+      osc.stop(t0 + n.start + dur + 0.02);
+    });
+    const totalDur = guide.notes.length ? Math.max(...guide.notes.map(n => n.end)) : 0;
+    guidePlaying = true;
+    playGuideBtn.textContent = '■ Stop Guide';
+    setTimeout(() => { if (guidePlaying) stopGuidePlayback(); }, (totalDur + 0.3) * 1000);
+  }
+
+  playGuideBtn.addEventListener('click', async () => {
+    if (guidePlaying) { stopGuidePlayback(); guideStatus.textContent = 'Stopped.'; return; }
+    if (!song.audioBlob) { guideStatus.textContent = 'Record your performance first.'; return; }
+    try {
+      if (!song.guideTrack) {
+        guideStatus.textContent = 'Analyzing your recording for a chiptune guide…';
+        playGuideBtn.disabled = true;
+        song.guideTrack = await buildGuideTrack();
+      }
+      playGuideBtn.disabled = false;
+      const bpmText = song.guideTrack.bpm ? `, ~${song.guideTrack.bpm} BPM` : '';
+      guideStatus.textContent = `Playing guide — key of ${song.guideTrack.keyName}${bpmText}.`;
+      playGuideTrack(song.guideTrack);
+    } catch (err) {
+      playGuideBtn.disabled = false;
+      guideStatus.textContent = 'Could not build a guide tune: ' + err.message;
+    }
+  });
 })();
 </script>
 </body>
