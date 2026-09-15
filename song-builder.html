@@ -93,7 +93,7 @@
   audio { width:100%; margin-top:10px; }
   #processing-panel { display:none; margin-top:16px; border-top:1px solid var(--line); padding-top:14px; }
   #processing-status { color:var(--accent); }
-  #melody-processing-status { color:var(--accent); }
+  #vocal-isolation-status { color:var(--accent); }
 
   /* --- Test performance (after Finish) --- */
   #perform-wrap { display:none; margin-top:20px; border-top:1px solid var(--line); padding-top:16px; }
@@ -121,8 +121,9 @@
   #live-viewport { height: calc(var(--row-h) * 6); overflow:hidden; position:relative; }
   #live-scroll { position:absolute; top:0; left:0; right:0; }
 
-  /* --- Melody-only take --- */
-  #melody-capture { margin-top:20px; border-top:1px solid var(--line); padding-top:16px; }
+  /* --- On-device vocal isolation --- */
+  #vocal-isolation { margin-top:20px; border-top:1px solid var(--line); padding-top:16px; }
+  #isolate-vocals-btn:disabled { opacity:.4; cursor:default; }
 </style>
 </head>
 <body>
@@ -179,7 +180,7 @@ Cool wind in my hair
 
         <!-- AUTO: chord pool + record-to-place -->
         <div id="chords-auto-panel" style="display:none;">
-          <p class="hint">List every chord used in the song, in any order. On the Sync screen, record a melody-only take (just your voice, no instrument) and Singa will place these chords onto your lyrics — word by word — from that recording.</p>
+          <p class="hint">List every chord used in the song, in any order. On the Sync screen, record the song as usual, then use "Isolate Vocals" — Singa will separate your voice from that same recording, on this device, and place these chords onto your lyrics word by word.</p>
           <label class="hint" style="text-transform:uppercase; letter-spacing:.06em;">Chords used in this song</label>
           <input type="text" id="auto-chords-input" placeholder="e.g. Am F C G">
           <div class="hint" id="auto-chords-error" style="color:#f0a99b;"></div>
@@ -193,7 +194,7 @@ Cool wind in my hair
       <!-- SYNC -->
       <div class="screen" id="screen-sync">
         <div class="hint" style="text-transform:uppercase; letter-spacing:.06em;">Chord sheet</div>
-        <div class="hint" id="auto-sync-hint" style="display:none;">Auto mode — chords aren't placed yet. Record a melody-only take below and Singa will place them from that recording.</div>
+        <div class="hint" id="auto-sync-hint" style="display:none;">Auto mode — chords aren't placed yet. Record your song below, then use "Isolate Vocals" and Singa will place them automatically.</div>
         <div id="chordsheet-sync" class="chordsheet" style="margin-bottom:16px;"></div>
 
         <p class="hint">Record yourself singing/playing the song. This becomes the reference track your live performance will sync to.</p>
@@ -220,16 +221,11 @@ Cool wind in my hair
           <button class="secondary danger" id="record-again-btn">Re-record</button>
         </div>
 
-        <div id="melody-capture">
-          <div class="hint" style="text-transform:uppercase; letter-spacing:.06em;">Melody-only take (optional)</div>
-          <p class="hint">Sing just the tune here — no guitar or backing instrument. A clean voice-only take is what lets Singa read pitch reliably for auto chord placement and the guide tune below; your main recording above stays as the performance reference.</p>
-          <div class="row">
-            <button class="primary danger-solid" id="melody-record-btn">● Record Melody</button>
-            <button class="secondary" id="melody-stop-btn" style="display:none;">■ Stop</button>
-          </div>
-          <div id="melody-rec-status" class="hint"><span class="rec-dot" id="melody-rec-dot"></span><span id="melody-rec-status-text">Not recorded</span></div>
-          <div class="hint" id="melody-error" style="color:#f0a99b;"></div>
-          <div class="hint" id="melody-processing-status"></div>
+        <div id="vocal-isolation">
+          <div class="hint" style="text-transform:uppercase; letter-spacing:.06em;">Vocal isolation</div>
+          <p class="hint">Singa can separate your voice from the recording above — entirely on this device, nothing is uploaded — to drive auto chord placement and the guide tune below. The first time, it downloads an offline AI model (about 170MB, cached afterward) and processes your track; this can take a while depending on your device, and is much faster in a browser with WebGPU (recent Chrome, Edge or Safari).</p>
+          <button class="secondary" id="isolate-vocals-btn" disabled>Isolate Vocals From My Recording</button>
+          <div class="hint" id="vocal-isolation-status"></div>
         </div>
 
         <div id="perform-wrap">
@@ -261,13 +257,9 @@ Cool wind in my hair
       audioBlob: null,
       audioUrl: null,
       audioDurationSec: null,
-      wordTimestamps: null,       // from the main recording — used for lyric scroll sync
-      melodyBlob: null,
-      melodyDurationSec: null,
-      melodyWordTimestamps: null, // from the melody-only take — used for auto chord placement
-      melodyPcm16k: null,
-      melodyPitchTrack: null,     // cached { time, freq, energy }[] from the melody-only take
-      guideTrack: null            // cached generated chiptune guide { notes, keyName, bpm }
+      wordTimestamps: null,     // from the main recording — used for lyric scroll sync AND (now) chord timing
+      vocalPitchTrack: null,    // cached { time, freq, energy }[] from the isolated vocal stem of the main recording
+      guideTrack: null          // cached generated chiptune guide { notes, keyName, bpm }
     };
   }
   let song = freshSong();
@@ -297,9 +289,8 @@ Cool wind in my hair
     document.getElementById('perform-wrap').style.display = 'none';
     document.getElementById('processing-panel').style.display = 'none';
     recStatusText.textContent = 'Not recording';
-    melodyRecStatusText.textContent = 'Not recorded';
-    melodyProcessingStatus.textContent = '';
-    melodyError.textContent = '';
+    isolateVocalsBtn.disabled = true;
+    vocalIsolationStatus.textContent = '';
     guideStatus.textContent = '';
     playGuideBtn.textContent = '▶ Play Guide';
     setChordMode('manual');
@@ -575,9 +566,9 @@ Cool wind in my hair
     autoChordsError.textContent = '';
     song.chordPool = pool;
     song.chordMode = 'auto';
-    song.chordEvents = []; // not placed yet — cleared until the melody-only take is processed
+    song.chordEvents = []; // not placed yet — cleared until vocals are isolated from the recording
     renderChordSheet(chordsheetSyncEl);
-    autoSyncHint.textContent = 'Auto mode — record a melody-only take below (voice only, no instrument) so Singa can place these chords automatically.';
+    autoSyncHint.textContent = 'Auto mode — record your song below, then use "Isolate Vocals" and Singa will place these chords automatically.';
     autoSyncHint.style.display = 'block';
     enableStep('sync');
     showStep('sync');
@@ -729,12 +720,25 @@ Cool wind in my hair
     song.audioUrl = null;
     song.audioDurationSec = null;
     song.wordTimestamps = null;
+    // Vocal isolation and the guide tune are derived from this same recording, so a
+    // re-recording invalidates them too — and, in auto mode, any chords placed from them.
+    song.vocalPitchTrack = null;
+    song.guideTrack = null;
+    if (song.chordMode === 'auto') {
+      song.chordEvents = [];
+      renderChordSheet(chordsheetSyncEl);
+      autoSyncHint.textContent = 'Auto mode — chords aren\'t placed yet. Record your song below, then use "Isolate Vocals" and Singa will place them automatically.';
+      autoSyncHint.style.display = 'block';
+    }
+    isolateVocalsBtn.disabled = true;
+    vocalIsolationStatus.textContent = '';
+    guideStatus.textContent = '';
+    playGuideBtn.textContent = '▶ Play Guide';
     recPreview.style.display = 'none';
     syncActions.style.display = 'none';
     performWrap.style.display = 'none';
     document.getElementById('processing-panel').style.display = 'none';
     recStatusText.textContent = 'Not recording';
-    // Chords come from the melody-only take now, so re-recording the main take doesn't affect them.
   });
 
   const processingPanel = document.getElementById('processing-panel');
@@ -840,9 +844,10 @@ Cool wind in my hair
 
     recStatusText.textContent = 'Ready';
     syncActions.style.display = 'flex';
+    isolateVocalsBtn.disabled = false;
   }
 
-  // ---------- Shared pitch tracking (used by melody-only auto chord placement and guide tune) ----------
+  // ---------- Shared pitch tracking (used by on-device vocal isolation and the guide tune) ----------
   const PITCH_SAMPLE_RATE = 16000;
 
   function detectPitchACF(frame, sampleRate) {
@@ -883,61 +888,167 @@ Cool wind in my hair
     return ((Math.round(midi) % 12) + 12) % 12;
   }
 
-  // ---------- Melody-only take: drives auto chord placement + guide tune with clean, isolated pitch ----------
-  const melodyRecordBtn = document.getElementById('melody-record-btn');
-  const melodyStopBtn = document.getElementById('melody-stop-btn');
-  const melodyRecDot = document.getElementById('melody-rec-dot');
-  const melodyRecStatusText = document.getElementById('melody-rec-status-text');
-  const melodyError = document.getElementById('melody-error');
-  const melodyProcessingStatus = document.getElementById('melody-processing-status');
-  let melodyRecorder = null, melodyChunks = [], melodyStream = null;
+  // ---------- On-device vocal isolation (Demucs via ONNX Runtime Web) ----------
+  // Runs entirely in the browser, on the user's own machine — the recording never leaves the
+  // device. This replaces the earlier "record a second, voice-only take" approach: instead we
+  // separate the vocal stem out of the SAME main recording, so auto chord placement and the guide
+  // tune can reuse the word timestamps already produced by processRecording()'s speech alignment.
+  const DEMUCS_MODEL_URL = 'https://huggingface.co/timcsy/demucs-web-onnx/resolve/main/htdemucs_embedded.onnx';
+  const DEMUCS_DB_NAME = 'singa-demucs-cache';
+  const DEMUCS_STORE = 'models';
+  const DEMUCS_MODEL_KEY = 'htdemucs_embedded_v1';
+  const isolateVocalsBtn = document.getElementById('isolate-vocals-btn');
+  const vocalIsolationStatus = document.getElementById('vocal-isolation-status');
 
-  melodyRecordBtn.addEventListener('click', async () => {
-    melodyError.textContent = '';
-    melodyProcessingStatus.textContent = '';
+  function openDemucsCacheDb() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(DEMUCS_DB_NAME, 1);
+      req.onupgradeneeded = () => { req.result.createObjectStore(DEMUCS_STORE); };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function loadCachedModelBuffer() {
     try {
-      melodyStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const db = await openDemucsCacheDb();
+      return await new Promise((resolve) => {
+        const tx = db.transaction(DEMUCS_STORE, 'readonly');
+        const req = tx.objectStore(DEMUCS_STORE).get(DEMUCS_MODEL_KEY);
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => resolve(null);
+      });
+    } catch (e) { return null; }
+  }
+
+  async function saveModelBufferToCache(buffer) {
+    try {
+      const db = await openDemucsCacheDb();
+      await new Promise((resolve) => {
+        const tx = db.transaction(DEMUCS_STORE, 'readwrite');
+        tx.objectStore(DEMUCS_STORE).put(buffer, DEMUCS_MODEL_KEY);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => resolve();
+      });
+    } catch (e) { /* best-effort cache — safe to skip if storage is full/unavailable */ }
+  }
+
+  let demucsProcessorPromise = null;
+
+  // Loaded once per page load and reused for every isolation/re-isolation after that.
+  function getDemucsProcessor(onLog) {
+    if (demucsProcessorPromise) return demucsProcessorPromise;
+    demucsProcessorPromise = (async () => {
+      const ort = await import('https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.2/dist/ort.min.mjs');
+      // Single-threaded WASM needs no SharedArrayBuffer, so it works on plain static hosting
+      // (e.g. GitHub Pages) without cross-origin-isolation headers. WebGPU (tried first, when the
+      // browser supports it) is unaffected by this and is much faster.
+      ort.env.wasm.numThreads = 1;
+      ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.2/dist/';
+      const { DemucsProcessor, CONSTANTS } = await import('https://cdn.jsdelivr.net/npm/demucs-web@1.0.2/src/index.js');
+      const processor = new DemucsProcessor({ ort, onLog: onLog || (() => {}) });
+
+      let modelBuffer = await loadCachedModelBuffer();
+      if (!modelBuffer) {
+        onLog && onLog('model', 'Downloading the vocal-isolation model (about 170MB, one time only)…');
+        const resp = await fetch(CONSTANTS.DEFAULT_MODEL_URL);
+        if (!resp.ok) throw new Error('could not download the vocal-isolation model (HTTP ' + resp.status + ')');
+        modelBuffer = await resp.arrayBuffer();
+        saveModelBufferToCache(modelBuffer); // fire-and-forget
+      } else {
+        onLog && onLog('model', 'Loading the cached vocal-isolation model…');
+      }
+      await processor.loadModel(modelBuffer);
+      return processor;
+    })();
+    demucsProcessorPromise.catch(() => { demucsProcessorPromise = null; }); // allow retry on failure
+    return demucsProcessorPromise;
+  }
+
+  async function decodeToStereo44k(blob) {
+    const arrayBuffer = await blob.arrayBuffer();
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+    const targetRate = 44100;
+    const offlineCtx = new OfflineAudioContext(2, Math.ceil(audioBuffer.duration * targetRate), targetRate);
+    const source = offlineCtx.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(offlineCtx.destination);
+    source.start();
+    const rendered = await offlineCtx.startRendering();
+    const left = rendered.getChannelData(0);
+    const right = rendered.numberOfChannels > 1 ? rendered.getChannelData(1) : rendered.getChannelData(0);
+    return { left, right };
+  }
+
+  async function resampleFloat32(samples, fromRate, toRate) {
+    if (fromRate === toRate) return samples;
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const buffer = audioCtx.createBuffer(1, samples.length, fromRate);
+    buffer.getChannelData(0).set(samples);
+    const offlineCtx = new OfflineAudioContext(1, Math.ceil(samples.length * toRate / fromRate), toRate);
+    const source = offlineCtx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(offlineCtx.destination);
+    source.start();
+    const rendered = await offlineCtx.startRendering();
+    return rendered.getChannelData(0);
+  }
+
+  async function isolateVocalsFromMainRecording() {
+    if (!song.audioBlob) return;
+    isolateVocalsBtn.disabled = true;
+    try {
+      vocalIsolationStatus.textContent = 'Decoding your recording…';
+      const { left, right } = await decodeToStereo44k(song.audioBlob);
+
+      const processor = await getDemucsProcessor((phase, msg) => { vocalIsolationStatus.textContent = msg; });
+
+      vocalIsolationStatus.textContent = 'Separating your voice from the recording — running on this device…';
+      processor.onProgress = ({ progress, currentSegment, totalSegments }) => {
+        vocalIsolationStatus.textContent = `Isolating vocals… segment ${currentSegment}/${totalSegments} (${Math.round(progress * 100)}%)`;
+      };
+      const stems = await processor.separate(left, right);
+
+      vocalIsolationStatus.textContent = 'Analyzing the isolated vocal…';
+      const vocalMono = new Float32Array(stems.vocals.left.length);
+      for (let i = 0; i < vocalMono.length; i++) vocalMono[i] = (stems.vocals.left[i] + stems.vocals.right[i]) / 2;
+      const vocal16k = await resampleFloat32(vocalMono, 44100, PITCH_SAMPLE_RATE);
+      song.vocalPitchTrack = analyzePitchTrack(vocal16k, PITCH_SAMPLE_RATE);
+      song.guideTrack = null; // invalidate any cached guide from a previous isolation
+      vocalIsolationStatus.textContent = 'Done — vocals isolated.';
+
+      if (song.chordMode === 'auto' && song.chordPool.length) {
+        vocalIsolationStatus.textContent = 'Placing your chords, word by word…';
+        await runAutoChordPlacementFromVocals();
+        renderChordSheet(chordsheetSyncEl);
+        autoSyncHint.style.display = 'none';
+        vocalIsolationStatus.textContent = 'Done — vocals isolated and chords placed.';
+      }
     } catch (err) {
-      melodyError.textContent = 'Mic error: ' + err.name + ' — ' + err.message;
-      return;
+      vocalIsolationStatus.textContent = 'Could not isolate vocals: ' + err.message;
+      song.vocalPitchTrack = null;
+      throw err;
+    } finally {
+      isolateVocalsBtn.disabled = false;
     }
-    melodyChunks = [];
-    melodyRecorder = new MediaRecorder(melodyStream);
-    melodyRecorder.ondataavailable = e => { if (e.data.size > 0) melodyChunks.push(e.data); };
-    melodyRecorder.onstop = async () => {
-      const blob = new Blob(melodyChunks, { type: melodyRecorder.mimeType || 'audio/webm' });
-      song.melodyBlob = blob;
-      melodyStream.getTracks().forEach(t => t.stop());
-      await processMelodyRecording();
-    };
-    melodyRecorder.start();
-    melodyRecDot.classList.add('live');
-    melodyRecStatusText.textContent = 'Recording…';
-    melodyRecordBtn.style.display = 'none';
-    melodyStopBtn.style.display = 'inline-block';
-  });
+  }
 
-  melodyStopBtn.addEventListener('click', () => {
-    if (melodyRecorder && melodyRecorder.state !== 'inactive') melodyRecorder.stop();
-    melodyRecDot.classList.remove('live');
-    melodyRecStatusText.textContent = 'Processing…';
-    melodyStopBtn.style.display = 'none';
-    melodyRecordBtn.style.display = 'inline-block';
-  });
+  isolateVocalsBtn.addEventListener('click', () => { isolateVocalsFromMainRecording().catch(() => {}); });
 
-  // ---------- Auto mode: place the chord pool onto lines, word by word, using the melody-only take ----------
-  async function runAutoChordPlacementFromMelody() {
+  // ---------- Auto mode: place the chord pool onto lines, word by word, using the isolated vocal ----------
+  async function runAutoChordPlacementFromVocals() {
     const pool = song.chordPool.map(c => ({ raw: c, parsed: parseChordSymbol(c) })).filter(c => c.parsed);
     song.chordEvents = [];
-    if (pool.length === 0 || !song.melodyPitchTrack || !song.melodyWordTimestamps) return;
-    const ts = song.melodyWordTimestamps;
-    const pitchTrack = song.melodyPitchTrack;
+    if (pool.length === 0 || !song.vocalPitchTrack || !song.wordTimestamps) return;
+    const ts = song.wordTimestamps;
+    const pitchTrack = song.vocalPitchTrack;
     const n = song.wordTokens.length;
     let lastChosenRaw = null;
 
     for (let i = 0; i < n; i++) {
       const start = ts[i];
-      const end = (i + 1 < n) ? ts[i + 1] : song.melodyDurationSec;
+      const end = (i + 1 < n) ? ts[i + 1] : song.audioDurationSec;
       const hist = new Array(12).fill(0);
       pitchTrack.forEach(p => {
         if (p.freq && p.time >= start && p.time < end && p.energy > 0.015) {
@@ -962,55 +1073,6 @@ Cool wind in my hair
       if (chosenRaw) lastChosenRaw = chosenRaw;
     }
     song.chordEvents.sort((a, b) => a.wordIdx - b.wordIdx);
-  }
-
-  async function processMelodyRecording() {
-    let durationSec;
-    try {
-      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      const arrayBuffer = await song.melodyBlob.arrayBuffer();
-      const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-      durationSec = audioBuffer.duration;
-      song.melodyDurationSec = durationSec;
-    } catch (e) {
-      melodyError.textContent = 'Could not read recording duration: ' + e.message;
-      return;
-    }
-
-    melodyProcessingStatus.textContent = 'Loading speech model (first run only, may take a bit)…';
-    try {
-      const { pipeline } = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2');
-      const transcriber = await pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny.en');
-
-      melodyProcessingStatus.textContent = 'Analyzing your melody take…';
-      const pcm = await decodeToFloat32Mono16k(song.melodyBlob);
-      song.melodyPcm16k = pcm;
-      song.melodyPitchTrack = analyzePitchTrack(pcm, PITCH_SAMPLE_RATE);
-
-      const output = await transcriber(pcm, { return_timestamps: 'word', chunk_length_s: 30, stride_length_s: 5 });
-      const hypWords = (output.chunks || [])
-        .map(c => ({ word: normalizeForAlign(c.text), start: c.timestamp[0] }))
-        .filter(h => h.word.length > 0);
-      const refWords = song.wordTokens.map(t => normalizeForAlign(t.word));
-      const mapping = alignSequences(refWords, hypWords);
-      song.melodyWordTimestamps = fillTimestamps(mapping, hypWords, durationSec, refWords.length);
-
-      song.guideTrack = null; // invalidate any cached guide from a previous take
-
-      if (song.chordMode === 'auto' && song.chordPool.length) {
-        melodyProcessingStatus.textContent = 'Placing your chords, word by word…';
-        await runAutoChordPlacementFromMelody();
-        renderChordSheet(chordsheetSyncEl);
-        autoSyncHint.style.display = 'none';
-      }
-      melodyProcessingStatus.textContent = 'Done — melody analyzed.';
-    } catch (err) {
-      melodyProcessingStatus.textContent = 'Could not analyze the melody take (' + err.message + ').';
-      song.melodyWordTimestamps = null;
-      song.melodyPitchTrack = null;
-    }
-
-    melodyRecStatusText.textContent = 'Ready';
   }
 
   // ---------- Finish → show test-performance area ----------
@@ -1146,7 +1208,7 @@ Cool wind in my hair
 
   performStartBtn.addEventListener('click', startListeningForCue);
 
-  // ---------- "Play Guide": chiptune melody rendered from the isolated melody-only take ----------
+  // ---------- "Play Guide": chiptune melody rendered from the on-device isolated vocal ----------
   const KK_MAJOR = [6.35,2.23,3.48,2.33,4.38,4.09,2.52,5.19,2.39,3.66,2.29,2.88];
   const KK_MINOR = [6.33,2.68,3.52,5.38,2.60,3.53,2.54,4.75,3.98,2.69,3.34,3.17];
   const PITCH_CLASS_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
@@ -1212,10 +1274,10 @@ Cool wind in my hair
   }
 
   async function buildGuideTrack() {
-    if (!song.melodyPitchTrack || !song.melodyDurationSec) {
-      throw new Error('record a melody-only take first');
+    if (!song.vocalPitchTrack) {
+      throw new Error('isolate the vocal from your recording first');
     }
-    const pitchTrack = song.melodyPitchTrack;
+    const pitchTrack = song.vocalPitchTrack;
     const key = estimateKey(pitchTrack);
     const scaleSteps = key.mode === 'major' ? MAJOR_SCALE_STEPS : MINOR_SCALE_STEPS;
     const grid = estimateTempoGrid(pitchTrack);
@@ -1292,13 +1354,18 @@ Cool wind in my hair
 
   playGuideBtn.addEventListener('click', async () => {
     if (guidePlaying) { stopGuidePlayback(); guideStatus.textContent = 'Stopped.'; return; }
-    if (!song.melodyPitchTrack || !song.melodyDurationSec) {
-      guideStatus.textContent = 'Record a melody-only take first (see the Melody-only take section above).';
+    if (!song.audioBlob) {
+      guideStatus.textContent = 'Record your song on the Sync screen first.';
       return;
     }
     try {
+      if (!song.vocalPitchTrack) {
+        playGuideBtn.disabled = true;
+        guideStatus.textContent = 'Isolating your voice from the recording (on this device, no upload)…';
+        await isolateVocalsFromMainRecording();
+      }
       if (!song.guideTrack) {
-        guideStatus.textContent = 'Analyzing your melody take for a chiptune guide…';
+        guideStatus.textContent = 'Analyzing your vocal for a chiptune guide…';
         playGuideBtn.disabled = true;
         song.guideTrack = await buildGuideTrack();
       }
