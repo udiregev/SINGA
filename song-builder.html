@@ -74,6 +74,13 @@
   }
   .chord-line-text { font-size:16px; color:var(--text-upcoming); }
 
+  /* --- Chord sheet (chords inline over lyrics) --- */
+  .chordsheet { line-height:1.3; }
+  .chordsheet-line { display:flex; flex-wrap:wrap; margin-bottom:10px; }
+  .cs-word-col { display:flex; flex-direction:column; align-items:flex-start; margin-right:7px; }
+  .cs-chord { color:var(--accent); font-weight:700; font-size:12px; min-height:15px; }
+  .cs-word { font-size:16px; color:var(--text-upcoming); }
+
   /* --- Sync / Record --- */
   #rec-status { font-size:13px; color:var(--text-dim); margin:12px 0; }
   #rec-dot { display:inline-block; width:10px; height:10px; border-radius:50%; background:var(--danger); margin-right:6px; }
@@ -98,6 +105,15 @@
   }
   .p-line.current { color:var(--text-current); font-weight:700; }
   .p-line.done { color:var(--sung); }
+
+  /* --- Live capture (during recording) --- */
+  #live-capture { margin-top:16px; border-top:1px solid var(--line); padding-top:14px; }
+  #live-chord {
+    text-align:center; padding:12px; font-size:32px; font-weight:800; color:var(--accent);
+    border-bottom:1px solid var(--line); min-height:56px; margin-bottom:6px;
+  }
+  #live-viewport { height: calc(var(--row-h) * 6); overflow:hidden; position:relative; }
+  #live-scroll { position:absolute; top:0; left:0; right:0; }
 </style>
 </head>
 <body>
@@ -138,6 +154,10 @@ Cool wind in my hair
       <div class="screen" id="screen-chords">
         <p class="hint">Tap + to add a chord above a line. You can add more than one chord per line — they'll split evenly across that line during sync.</p>
         <div id="chord-lines"></div>
+
+        <div class="hint" style="text-transform:uppercase; letter-spacing:.06em; margin-top:18px;">Preview</div>
+        <div id="chordsheet-chords" class="chordsheet"></div>
+
         <div class="row">
           <button class="primary" id="chords-continue-btn">Continue to Sync</button>
           <button class="secondary" id="chords-back-btn">Back to Lyrics</button>
@@ -146,6 +166,9 @@ Cool wind in my hair
 
       <!-- SYNC -->
       <div class="screen" id="screen-sync">
+        <div class="hint" style="text-transform:uppercase; letter-spacing:.06em;">Chord sheet</div>
+        <div id="chordsheet-sync" class="chordsheet" style="margin-bottom:16px;"></div>
+
         <p class="hint">Record yourself singing/playing the song. This becomes the reference track your live performance will sync to.</p>
         <div class="row">
           <button class="primary danger-solid" id="record-start-btn">● Record</button>
@@ -154,6 +177,11 @@ Cool wind in my hair
         <div id="rec-status"><span id="rec-dot"></span><span id="rec-status-text">Not recording</span></div>
         <audio id="record-preview" controls style="display:none;"></audio>
         <div class="hint" id="record-error" style="color:#f0a99b;"></div>
+
+        <div id="live-capture" style="display:none;">
+          <div id="live-chord">—</div>
+          <div id="live-viewport"><div id="live-scroll"></div></div>
+        </div>
 
         <div id="processing-panel">
           <div class="hint" style="text-transform:uppercase; letter-spacing:.06em;">Aligning lyrics to your recording</div>
@@ -225,6 +253,28 @@ Cool wind in my hair
     showStep('lyrics');
   });
 
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let lineBounds = []; // shared by live-record tracking and post-record perform tracking
+
+  function computeLineBounds() {
+    lineBounds = song.lines.map((_, lineIdx) => {
+      const idxs = song.wordTokens.reduce((acc, t, i) => { if (t.lineIdx === lineIdx) acc.push(i); return acc; }, []);
+      return { start: idxs[0], end: idxs[idxs.length - 1] };
+    });
+  }
+
+  function normalizeWord(w) { return w.toLowerCase().replace(/[^a-z0-9']/g, ''); }
+
+  // Multiple chords on one line split evenly across that line's duration.
+  function chordForLinePosition(linePosFloat) {
+    const lineIdx = Math.max(0, Math.min(Math.floor(linePosFloat), song.lines.length - 1));
+    const fracWithinLine = linePosFloat - lineIdx;
+    const chips = (song.lineChords[lineIdx] || []).filter(c => c && c.trim());
+    if (chips.length === 0) return '—';
+    const chipIdx = Math.min(chips.length - 1, Math.floor(fracWithinLine * chips.length));
+    return chips[chipIdx];
+  }
+
   // ---------- 1. LYRICS ----------
   const lyricsInput = document.getElementById('lyrics-input');
   document.getElementById('lyrics-continue-btn').addEventListener('click', () => {
@@ -244,6 +294,43 @@ Cool wind in my hair
 
   // ---------- 2. CHORDS (per-line chips) ----------
   const chordLinesEl = document.getElementById('chord-lines');
+  const chordsheetChordsEl = document.getElementById('chordsheet-chords');
+  const chordsheetSyncEl = document.getElementById('chordsheet-sync');
+
+  function computeChordPositions(lineIdx) {
+    const words = song.lines[lineIdx].split(/\s+/);
+    const chips = (song.lineChords[lineIdx] || []).filter(c => c && c.trim());
+    const positions = new Array(words.length).fill(null);
+    chips.forEach((chord, i) => {
+      const wordIdx = Math.min(words.length - 1, Math.floor(i * words.length / chips.length));
+      positions[wordIdx] = chord;
+    });
+    return { words, positions };
+  }
+
+  function renderChordSheet(container) {
+    if (!container) return;
+    container.innerHTML = '';
+    song.lines.forEach((lineText, lineIdx) => {
+      const { words, positions } = computeChordPositions(lineIdx);
+      const lineDiv = document.createElement('div');
+      lineDiv.className = 'chordsheet-line';
+      words.forEach((w, wi) => {
+        const col = document.createElement('div');
+        col.className = 'cs-word-col';
+        const chordEl = document.createElement('div');
+        chordEl.className = 'cs-chord';
+        chordEl.textContent = positions[wi] || '';
+        const wordEl = document.createElement('div');
+        wordEl.className = 'cs-word';
+        wordEl.textContent = w;
+        col.appendChild(chordEl);
+        col.appendChild(wordEl);
+        lineDiv.appendChild(col);
+      });
+      container.appendChild(lineDiv);
+    });
+  }
 
   function renderChordEditor() {
     chordLinesEl.innerHTML = '';
@@ -259,7 +346,10 @@ Cool wind in my hair
         const input = document.createElement('input');
         input.value = chordVal;
         input.placeholder = 'chord';
-        input.addEventListener('input', () => { song.lineChords[lineIdx][chipIdx] = input.value; });
+        input.addEventListener('input', () => {
+          song.lineChords[lineIdx][chipIdx] = input.value;
+          renderChordSheet(chordsheetChordsEl);
+        });
         const del = document.createElement('button');
         del.className = 'chip-del';
         del.textContent = '×';
@@ -283,10 +373,12 @@ Cool wind in my hair
       wrap.appendChild(lineDiv);
       chordLinesEl.appendChild(wrap);
     });
+    renderChordSheet(chordsheetChordsEl);
   }
 
   document.getElementById('chords-back-btn').addEventListener('click', () => showStep('lyrics'));
   document.getElementById('chords-continue-btn').addEventListener('click', () => {
+    renderChordSheet(chordsheetSyncEl);
     enableStep('sync');
     showStep('sync');
   });
@@ -303,6 +395,84 @@ Cool wind in my hair
   const recError = document.getElementById('record-error');
   const syncActions = document.getElementById('sync-actions');
   const performWrap = document.getElementById('perform-wrap');
+
+  // ---------- Live capture autocue (while recording) ----------
+  const liveCaptureEl = document.getElementById('live-capture');
+  const liveChordEl = document.getElementById('live-chord');
+  const liveScrollEl = document.getElementById('live-scroll');
+  let liveLineEls = [];
+  let liveSearchCursor = 0;
+  let liveCurrentLine = 0;
+  let liveRecognition = null;
+
+  function buildLiveLyrics() {
+    computeLineBounds();
+    liveScrollEl.innerHTML = '';
+    liveLineEls = [];
+    liveSearchCursor = 0;
+    liveCurrentLine = 0;
+    song.lines.forEach((lineText) => {
+      const div = document.createElement('div');
+      div.className = 'p-line';
+      div.textContent = lineText;
+      liveScrollEl.appendChild(div);
+      liveLineEls.push(div);
+    });
+    setLiveLine(0);
+  }
+
+  function setLiveLine(newLine) {
+    newLine = Math.max(0, Math.min(newLine, song.lines.length - 1));
+    liveCurrentLine = newLine;
+    liveScrollEl.style.transform = `translateY(${-(newLine - 1) * ROW_HEIGHT}px)`;
+    liveLineEls.forEach((el, i) => {
+      el.classList.toggle('done', i < newLine);
+      el.classList.toggle('current', i === newLine);
+    });
+    liveChordEl.textContent = chordForLinePosition(newLine);
+  }
+
+  function consumeLiveWord(spokenNorm) {
+    if (!spokenNorm) return;
+    const LOOKAHEAD = 4;
+    for (let i = liveSearchCursor; i < Math.min(liveSearchCursor + LOOKAHEAD, song.wordTokens.length); i++) {
+      const tok = song.wordTokens[i];
+      const norm = normalizeWord(tok.word);
+      if (norm === spokenNorm || norm.startsWith(spokenNorm) || spokenNorm.startsWith(norm)) {
+        liveSearchCursor = i + 1;
+        if (tok.lineIdx > liveCurrentLine) setLiveLine(tok.lineIdx);
+        return;
+      }
+    }
+  }
+
+  function startLiveRecognition() {
+    if (!SpeechRecognition) return;
+    liveRecognition = new SpeechRecognition();
+    liveRecognition.continuous = true;
+    liveRecognition.interimResults = true;
+    liveRecognition.lang = 'en-US';
+    liveRecognition.onresult = (event) => {
+      let combined = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        combined += event.results[i][0].transcript + ' ';
+      }
+      combined.split(/\s+/).map(normalizeWord).filter(Boolean).forEach(consumeLiveWord);
+    };
+    liveRecognition.onend = () => {
+      if (liveRecognition && liveRecognition._shouldRestart) liveRecognition.start();
+    };
+    liveRecognition._shouldRestart = true;
+    liveRecognition.start();
+  }
+
+  function stopLiveRecognition() {
+    if (liveRecognition) {
+      liveRecognition._shouldRestart = false;
+      liveRecognition.stop();
+      liveRecognition = null;
+    }
+  }
 
   recStartBtn.addEventListener('click', async () => {
     recError.textContent = '';
@@ -332,10 +502,16 @@ Cool wind in my hair
     recStartBtn.style.display = 'none';
     recStopBtn.style.display = 'inline-block';
     recPreview.style.display = 'none';
+
+    liveCaptureEl.style.display = 'block';
+    buildLiveLyrics();
+    startLiveRecognition();
   });
 
   recStopBtn.addEventListener('click', () => {
     if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+    stopLiveRecognition();
+    liveCaptureEl.style.display = 'none';
     recDot.classList.remove('live');
     recStatusText.textContent = 'Processing…';
     recStopBtn.style.display = 'none';
@@ -472,7 +648,6 @@ Cool wind in my hair
   const lyricsScrollEl = document.getElementById('lyrics-scroll');
 
   let perfLineEls = [];
-  let perfLineBounds = [];
 
   function buildPerformLyrics() {
     lyricsScrollEl.innerHTML = '';
@@ -484,10 +659,7 @@ Cool wind in my hair
       lyricsScrollEl.appendChild(div);
       perfLineEls.push(div);
     });
-    perfLineBounds = song.lines.map((_, lineIdx) => {
-      const idxs = song.wordTokens.reduce((acc, t, i) => { if (t.lineIdx === lineIdx) acc.push(i); return acc; }, []);
-      return { start: idxs[0], end: idxs[idxs.length - 1] };
-    });
+    computeLineBounds();
   }
 
   function continuousLinePosition(estWordIndexFloat) {
@@ -496,20 +668,10 @@ Cool wind in my hair
     const idx = Math.floor(clamped);
     const frac = clamped - idx;
     const tok = song.wordTokens[idx];
-    const b = perfLineBounds[tok.lineIdx];
+    const b = lineBounds[tok.lineIdx];
     const lineWordCount = b.end - b.start + 1;
     const posInLine = (idx - b.start + frac) / lineWordCount;
     return tok.lineIdx + posInLine;
-  }
-
-  // Multiple chords on one line split evenly across that line's duration.
-  function chordForLinePosition(linePosFloat) {
-    const lineIdx = Math.max(0, Math.min(Math.floor(linePosFloat), song.lines.length - 1));
-    const fracWithinLine = linePosFloat - lineIdx;
-    const chips = (song.lineChords[lineIdx] || []).filter(c => c && c.trim());
-    if (chips.length === 0) return '—';
-    const chipIdx = Math.min(chips.length - 1, Math.floor(fracWithinLine * chips.length));
-    return chips[chipIdx];
   }
 
   function estimateWordIndex(elapsedSec, frac) {
