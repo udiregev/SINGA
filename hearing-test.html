@@ -57,10 +57,13 @@
     border-bottom:1px solid var(--line); min-height:52px; margin-top:18px; display:none;
   }
   #guide-style-section { margin-top:18px; padding-top:14px; border-top:1px solid var(--line); }
-  .style-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px; }
+  .style-grid {
+    display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px;
+    max-height:280px; overflow-y:auto; padding-right:2px;
+  }
   .style-btn {
     padding:10px 8px; border-radius:8px; border:1px solid var(--line); background:var(--panel);
-    color:var(--text-upcoming); font-size:12.5px; font-weight:600; cursor:pointer; text-align:center;
+    color:var(--text-upcoming); font-size:12px; font-weight:600; cursor:pointer; text-align:center; line-height:1.3;
   }
   .style-btn.active { border-color:var(--accent); color:var(--accent); background:#1c1710; }
   .style-btn:disabled { opacity:.4; cursor:default; }
@@ -112,13 +115,9 @@
     <div id="chord-readout">—</div>
 
     <div id="guide-style-section">
-      <div class="hint" style="text-transform:uppercase; letter-spacing:.06em;">Guide melody render style</div>
+      <div class="hint" style="text-transform:uppercase; letter-spacing:.06em;">Guide melody arrangement</div>
       <div id="guide-style-picker" class="style-grid"></div>
-      <label style="display:flex; align-items:center; gap:8px; margin-top:10px; font-size:13px; color:var(--text-upcoming);">
-        <input type="checkbox" id="guide-mix-toggle" disabled>
-        Mix with backing track (unchecked: guide melody alone)
-      </label>
-      <div class="hint">Pick a style, then press "Play Guide" above — pitch and timing always match your recording exactly; only the instrument sound changes.</div>
+      <div class="hint">Pitch is auto-corrected to the recording's own key and timing always matches your take exactly. Some arrangements are solo vocal-melody only; others add a full backing — either the real isolated accompaniment or a band synthesized from the detected chords. Pick one, then press "Play Guide" above.</div>
     </div>
 
     <div id="lyrics-viewport"><div id="lyrics-scroll"></div></div>
@@ -132,6 +131,10 @@
   const ROW_HEIGHT = 40;
   const PITCH_SAMPLE_RATE = 16000;
   const PITCH_CLASS_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+  const MAJOR_SCALE_STEPS = [0,2,4,5,7,9,11];
+  const MINOR_SCALE_STEPS = [0,2,3,5,7,8,10];
+  const KK_MAJOR = [6.35,2.23,3.48,2.33,4.38,4.09,2.52,5.19,2.39,3.66,2.29,2.88];
+  const KK_MINOR = [6.33,2.68,3.52,5.38,2.60,3.53,2.54,4.75,3.98,2.69,3.34,3.17];
 
   // ---------- Recording ----------
   const recordBtn = document.getElementById('record-btn');
@@ -331,10 +334,56 @@
     return ((Math.round(midi) % 12) + 12) % 12;
   }
 
-  // ---------- Vocal pitch envelope: faithful to the original recording's pitch & timing.
-  // No scale quantization, no tempo-grid snapping — every render style below shares this exact
-  // curve, so pitch and timing are identical to the recording across all of them. Only the
-  // instrument timbre changes between styles.
+  // ---------- Pitch correction (auto-tune style): detect the recording's own key, then snap
+  // each voiced frame's frequency to the nearest note in that key. Timing is never touched here —
+  // only the pitch value at each existing timestamp — so the melody keeps the recording's own
+  // key and tempo, just with the natural pitch wobble of live singing cleaned up.
+  function correlate(hist, profile) {
+    const meanH = hist.reduce((a,b)=>a+b,0) / 12;
+    const meanP = profile.reduce((a,b)=>a+b,0) / 12;
+    let num = 0, denH = 0, denP = 0;
+    for (let i = 0; i < 12; i++) {
+      const dh = hist[i] - meanH, dp = profile[i] - meanP;
+      num += dh * dp; denH += dh * dh; denP += dp * dp;
+    }
+    return num / (Math.sqrt(denH * denP) + 1e-9);
+  }
+
+  function estimateKeyFromPoints(points) {
+    const hist = new Array(12).fill(0);
+    points.forEach(p => { if (p.freq) hist[freqToPitchClass(p.freq)] += p.amp; });
+    let best = { corr: -Infinity, rootPc: 0, mode: 'major' };
+    for (let rootPc = 0; rootPc < 12; rootPc++) {
+      const rotated = hist.slice(rootPc).concat(hist.slice(0, rootPc));
+      const cMaj = correlate(rotated, KK_MAJOR);
+      const cMin = correlate(rotated, KK_MINOR);
+      if (cMaj > best.corr) best = { corr: cMaj, rootPc, mode: 'major' };
+      if (cMin > best.corr) best = { corr: cMin, rootPc, mode: 'minor' };
+    }
+    return best;
+  }
+
+  function correctFreqToScale(freq, rootPc, scaleSteps) {
+    const midi = 69 + 12 * Math.log2(freq / 440);
+    const midiRound = Math.round(midi);
+    const pc = ((midiRound % 12) + 12) % 12;
+    const allowed = scaleSteps.map(s => (rootPc + s) % 12);
+    let bestPc = allowed[0], bestDist = 99;
+    allowed.forEach(a => {
+      const dist = Math.min(Math.abs(a - pc), 12 - Math.abs(a - pc));
+      if (dist < bestDist) { bestDist = dist; bestPc = a; }
+    });
+    let diff = bestPc - pc;
+    if (diff > 6) diff -= 12;
+    if (diff < -6) diff += 12;
+    const correctedMidi = midiRound + diff;
+    return 440 * Math.pow(2, (correctedMidi - 69) / 12);
+  }
+
+  // ---------- Vocal pitch envelope: pitch-corrected to the recording's own key, but never
+  // re-timed — every render style below shares this exact curve, so timing is identical to the
+  // recording across all of them, and pitch sits cleanly in the recording's own key. Only the
+  // instrument timbre (and, for band arrangements, the backing) changes between styles.
   function buildPitchEnvelope(pitchTrack, totalDurationSec) {
     const hop = pitchTrack.length > 1 ? (pitchTrack[1].time - pitchTrack[0].time) : 0.032;
     const ENERGY_GATE = 0.012;
@@ -369,7 +418,15 @@
       return { time: p.time, freq: cands[Math.floor(cands.length / 2)], amp: p.amp };
     });
 
-    return { points: smoothed, hop, totalDurationSec };
+    // Pitch correction: detect the key from what was actually sung, then snap each frame to the
+    // nearest note in that key. Frame timestamps (and therefore timing) are left exactly as-is.
+    const key = estimateKeyFromPoints(smoothed);
+    const scaleSteps = key.mode === 'major' ? MAJOR_SCALE_STEPS : MINOR_SCALE_STEPS;
+    const corrected = smoothed.map(p => p.freq
+      ? { time: p.time, freq: correctFreqToScale(p.freq, key.rootPc, scaleSteps), amp: p.amp }
+      : p);
+
+    return { points: corrected, hop, totalDurationSec, key };
   }
 
   function getVoicedRuns(envelope) {
@@ -385,6 +442,7 @@
 
   function scheduleCurve(param, run) { run.forEach(p => param.setValueAtTime(p.freq, p.time)); }
   function runEdges(run, hop) { return { t0: run[0].time, t1: run[run.length - 1].time + hop }; }
+  function midiToFreq(midi) { return 440 * Math.pow(2, (midi - 69) / 12); }
 
   function makeWhiteNoiseBuffer(ctx, durationSec) {
     const len = Math.max(1, Math.ceil(durationSec * ctx.sampleRate));
@@ -562,30 +620,6 @@
     });
   }
 
-  const GUIDE_STYLES = [
-    { id: 'sine', label: 'Pure Sine', render: renderSineStyle },
-    { id: 'square', label: 'Square (Chiptune)', render: (env, ctx) => renderBasicOscStyle(env, ctx, 'square', 0.16) },
-    { id: 'triangle', label: 'Triangle (Soft)', render: (env, ctx) => renderBasicOscStyle(env, ctx, 'triangle', 0.24) },
-    { id: 'sawtooth', label: 'Sawtooth (Bright Lead)', render: (env, ctx) => renderBasicOscStyle(env, ctx, 'sawtooth', 0.14) },
-    { id: 'vibrato', label: 'Sine + Vibrato', render: renderVibratoStyle },
-    { id: 'fmbell', label: 'FM Bell', render: renderFmBellStyle },
-    { id: 'organ', label: 'Organ (Harmonics)', render: renderOrganStyle },
-    { id: 'pluck', label: 'Plucked String', render: renderPluckStyle },
-    { id: 'vowel', label: 'Vowel ("Ooh") Formant', render: renderVowelStyle },
-    { id: 'breathy', label: 'Breathy Whistle', render: renderBreathyStyle }
-  ];
-
-  async function renderStyleToBuffer(envelope, renderFn) {
-    const sampleRate = 44100;
-    const totalSamples = Math.max(1, Math.ceil(envelope.totalDurationSec * sampleRate));
-    const ctx = new OfflineAudioContext(2, totalSamples, sampleRate);
-    renderFn(envelope, ctx);
-    const rendered = await ctx.startRendering();
-    const left = rendered.getChannelData(0);
-    const right = rendered.numberOfChannels > 1 ? rendered.getChannelData(1) : rendered.getChannelData(0);
-    return { left, right };
-  }
-
   function mixBuffers(a, bufB, bLevel) {
     const len = Math.min(a.left.length, bufB.left.length);
     const left = new Float32Array(len), right = new Float32Array(len);
@@ -595,6 +629,227 @@
     }
     return { left, right };
   }
+
+  // ---------- Chord-driven backing arrangements. These read the chord symbols already detected
+  // in the Chords stage and synthesize a full accompaniment from them (bass, pads, drums) —
+  // distinct from the "real backing" option, which mixes in the actual isolated recording. ----------
+  function nearestMidiForPc(pc, refMidi) {
+    const base = Math.floor(refMidi / 12) * 12 + pc;
+    const candidates = [base - 12, base, base + 12];
+    return candidates.reduce((best, c) => Math.abs(c - refMidi) < Math.abs(best - refMidi) ? c : best);
+  }
+
+  function triadMidis(rootPc, quality, refMidi) {
+    const steps = quality === 'minor' ? [0,3,7] : [0,4,7];
+    const rootMidi = nearestMidiForPc(rootPc, refMidi);
+    return steps.map(s => rootMidi + s);
+  }
+
+  function parseChordLabel(label) {
+    if (!label) return null;
+    const isMinor = label.length > 1 && label.endsWith('m');
+    const rootName = isMinor ? label.slice(0, -1) : label;
+    const rootPc = PITCH_CLASS_NAMES.indexOf(rootName);
+    if (rootPc < 0) return null;
+    return { rootPc, quality: isMinor ? 'minor' : 'major' };
+  }
+
+  function scheduleTone(ctx, waveType, freq, t0, t1, level, attack, release) {
+    attack = attack || 0.02; release = release || 0.05;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = waveType;
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0, t0);
+    gain.gain.linearRampToValueAtTime(level, t0 + attack);
+    gain.gain.setValueAtTime(level, Math.max(t0 + attack, t1 - release));
+    gain.gain.linearRampToValueAtTime(0.0001, t1);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(t0); osc.stop(t1 + 0.02);
+  }
+
+  function scheduleKick(ctx, t, level) {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(140, t);
+    osc.frequency.exponentialRampToValueAtTime(45, t + 0.12);
+    gain.gain.setValueAtTime(level, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(t); osc.stop(t + 0.25);
+  }
+
+  function scheduleSnare(ctx, t, level) {
+    const noise = ctx.createBufferSource();
+    noise.buffer = makeWhiteNoiseBuffer(ctx, 0.2);
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass'; bp.frequency.value = 1800; bp.Q.value = 0.8;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(level, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+    noise.connect(bp).connect(gain).connect(ctx.destination);
+    noise.start(t); noise.stop(t + 0.2);
+  }
+
+  function scheduleHat(ctx, t, level) {
+    const noise = ctx.createBufferSource();
+    noise.buffer = makeWhiteNoiseBuffer(ctx, 0.06);
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass'; hp.frequency.value = 7000;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(level, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
+    noise.connect(hp).connect(gain).connect(ctx.destination);
+    noise.start(t); noise.stop(t + 0.06);
+  }
+
+  function estimateBackingTempo(pitchTrack) {
+    const onsets = [];
+    let prevEnergy = 0;
+    pitchTrack.forEach(p => {
+      if (p.energy > 0.02 && p.energy > prevEnergy * 1.5) onsets.push(p.time);
+      prevEnergy = p.energy;
+    });
+    if (onsets.length < 4) return 0.5;
+    const intervals = [];
+    for (let i = 1; i < onsets.length; i++) {
+      const d = onsets[i] - onsets[i-1];
+      if (d > 0.15 && d < 1.5) intervals.push(d);
+    }
+    if (intervals.length < 3) return 0.5;
+    intervals.sort((a,b) => a-b);
+    return Math.max(0.25, Math.min(0.8, intervals[Math.floor(intervals.length / 2)]));
+  }
+
+  function renderChipBandBacking(ctx, segments, totalDurationSec, beatSec) {
+    const step = Math.max(0.12, Math.min(0.22, beatSec / 2));
+    segments.forEach(seg => {
+      const parsed = parseChordLabel(seg.chord);
+      if (!parsed) return;
+      scheduleTone(ctx, 'square', midiToFreq(nearestMidiForPc(parsed.rootPc, 36)), seg.start, seg.end, 0.10, 0.01, 0.04);
+      const triad = triadMidis(parsed.rootPc, parsed.quality, 60).map(midiToFreq);
+      let t = seg.start, idx = 0;
+      while (t < seg.end - 0.02) {
+        const noteEnd = Math.min(t + step * 0.82, seg.end);
+        scheduleTone(ctx, 'square', triad[idx % triad.length], t, noteEnd, 0.055, 0.005, 0.02);
+        if (idx % 2 === 0) scheduleHat(ctx, t, 0.03);
+        t += step; idx++;
+      }
+    });
+  }
+
+  function renderSynthPadBacking(ctx, segments, totalDurationSec, beatSec) {
+    segments.forEach(seg => {
+      const parsed = parseChordLabel(seg.chord);
+      if (!parsed) return;
+      const triad = triadMidis(parsed.rootPc, parsed.quality, 64).map(midiToFreq);
+      triad.forEach(f => {
+        [0, 6].forEach(detuneCents => {
+          const osc = ctx.createOscillator();
+          osc.type = 'sawtooth';
+          osc.frequency.value = f;
+          osc.detune.value = detuneCents;
+          const gain = ctx.createGain();
+          gain.gain.setValueAtTime(0, seg.start);
+          gain.gain.linearRampToValueAtTime(0.045, seg.start + 0.15);
+          gain.gain.setValueAtTime(0.045, Math.max(seg.start + 0.15, seg.end - 0.1));
+          gain.gain.linearRampToValueAtTime(0.0001, seg.end);
+          const lp = ctx.createBiquadFilter();
+          lp.type = 'lowpass'; lp.frequency.value = 2200;
+          osc.connect(lp).connect(gain).connect(ctx.destination);
+          osc.start(seg.start); osc.stop(seg.end + 0.05);
+        });
+      });
+    });
+    for (let t = 0; t < totalDurationSec; t += beatSec) scheduleKick(ctx, t, 0.16);
+  }
+
+  function renderOrganPadBacking(ctx, segments) {
+    segments.forEach(seg => {
+      const parsed = parseChordLabel(seg.chord);
+      if (!parsed) return;
+      const notes = [ ...triadMidis(parsed.rootPc, parsed.quality, 48), ...triadMidis(parsed.rootPc, parsed.quality, 60) ];
+      notes.forEach(m => {
+        const f = midiToFreq(m);
+        scheduleTone(ctx, 'sine', f, seg.start, seg.end, 0.05, 0.08, 0.12);
+        scheduleTone(ctx, 'sine', f * 2, seg.start, seg.end, 0.015, 0.08, 0.12);
+      });
+    });
+  }
+
+  function renderJazzWalkBacking(ctx, segments) {
+    segments.forEach(seg => {
+      const parsed = parseChordLabel(seg.chord);
+      if (!parsed) return;
+      const triad = triadMidis(parsed.rootPc, parsed.quality, 40);
+      const walk = [triad[0], triad[2], triad[0], triad[1]];
+      const dur = seg.end - seg.start;
+      const stepDur = dur / walk.length;
+      walk.forEach((m, i) => {
+        const t0 = seg.start + i * stepDur;
+        scheduleTone(ctx, 'triangle', midiToFreq(m), t0, t0 + stepDur * 0.85, 0.09, 0.01, 0.05);
+        scheduleHat(ctx, t0, 0.02);
+      });
+    });
+  }
+
+  function renderRockPowerBacking(ctx, segments, totalDurationSec, beatSec) {
+    segments.forEach(seg => {
+      const parsed = parseChordLabel(seg.chord);
+      if (!parsed) return;
+      const power = [ nearestMidiForPc(parsed.rootPc, 40), nearestMidiForPc((parsed.rootPc + 7) % 12, 40) ];
+      let t = seg.start;
+      while (t < seg.end - 0.02) {
+        const noteEnd = Math.min(t + beatSec * 0.9, seg.end);
+        power.forEach(m => scheduleTone(ctx, 'sawtooth', midiToFreq(m), t, noteEnd, 0.07, 0.005, 0.03));
+        t += beatSec;
+      }
+    });
+    for (let t = 0; t < totalDurationSec; t += beatSec) {
+      scheduleKick(ctx, t, 0.18);
+      if (Math.round(t / beatSec) % 2 === 1) scheduleSnare(ctx, t, 0.12);
+      scheduleHat(ctx, t + beatSec / 2, 0.04);
+    }
+  }
+
+  function renderOrchestralBacking(ctx, segments) {
+    segments.forEach(seg => {
+      const parsed = parseChordLabel(seg.chord);
+      if (!parsed) return;
+      const triad = triadMidis(parsed.rootPc, parsed.quality, 55);
+      triad.forEach(m => {
+        [-5, 0, 5].forEach(detuneCents => {
+          const osc = ctx.createOscillator();
+          osc.type = detuneCents === 0 ? 'triangle' : 'sine';
+          osc.frequency.value = midiToFreq(m);
+          osc.detune.value = detuneCents;
+          const gain = ctx.createGain();
+          gain.gain.setValueAtTime(0, seg.start);
+          gain.gain.linearRampToValueAtTime(0.035, seg.start + 0.3);
+          gain.gain.setValueAtTime(0.035, Math.max(seg.start + 0.3, seg.end - 0.2));
+          gain.gain.linearRampToValueAtTime(0.0001, seg.end);
+          osc.connect(gain).connect(ctx.destination);
+          osc.start(seg.start); osc.stop(seg.end + 0.1);
+        });
+      });
+    });
+  }
+
+  const ARRANGEMENTS = [
+    { id: 'chiptuneSolo', label: 'Chiptune Lead (solo)', melody: (env, ctx) => renderBasicOscStyle(env, ctx, 'square', 0.2), backing: { type: 'none' } },
+    { id: 'chiptuneBand', label: '8-Bit Band (chiptune)', melody: (env, ctx) => renderBasicOscStyle(env, ctx, 'square', 0.2), backing: { type: 'synth', render: renderChipBandBacking } },
+    { id: 'chiptuneRealBand', label: 'Chiptune + Real Band', melody: (env, ctx) => renderBasicOscStyle(env, ctx, 'square', 0.2), backing: { type: 'real', level: 0.55 } },
+    { id: 'vowelSolo', label: 'Vowel Lead (solo)', melody: renderVowelStyle, backing: { type: 'none' } },
+    { id: 'breathySolo', label: 'Breathy Whistle (solo)', melody: renderBreathyStyle, backing: { type: 'none' } },
+    { id: 'bellSolo', label: 'FM Bell (solo)', melody: renderFmBellStyle, backing: { type: 'none' } },
+    { id: 'acousticRealBand', label: 'Acoustic Band (real backing)', melody: renderPluckStyle, backing: { type: 'real', level: 0.6 } },
+    { id: 'synthPopBand', label: 'Synth-Pop (synth pads)', melody: renderVibratoStyle, backing: { type: 'synth', render: renderSynthPadBacking } },
+    { id: 'organHymnBand', label: 'Organ Hymn (organ backing)', melody: renderOrganStyle, backing: { type: 'synth', render: renderOrganPadBacking } },
+    { id: 'jazzComboBand', label: 'Jazz Combo (upright + brushes)', melody: renderSineStyle, backing: { type: 'synth', render: renderJazzWalkBacking } },
+    { id: 'rockBandFull', label: 'Rock Band (power chords + drums)', melody: (env, ctx) => renderBasicOscStyle(env, ctx, 'sawtooth', 0.2), backing: { type: 'synth', render: renderRockPowerBacking } },
+    { id: 'orchestralPad', label: 'Orchestral Strings (string pad)', melody: renderVibratoStyle, backing: { type: 'synth', render: renderOrchestralBacking } }
+  ];
 
   // ---------- On-device vocal/accompaniment separation (Demucs via ONNX Runtime Web) ----------
   const DEMUCS_DB_NAME = 'singa-demucs-cache';
@@ -792,33 +1047,26 @@
   let currentTrackKey = null;
   let rafId = null;
   let sources = {}; // key -> object URL
-  let guideStyles = {}; // styleId -> { label, alone: url, both: url }
-  let selectedGuideStyleId = GUIDE_STYLES[0].id;
-  let guideMixWithBacking = false;
+  let guideStyles = {}; // arrangementId -> { label, url }
+  let selectedGuideStyleId = ARRANGEMENTS[0].id;
 
   function initGuideStylePicker() {
     const container = document.getElementById('guide-style-picker');
     container.innerHTML = '';
-    GUIDE_STYLES.forEach(style => {
+    ARRANGEMENTS.forEach(arr => {
       const btn = document.createElement('button');
       btn.className = 'style-btn';
-      btn.textContent = style.label;
-      btn.dataset.styleId = style.id;
+      btn.textContent = arr.label;
+      btn.dataset.styleId = arr.id;
       btn.disabled = true;
       btn.addEventListener('click', () => {
-        selectedGuideStyleId = style.id;
+        selectedGuideStyleId = arr.id;
         applySelectedGuideStyle();
       });
       container.appendChild(btn);
     });
   }
   initGuideStylePicker();
-
-  const guideMixToggleEl = document.getElementById('guide-mix-toggle');
-  guideMixToggleEl.addEventListener('change', () => {
-    guideMixWithBacking = guideMixToggleEl.checked;
-    applySelectedGuideStyle();
-  });
 
   function restartGuidePlaybackIfActive() {
     if (currentTrackKey === 'guide' && sources.guide) {
@@ -837,7 +1085,7 @@
     });
     const entry = guideStyles[selectedGuideStyleId];
     if (!entry) return;
-    sources.guide = guideMixWithBacking ? entry.both : entry.alone;
+    sources.guide = entry.url;
     playButtons.guide.disabled = false;
     restartGuidePlaybackIfActive();
   }
@@ -927,12 +1175,9 @@
     Object.values(sources).forEach(url => { if (url) URL.revokeObjectURL(url); });
     sources = { track: URL.createObjectURL(blob) };
     window.__chordSegments = [];
-    Object.values(guideStyles).forEach(entry => { URL.revokeObjectURL(entry.alone); URL.revokeObjectURL(entry.both); });
+    Object.values(guideStyles).forEach(entry => { URL.revokeObjectURL(entry.url); });
     guideStyles = {};
-    selectedGuideStyleId = GUIDE_STYLES[0].id;
-    guideMixWithBacking = false;
-    guideMixToggleEl.checked = false;
-    guideMixToggleEl.disabled = true;
+    selectedGuideStyleId = ARRANGEMENTS[0].id;
     document.querySelectorAll('#guide-style-picker .style-btn').forEach(b => { b.disabled = true; b.classList.remove('active'); });
 
     let wordTokens = [];
@@ -993,13 +1238,15 @@
 
     if (stems) {
       try {
-        setStage('stage-guide', 'active', 'Analyzing the vocal pitch contour…');
+        setStage('stage-guide', 'active', 'Analyzing and pitch-correcting the vocal…');
         const vocalMono = new Float32Array(stems.vocals.left.length);
         for (let i = 0; i < vocalMono.length; i++) vocalMono[i] = (stems.vocals.left[i] + stems.vocals.right[i]) / 2;
         const vocal16k = await resampleFloat32(vocalMono, 44100, PITCH_SAMPLE_RATE);
         const pitchTrack = analyzePitchTrack(vocal16k, PITCH_SAMPLE_RATE);
         const totalDurationSec = stems.vocals.left.length / 44100;
         const envelope = buildPitchEnvelope(pitchTrack, totalDurationSec);
+        const beatSec = estimateBackingTempo(pitchTrack);
+        const chordSegments = window.__chordSegments || [];
 
         const backingLen = stems.other.left.length;
         const backingBed = { left: new Float32Array(backingLen), right: new Float32Array(backingLen) };
@@ -1008,26 +1255,30 @@
           backingBed.right[i] = (stems.other.right[i]||0) + (stems.bass.right[i]||0) + (stems.drums ? (stems.drums.right[i]||0) : 0);
         }
 
-        for (const style of GUIDE_STYLES) {
-          setStage('stage-guide', 'active', `Rendering "${style.label}"…`);
-          const buf = await renderStyleToBuffer(envelope, style.render);
-          const bothBuf = mixBuffers(buf, backingBed, 0.55);
-          guideStyles[style.id] = {
-            label: style.label,
-            alone: URL.createObjectURL(encodeWavStereo(buf.left, buf.right, 44100)),
-            both: URL.createObjectURL(encodeWavStereo(bothBuf.left, bothBuf.right, 44100))
-          };
+        for (const arr of ARRANGEMENTS) {
+          setStage('stage-guide', 'active', `Rendering "${arr.label}"…`);
+          const totalSamples = Math.max(1, Math.ceil(envelope.totalDurationSec * 44100));
+          const ctx = new OfflineAudioContext(2, totalSamples, 44100);
+          arr.melody(envelope, ctx);
+          if (arr.backing.type === 'synth') arr.backing.render(ctx, chordSegments, envelope.totalDurationSec, beatSec);
+          const rendered = await ctx.startRendering();
+          let left = rendered.getChannelData(0);
+          let right = rendered.numberOfChannels > 1 ? rendered.getChannelData(1) : rendered.getChannelData(0);
+          if (arr.backing.type === 'real') {
+            const mixed = mixBuffers({ left, right }, backingBed, arr.backing.level);
+            left = mixed.left; right = mixed.right;
+          }
+          guideStyles[arr.id] = { label: arr.label, url: URL.createObjectURL(encodeWavStereo(left, right, 44100)) };
         }
         document.querySelectorAll('#guide-style-picker .style-btn').forEach(b => { b.disabled = false; });
-        guideMixToggleEl.disabled = false;
         applySelectedGuideStyle();
 
         const hasSound = getVoicedRuns(envelope).length > 0;
         setStage('stage-guide', 'done', hasSound
-          ? `${GUIDE_STYLES.length} render styles ready — pick one below and try "with backing".`
+          ? `${ARRANGEMENTS.length} arrangements ready in the key of ${PITCH_CLASS_NAMES[envelope.key.rootPc]} ${envelope.key.mode} — pick one below.`
           : 'Could not find enough clear pitch in the vocal to build a guide melody.');
       } catch (err) {
-        setStage('stage-guide', 'error', 'Could not build guide melody styles: ' + err.message);
+        setStage('stage-guide', 'error', 'Could not build guide melody arrangements: ' + err.message);
       }
     } else {
       setStage('stage-guide', 'error', 'Skipped — vocal separation did not complete.');
