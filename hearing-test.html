@@ -117,7 +117,7 @@
     <div id="guide-style-section">
       <div class="hint" style="text-transform:uppercase; letter-spacing:.06em;">Guide melody arrangement</div>
       <div id="guide-style-picker" class="style-grid"></div>
-      <div class="hint">Pitch is auto-corrected to the recording's own key and timing always matches your take exactly. Some arrangements are solo vocal-melody only; others add a full backing — either the real isolated accompaniment or a band synthesized from the detected chords. Pick one, then press "Play Guide" above.</div>
+      <div class="hint">Vibrato and pitch wobble are stabilized into clean held notes, then auto-corrected to the recording's own key — timing always matches your take exactly. Some arrangements are solo vocal-melody only; others add a full backing — either the real isolated accompaniment or a band synthesized from the detected chords. Pick one, then press "Play Guide" above.</div>
     </div>
 
     <div id="lyrics-viewport"><div id="lyrics-scroll"></div></div>
@@ -454,10 +454,82 @@
     return 440 * Math.pow(2, (correctedMidi - 69) / 12);
   }
 
-  // ---------- Vocal pitch envelope: pitch-corrected to the recording's own key, but never
-  // re-timed — every render style below shares this exact curve, so timing is identical to the
-  // recording across all of them, and pitch sits cleanly in the recording's own key. Only the
-  // instrument timbre (and, for band arrangements, the backing) changes between styles.
+  // ---------- Voice stabilization: natural vibrato (and general pitch wobble) is real variation
+  // around a note the singer intended, not a deliberate melodic change — but per-frame pitch
+  // correction alone doesn't remove it. Equal-tempered rounding happens to hold steady as long as
+  // the wobble stays within about a quarter-tone of the target, but wider vibrato (very common,
+  // especially on held notes) crosses into the neighboring semitone and back, so a purely
+  // per-frame corrector reproduces that as an audible flicker between two exact pitches instead of
+  // a single clean note. This groups frames into held "notes" with a short hold-time + local
+  // majority vote (so a brief vibrato swing never registers as a new note), then replaces each
+  // note's wavering pitch with one stable center frequency (the vibrato — being roughly symmetric —
+  // averages out of the median). A short portamento glide between adjacent notes keeps transitions
+  // musical rather than robotic/stepped: this is the "transparent" part of the correction.
+  function midiFromFreq(freq) { return 69 + 12 * Math.log2(freq / 440); }
+
+  function stabilizeNotes(points, hop) {
+    const MIN_HOLD_SEC = 0.10; // a genuine note change must persist at least this long
+    const VOTE_WINDOW = 2; // +/- frames used for a smoothed "candidate semitone" vote
+    const minHold = Math.max(1, Math.round(MIN_HOLD_SEC / hop));
+
+    const candidates = points.map(p => p.freq ? Math.round(midiFromFreq(p.freq)) : null);
+    const voted = candidates.map((c, i) => {
+      if (c === null) return null;
+      const counts = new Map();
+      for (let k = Math.max(0, i - VOTE_WINDOW); k <= Math.min(candidates.length - 1, i + VOTE_WINDOW); k++) {
+        const v = candidates[k];
+        if (v === null) continue;
+        counts.set(v, (counts.get(v) || 0) + 1);
+      }
+      let best = c, bestCount = -1;
+      counts.forEach((count, v) => { if (count > bestCount) { bestCount = count; best = v; } });
+      return best;
+    });
+
+    const segments = [];
+    let cur = null;
+    let pendingSemitone = null, pendingCount = 0;
+    voted.forEach((v, i) => {
+      if (v === null) {
+        if (cur) { segments.push(cur); cur = null; }
+        pendingSemitone = null; pendingCount = 0;
+        return;
+      }
+      if (!cur) {
+        cur = { semitone: v, startIdx: i, endIdx: i };
+        pendingSemitone = null; pendingCount = 0;
+        return;
+      }
+      if (v === cur.semitone) {
+        cur.endIdx = i;
+        pendingSemitone = null; pendingCount = 0;
+      } else {
+        pendingCount = (v === pendingSemitone) ? pendingCount + 1 : 1;
+        pendingSemitone = v;
+        if (pendingCount >= minHold) {
+          segments.push(cur);
+          cur = { semitone: pendingSemitone, startIdx: i - pendingCount + 1, endIdx: i };
+          pendingSemitone = null; pendingCount = 0;
+        } else {
+          cur.endIdx = i; // still the held note while we wait to confirm a real change
+        }
+      }
+    });
+    if (cur) segments.push(cur);
+
+    return segments.map(seg => {
+      const freqs = [];
+      for (let i = seg.startIdx; i <= seg.endIdx; i++) if (points[i].freq) freqs.push(points[i].freq);
+      freqs.sort((a, b) => a - b);
+      return { startIdx: seg.startIdx, endIdx: seg.endIdx, freq: freqs.length ? freqs[Math.floor(freqs.length / 2)] : null };
+    });
+  }
+
+  // ---------- Vocal pitch envelope: stabilized and pitch-corrected to the recording's own key,
+  // but never re-timed — every render style below shares this exact curve, so timing is identical
+  // to the recording across all of them, and pitch sits cleanly in the recording's own key with
+  // vibrato/wobble stabilized out. Only the instrument timbre (and, for band arrangements, the
+  // backing) changes between styles.
   function buildPitchEnvelope(pitchTrack, totalDurationSec) {
     const hop = pitchTrack.length > 1 ? (pitchTrack[1].time - pitchTrack[0].time) : 0.032;
     const ENERGY_GATE = 0.012;
@@ -492,13 +564,30 @@
       return { time: p.time, freq: cands[Math.floor(cands.length / 2)], amp: p.amp };
     });
 
-    // Pitch correction: detect the key from what was actually sung, then snap each frame to the
-    // nearest note in that key. Frame timestamps (and therefore timing) are left exactly as-is.
+    // Pitch correction: detect the key from what was actually sung, then snap each STABILIZED
+    // note (not each raw frame) to the nearest note in that key. Frame timestamps (and therefore
+    // timing) are left exactly as-is throughout.
     const key = estimateKeyFromPoints(smoothed);
     const scaleSteps = key.mode === 'major' ? MAJOR_SCALE_STEPS : MINOR_SCALE_STEPS;
-    const corrected = smoothed.map(p => p.freq
-      ? { time: p.time, freq: correctFreqToScale(p.freq, key.rootPc, scaleSteps), amp: p.amp }
-      : p);
+    const noteSegments = stabilizeNotes(smoothed, hop);
+    noteSegments.forEach(seg => { seg.correctedFreq = seg.freq ? correctFreqToScale(seg.freq, key.rootPc, scaleSteps) : null; });
+
+    const GLIDE_SEC = 0.045; // short portamento between adjacent notes so transitions stay musical
+    const corrected = smoothed.map(p => ({ time: p.time, freq: null, amp: p.amp }));
+    noteSegments.forEach((seg, segIdx) => {
+      if (seg.correctedFreq == null) return;
+      const prevSeg = noteSegments[segIdx - 1];
+      const contiguous = prevSeg && prevSeg.correctedFreq != null && seg.startIdx === prevSeg.endIdx + 1;
+      const glideFrames = contiguous ? Math.min(seg.endIdx - seg.startIdx, Math.round(GLIDE_SEC / hop)) : 0;
+      for (let i = seg.startIdx; i <= seg.endIdx; i++) {
+        if (contiguous && i - seg.startIdx < glideFrames) {
+          const t = (i - seg.startIdx + 1) / (glideFrames + 1);
+          corrected[i].freq = Math.exp(Math.log(prevSeg.correctedFreq) * (1 - t) + Math.log(seg.correctedFreq) * t);
+        } else {
+          corrected[i].freq = seg.correctedFreq;
+        }
+      }
+    });
 
     return { points: corrected, hop, totalDurationSec, key };
   }
