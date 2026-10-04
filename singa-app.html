@@ -7,1050 +7,1562 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=Source+Serif+4:opsz,wght@8..60,700&family=Caveat:wght@500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,300,0..1,0" rel="stylesheet">
 <style>
-/* Singa — shared stylesheet for all surfaces (Performer App, Desktop Website,
-   Audience Guest Site, Gig TV / Monitor Portal). Tokens match the product's
-   real design system (Hanken Grotesk / Source Serif 4 / Caveat, warm paper
-   background, orange-red accent). Each surface is its own full-bleed page —
-   there is no shared "switcher" chrome here; this file only holds the real
-   UI patterns a shipped page would use. */
-
 :root{
-  --bg:#ffffff; --canvas:#ecebe8; --fg:#1b1b1b; --fg-muted:#77756f;
-  --border:#dcdad5; --accent:#f24822; --accent-fg:#ffffff;
-  --live:#f24822; --spotify:#1db954; --youtube:#ff0000;
-  --font-display:'Source Serif 4',Georgia,serif;
-  --font-body:'Hanken Grotesk',system-ui,-apple-system,sans-serif;
-  --font-hand:'Caveat',cursive;
-  --radius-sm:8px; --radius-md:12px; --radius-lg:20px;
-  --statusbar-h:28px; --header-h:56px; --bottomnav-h:60px;
+  --bg:#fff; --canvas:#ecebe8; --fg:#1b1b1b;
+  --m1:#77756f; --m2:#8a8a8a; --m3:#6f6f6f; --m4:#9a9a9a;
+  --accent:#f24822; --b1:#dcdad5; --b2:#ececec; --b3:#e6e6e6; --b4:#e2e2e2;
+  --chordblue:#2f8fe0; --spotify:#1ed760; --youtube:#ff0000;
+  --pad: clamp(16px, 4.5vw, 64px);
 }
-*{box-sizing:border-box;}
-html,body{height:100%;}
-body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--font-body);-webkit-font-smoothing:antialiased;}
-h1,h2,h3{font-family:var(--font-display);margin:0;font-weight:700;text-wrap:balance;}
-a{color:inherit;}
-button{font-family:inherit;}
-img{max-width:100%;display:block;}
-.visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);}
-[hidden]{display:none!important;}
-svg.icon{width:20px;height:20px;flex:none;display:block;}
-svg.icon-sm{width:16px;height:16px;}
-svg.icon-lg{width:26px;height:26px;}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--canvas)}
+body{font-family:'Hanken Grotesk',system-ui,sans-serif;color:var(--fg);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{color:var(--fg);text-decoration:none;cursor:pointer}
+a:hover{color:var(--accent)}
+input,textarea,button{font-family:inherit;color:inherit}
+button{cursor:pointer;background:none}
+.msi{font-family:'Material Symbols Outlined';font-weight:normal;font-style:normal;line-height:1;display:inline-block;vertical-align:middle}
+@keyframes singaIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes singaPop{from{opacity:0;transform:scale(.94) translateY(8px)}to{opacity:1;transform:none}}
+@keyframes singaFade{from{opacity:0}to{opacity:1}}
+@keyframes singaToast{from{opacity:0;transform:translate(-50%,16px)}to{opacity:1;transform:translate(-50%,0)}}
 
-/* ================= native status bar (phone-width simulation) ================= */
-.statusbar{height:var(--statusbar-h);display:flex;align-items:center;justify-content:space-between;padding:0 20px;font-size:13px;font-weight:600;color:var(--fg);background:var(--bg);flex:none;}
-.statusbar .right{display:flex;align-items:center;gap:5px;}
-.statusbar svg{display:block;}
-.statusbar-dark{background:#0d0d0d;color:#fff;}
+body.dark-invert{filter:invert(1) hue-rotate(180deg)}
 
-/* ================= app shell layout ================= */
-.app{display:flex;flex-direction:column;min-height:100vh;background:var(--bg);}
-.app-header{flex:none;height:var(--header-h);display:flex;align-items:center;justify-content:space-between;padding:0 18px;border-bottom:1px solid transparent;position:relative;}
-.app-header .wordmark{font-family:var(--font-display);font-size:20px;font-weight:700;letter-spacing:-.01em;}
-.app-header .iconbtn{background:none;border:none;color:var(--fg);cursor:pointer;padding:6px;display:flex;align-items:center;justify-content:center;border-radius:8px;}
-.app-header .iconbtn:hover{background:var(--canvas);}
-.app-body{flex:1;display:flex;min-height:0;}
-.app-main{flex:1;min-width:0;overflow-y:auto;padding:4px 18px 32px;}
-.app-main.narrow{max-width:640px;margin:0 auto;width:100%;}
+#appRoot{min-height:100vh;display:flex;flex-direction:column;background:#fff}
+#topbar{flex:none;height:64px;position:relative;display:flex;align-items:center;padding:0 24px}
+#topbar .wordmark{position:absolute;left:0;right:0;text-align:center;font-family:'Source Serif 4',serif;font-weight:700;font-size:22px;pointer-events:none}
+.darktoggle{display:flex;align-items:center;gap:8px;cursor:pointer;z-index:2}
+.darktoggle .pill{width:40px;height:22px;border-radius:11px;border:1.5px solid var(--fg);position:relative;transition:background .25s}
+.darktoggle .pill .dot{position:absolute;top:2px;width:15px;height:15px;border-radius:50%;transition:left .25s cubic-bezier(.2,.8,.2,1)}
+#screen{flex:1;min-height:0;display:flex;flex-direction:column}
+.scr{flex:1;min-height:0;padding:20px var(--pad) 40px;animation:singaIn .4s cubic-bezier(.2,.8,.2,1) both;display:flex;flex-direction:column}
+.scr.center{align-items:center}
 
-/* persistent left sidebar — shown at tablet/desktop widths (matches the real
-   design's split-pane layout: a song/context list stays visible beside the
-   active screen rather than being a separate "page"). */
-.app-sidebar{display:none;flex:none;width:280px;border-right:1px solid var(--border);padding:18px 14px 18px;overflow-y:auto;}
-.app-sidebar .side-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--fg-muted);margin:16px 6px 8px;}
-.app-sidebar .side-title:first-child{margin-top:2px;}
-.app-sidebar .list-row{padding-left:6px;padding-right:6px;}
-.app-sidebar .navtabs{display:flex;flex-direction:column;gap:2px;margin-bottom:8px;}
-.app-sidebar .navtabs button{display:flex;align-items:center;gap:10px;text-align:left;background:none;border:none;padding:9px 6px;border-radius:8px;font-size:14px;font-weight:600;color:var(--fg-muted);cursor:pointer;}
-.app-sidebar .navtabs button.active{background:var(--canvas);color:var(--fg);}
+/* buttons */
+.btn{height:52px;border:0;border-radius:12px;font-size:15px;font-weight:600;transition:transform .15s,background .2s,color .2s,opacity .2s;padding:0 24px}
+.btn:active{transform:scale(.96)}
+.btn-dark{background:var(--fg);color:#fff}
+.btn-outline{background:#fff;border:1.5px solid var(--fg);color:var(--fg)}
+.btn-accent{background:var(--accent);color:#fff}
+.btn-grey{background:#dcdcdc;color:#444}
+.btn-disabled{background:#d6d6d6;color:#fff;cursor:not-allowed}
+.btn-sm{height:44px;padding:0 18px;font-size:14px}
+.link{font-size:14px;font-weight:600;cursor:pointer}
+.link-accent{color:var(--accent)}
+.link-muted{color:var(--m3)}
 
-/* bottom tab bar — shown at phone widths */
-.bottom-nav{display:flex;flex:none;border-top:1px solid var(--border);background:var(--bg);height:var(--bottomnav-h);}
-.bottom-nav button{flex:1;border:none;background:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:11px;font-weight:600;color:var(--fg-muted);cursor:pointer;}
-.bottom-nav button.active{color:var(--fg);}
+input[type=text], input:not([type]), .ipt{height:54px;border:1.5px solid #d4d4d4;border-radius:12px;padding:0 18px;font-size:16px;outline:none;width:100%;background:#fff}
+textarea.ipt{height:auto;padding:16px 18px;line-height:1.5;resize:none}
 
-@media (min-width:860px){
-  .app-sidebar{display:flex;flex-direction:column;}
-  .bottom-nav{display:none;}
-  .app-main{padding:8px 32px 40px;}
-  .statusbar{display:none;}
-  .app-header{display:none;}
-}
+.row{display:flex;align-items:center}
+.icon-btn{border:0;background:none;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:transform .15s}
+.icon-btn:active{transform:scale(.9)}
 
-/* ================= generic UI ================= */
-.input,textarea.input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:11px 13px;font-size:14px;color:var(--fg);font-family:inherit;}
-.input::placeholder{color:#a6a49d;}
-textarea.input{resize:vertical;min-height:90px;}
-.input-icon-wrap{position:relative;}
-.input-icon-wrap .input{padding-right:40px;}
-.input-icon-wrap svg{position:absolute;right:13px;top:50%;transform:translateY(-50%);color:var(--fg-muted);}
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;border:none;border-radius:var(--radius-sm);padding:13px 16px;font-size:14.5px;font-weight:700;cursor:pointer;width:100%;font-family:inherit;}
-.btn-primary{background:var(--fg);color:#fff;}
-.btn-primary:disabled{opacity:.35;cursor:default;}
-.btn-accent{background:var(--accent);color:var(--accent-fg);}
-.btn-outline{background:transparent;color:var(--fg);border:1.5px solid var(--border);}
-.btn-ghost{background:none;border:none;color:var(--fg-muted);font-size:13px;cursor:pointer;width:auto;padding:6px;font-family:inherit;}
-.btn-sm{width:auto;padding:8px 13px;font-size:13px;}
-.btn:disabled{opacity:.5;cursor:default;}
-.row{display:flex;gap:8px;align-items:center;}
-.rowbetween{display:flex;gap:8px;align-items:center;justify-content:space-between;}
-.stack{display:flex;flex-direction:column;gap:12px;}
-.center-col{display:flex;flex-direction:column;align-items:center;text-align:center;}
+.seg{display:inline-flex;border:1.5px solid var(--fg);border-radius:10px;padding:3px;gap:3px}
+.seg button{border:0;border-radius:7px;padding:8px 18px;font-size:14px;font-weight:600;background:transparent;color:var(--fg);transition:background .2s,color .2s}
+.seg button.on{background:var(--fg);color:#fff}
 
-.seg{display:flex;background:var(--bg);border:1px solid var(--fg);border-radius:10px;padding:3px;gap:3px;}
-.seg button{flex:1;border:none;background:none;padding:9px 6px;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;color:var(--fg);font-family:inherit;}
-.seg button.active{background:var(--fg);color:#fff;}
+.toggle{width:40px;height:22px;border-radius:11px;border:1.5px solid var(--fg);position:relative;flex:none;cursor:pointer;transition:background .25s}
+.toggle .dot{position:absolute;top:2px;width:15px;height:15px;border-radius:50%;transition:left .25s cubic-bezier(.2,.8,.2,1)}
 
-.subtabs{display:flex;gap:22px;border-bottom:1px solid var(--border);margin-bottom:18px;}
-.subtabs button{border:none;background:none;padding:0 0 10px;font-size:14px;font-weight:600;color:var(--fg-muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;font-family:inherit;}
-.subtabs button.active{color:var(--fg);border-bottom-color:var(--fg);}
+.list-row{display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:1px solid var(--b2);cursor:pointer;gap:12px}
+.list-row .t{font-size:16px;font-weight:600;display:flex;align-items:center;gap:8px}
+.list-row .s{font-size:13px;color:var(--m2);margin-top:3px}
+.chev{font-size:22px;color:var(--m2);flex:none}
 
-.section-h{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--fg-muted);margin:20px 0 8px;}
-.list{border-top:1px solid var(--border);}
-.list-row{display:flex;align-items:center;gap:10px;padding:13px 2px;border-bottom:1px solid var(--border);cursor:pointer;min-width:0;}
-.list-row .meta{min-width:0;flex:1;}
-.list-row .t{font-weight:600;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.list-row .s{font-size:12.5px;color:var(--fg-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px;}
-.list-row .chev{color:#b9b7b0;flex:none;}
-.icon-src{width:18px;height:18px;border-radius:5px;flex:none;display:inline-flex;align-items:center;justify-content:center;font-size:10px;color:#fff;}
-.badge{font-size:10px;letter-spacing:.03em;padding:3px 8px;border-radius:999px;font-weight:700;flex:none;text-transform:uppercase;}
-.badge-synced{background:var(--canvas);color:var(--fg-muted);border:1px solid var(--border);}
-.badge-notake{background:var(--canvas);color:var(--fg-muted);border:1px solid var(--border);}
-.badge-live{background:var(--accent);color:#fff;}
-.fab{position:fixed;right:22px;bottom:calc(var(--bottomnav-h) + 18px);width:56px;height:56px;border-radius:50%;background:var(--fg);color:#fff;border:none;cursor:pointer;box-shadow:0 8px 20px -6px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;}
-@media (min-width:860px){.fab{display:none;}}
-.toast{position:fixed;left:50%;bottom:calc(var(--bottomnav-h) + 18px);transform:translateX(-50%);background:var(--fg);color:#fff;padding:10px 18px;border-radius:999px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .2s, transform .2s;z-index:80;white-space:nowrap;}
-.toast.show{opacity:1;transform:translateX(-50%) translateY(-4px);}
-@media (min-width:860px){.toast{bottom:22px;}}
-.chip{display:inline-flex;align-items:center;gap:5px;background:var(--canvas);border:1px solid var(--border);border-radius:999px;padding:4px 11px;font-size:12px;color:var(--fg-muted);}
+.search-field{height:48px;border:1.5px solid var(--fg);border-radius:12px;display:flex;align-items:center;padding:0 6px 0 16px;gap:6px;min-width:0}
+.search-field input{flex:1;min-width:0;border:0;outline:none;font-size:15px;background:transparent;height:100%}
 
-/* sheet / overflow menu / modal */
-.sheet-backdrop{position:fixed;inset:0;background:rgba(27,27,27,.28);z-index:60;}
-.sheet{position:absolute;right:0;top:calc(100% + 6px);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md);box-shadow:0 18px 40px -12px rgba(0,0,0,.25);padding:14px 18px;min-width:220px;z-index:70;text-align:right;}
-.sheet button{display:block;width:100%;text-align:right;background:none;border:none;padding:8px 0;font-size:15px;font-weight:600;color:var(--fg);cursor:pointer;font-family:inherit;}
-.sheet button.danger{color:var(--accent);}
-.sheet hr{border:none;border-top:1px solid var(--border);margin:6px 0;}
-.modal-backdrop{position:fixed;inset:0;background:rgba(27,27,27,.4);display:flex;align-items:center;justify-content:center;padding:24px;z-index:90;}
-.modal{background:var(--bg);border-radius:var(--radius-lg);padding:24px;max-width:420px;width:100%;max-height:85vh;overflow-y:auto;}
+.toast-box{position:fixed;left:50%;bottom:36px;transform:translateX(-50%);z-index:200}
+.toast{animation:singaToast .35s cubic-bezier(.2,.8,.2,1) both;background:var(--fg);color:#fff;padding:12px 20px;border-radius:10px;font-size:14px;font-weight:600;white-space:nowrap}
 
-/* word / chord / marking editor */
-.lyricline{margin-bottom:18px;}
-.wordrow{display:flex;flex-wrap:wrap;gap:4px 10px;}
-.wordcell{display:flex;flex-direction:column;align-items:flex-start;min-width:0;}
-.chordlabel{font-size:12px;font-weight:700;color:var(--accent);height:16px;}
-.markflag{font-size:10px;color:var(--accent);}
-.word{font-size:16px;background:none;border:none;color:var(--fg);padding:0;cursor:pointer;font-family:inherit;}
-.word.clickable:hover{text-decoration:underline;text-decoration-style:dotted;}
-.inline-editor{margin:10px 0 2px;padding:12px;background:var(--canvas);border:1px solid var(--border);border-radius:var(--radius-sm);}
-.markpill{display:inline-block;background:#eaf2ff;color:#2a5ad1;border:1px solid #c8dcff;border-radius:7px;padding:1px 6px;font-size:11.5px;font-family:var(--font-hand);margin-left:6px;}
-.marknote{font-family:var(--font-hand);font-size:18px;color:#3e7bff;margin-top:2px;line-height:1.1;}
+.modal-backdrop{position:fixed;inset:0;background:rgba(255,255,255,.82);animation:singaFade .25s ease both;display:flex;align-items:center;justify-content:center;z-index:100;padding:24px}
+.modal{width:100%;max-width:460px;border:1.5px solid var(--fg);border-radius:14px;background:#fff;padding:24px;display:flex;flex-direction:column;gap:12px;box-shadow:0 20px 60px rgba(0,0,0,.12);animation:singaPop .32s cubic-bezier(.2,.8,.2,1) both;max-height:88vh;overflow:auto}
+.modal .mhead{display:flex;justify-content:space-between;align-items:center}
+.modal .mhead .ttl{font-size:21px;font-weight:600}
+.modal .msub{font-size:13px;color:var(--m2)}
+
+.qrgrid{display:grid;grid-template-columns:repeat(25,1fr);width:220px}
+.qrgrid div{aspect-ratio:1}
 
 /* chord diagram */
-.chorddiagram{display:flex;flex-direction:column;align-items:center;gap:10px;margin:14px 0 6px;}
-.fretgrid{display:grid;grid-template-columns:repeat(6,14px);grid-template-rows:repeat(4,14px);gap:3px;}
-.fretgrid .fret{width:14px;height:14px;border:1.5px solid var(--border);border-radius:50%;}
-.fretgrid .fret.on{background:var(--fg);border-color:var(--fg);}
-.chordname{font-family:var(--font-display);font-size:22px;font-weight:700;}
+.diagram-row{display:flex;align-items:center;gap:26px;justify-content:center;flex-wrap:wrap}
+.fretboard{position:relative;margin-top:18px}
+.piano{position:relative;display:flex;height:92px;border:1.5px solid var(--fg);border-radius:4px;overflow:hidden}
+.diaName{font-size:52px;font-weight:700;letter-spacing:-0.02em;min-width:70px}
+.diaNext{font-size:24px;color:#b0b0b0}
 
-/* waveform */
-.wave{display:flex;align-items:flex-end;gap:3px;height:60px;justify-content:center;margin:16px 0;}
-.wave span{width:4px;background:var(--accent);border-radius:2px;transition:height .12s;}
+/* lyric lines */
+.lyrics-wrap{display:flex;flex-direction:column;align-items:flex-start;gap:16px}
+.lline{position:relative;display:flex;flex-wrap:wrap;column-gap:7px;transition:transform .5s cubic-bezier(.2,.8,.2,1),opacity .5s ease,margin .5s cubic-bezier(.2,.8,.2,1)}
+.lword{position:relative;display:flex;flex-direction:column;cursor:default}
+.lword .lchord{height:18px;font-size:14px;font-weight:600;color:#9a9a9a}
+.lword .ltext{font-size:24px;color:#333}
+.markup,.markbefore,.markafter{position:absolute;pointer-events:none;white-space:nowrap;display:flex;align-items:center;gap:4px}
+.markup{bottom:100%;left:50%;transform:translateX(-50%);flex-direction:column;align-items:center}
+.markbefore{right:100%;bottom:2px;margin-right:8px}
+.markafter{left:100%;bottom:2px;margin-left:10px}
+.markup .mtext,.markbefore .mtext,.markafter .mtext{font-family:Caveat,cursive;font-size:28px;line-height:1;color:var(--chordblue)}
+.markup .mtext{font-size:26px}
 
-/* mascot */
-.mascot{width:160px;height:auto;margin:0 auto;}
+/* responsive grids */
+.home-grid{display:grid;grid-template-columns:1fr;gap:40px}
+@media(min-width:760px){.home-grid{grid-template-columns:1fr 1fr;gap:56px}}
+.gig-grid{display:grid;grid-template-columns:1fr;gap:28px}
+@media(min-width:760px){.gig-grid{grid-template-columns:minmax(0,1fr) 150px;gap:40px}}
+.gig-rail{display:flex;flex-direction:row;flex-wrap:wrap;justify-content:center;gap:24px;padding:12px 0}
+@media(min-width:760px){.gig-rail{flex-direction:column;align-items:center;gap:28px;padding-top:4px}}
+.gigplayer-grid{display:flex;flex-direction:column;flex:1;min-height:0}
+@media(min-width:760px){.gigplayer-grid{display:grid;grid-template-columns:230px minmax(0,1fr)}}
+.gigplayer-side{border-bottom:1px solid var(--b2);max-height:220px;overflow:auto;padding:16px 16px 16px 28px;display:flex;flex-direction:column}
+@media(min-width:760px){.gigplayer-side{border-bottom:none;border-right:1px solid var(--b2);max-height:none;height:100%}}
 
-/* register / auth */
-.auth-screen{max-width:360px;margin:0 auto;padding:40px 20px 24px;}
-.auth-divider{display:flex;align-items:center;gap:12px;color:var(--fg-muted);font-size:12px;margin:4px 0;}
-.auth-divider::before,.auth-divider::after{content:"";flex:1;height:1px;background:var(--border);}
-.btn-social{background:var(--bg);color:var(--fg);border:1.5px solid var(--border);}
+.photogrid{display:grid;grid-template-columns:repeat(2,1fr);grid-auto-rows:150px;gap:12px}
+@media(min-width:600px){.photogrid{grid-template-columns:repeat(4,1fr);grid-auto-rows:170px}}
+.phototile{border-radius:8px;background:repeating-linear-gradient(135deg,#e9e9e9 0 8px,#e1e1e1 8px 16px);display:flex;align-items:flex-end;padding:10px}
+.phototile span{font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--m3)}
 
-/* ================= audience guest site ================= */
-.aud-app{min-height:100vh;display:flex;flex-direction:column;background:var(--bg);color:var(--fg);transition:background .2s,color .2s;}
-.aud-app.dark{background:#0d0d0d;color:#f2f2f0;}
-.aud-app .app-header{border-bottom:none;}
-.aud-app .themebtn{display:flex;align-items:center;gap:6px;background:none;border:none;color:inherit;cursor:pointer;padding:6px 8px;border-radius:999px;}
-.aud-lyrics{flex:1;display:flex;flex-direction:column;justify-content:center;padding:10px 26px 40px;gap:14px;max-width:560px;margin:0 auto;width:100%;}
-.aud-line{font-family:var(--font-display);font-size:clamp(19px,5vw,28px);font-weight:600;color:var(--fg-muted);transition:color .2s,opacity .2s;opacity:.55;line-height:1.35;}
-.aud-app.dark .aud-line{color:#8b8b88;}
-.aud-line.current{color:var(--fg);opacity:1;}
-.aud-app.dark .aud-line.current{color:#fff;}
-.aud-songmeta{max-width:560px;margin:0 auto;width:100%;padding:14px 26px 0;}
-.aud-songmeta .t{font-size:15px;font-weight:700;}
-.aud-songmeta .by{font-size:12px;color:var(--fg-muted);margin-top:2px;}
-.aud-qr-wrap{display:flex;flex-direction:column;align-items:center;gap:18px;padding:40px 24px;flex:1;justify-content:center;}
-.qr{display:grid;gap:2px;background:#fff;padding:8px;border-radius:10px;border:1px solid var(--border);}
-.qr div{background:#0d0d0d;}
-.photo-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:0 18px;}
-.photo-tile{aspect-ratio:1;border-radius:10px;background:var(--canvas);}
-@media (min-width:640px){.photo-grid{grid-template-columns:repeat(4,1fr);}}
-
-/* ================= TV / monitor portal ================= */
-.tv-app{min-height:100vh;background:#0d0d0d;color:#fff;display:flex;flex-direction:column;font-family:var(--font-body);position:relative;overflow:hidden;}
-.tv-top{display:flex;justify-content:space-between;align-items:center;padding:22px 32px 0;flex:none;}
-.tv-top .wordmark{font-family:var(--font-display);font-size:20px;font-weight:700;color:#fff;}
-.tv-body{flex:1;display:flex;flex-direction:column;justify-content:center;padding:20px 56px;gap:14px;max-width:1100px;}
-.tv-line{font-family:var(--font-display);font-size:clamp(22px,4.2vw,42px);font-weight:600;color:#54534f;transition:color .25s;line-height:1.3;}
-.tv-line.current{color:#fff;}
-.tv-qr-corner{position:absolute;left:32px;bottom:28px;display:flex;align-items:center;gap:12px;}
-.tv-qr-corner .qr{background:#fff;}
-.tv-qr-corner .meta .t{font-weight:700;font-size:14px;color:#fff;}
-.tv-qr-corner .meta .s{font-size:12px;color:#9c9b97;}
-.tv-takeover{flex:1;display:flex;align-items:center;justify-content:center;gap:48px;padding:40px;}
-.tv-next-label{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:#9c9b97;font-weight:700;}
-.tv-next-title{font-family:var(--font-display);font-size:clamp(26px,4vw,46px);font-weight:700;color:#fff;margin-top:6px;}
-.tv-next-sub{color:#9c9b97;font-size:16px;margin-top:4px;}
-.tv-scanme{background:#fff;border-radius:16px;padding:18px;display:flex;flex-direction:column;align-items:center;gap:10px;}
-.tv-scanme .label{background:#0d0d0d;color:#fff;font-weight:800;letter-spacing:.04em;font-size:13px;padding:6px 14px;border-radius:999px;}
-.tv-divider{width:1px;align-self:stretch;background:#2a2a28;}
-
+::placeholder{color:#a0a0a0}
 </style>
 </head>
 <body>
-<div class="app">
-  <div class="statusbar" id="statusbar"></div>
-  <div class="app-header" id="header"></div>
-  <div class="app-body">
-    <div class="app-sidebar" id="sidebar"></div>
-    <div class="app-main narrow" id="main"></div>
+<div id="appRoot">
+  <div id="topbar">
+    <span class="darktoggle" id="darkToggle" data-act="toggleDark" style="display:none">
+      <span class="pill" id="darkPill"><span class="dot" id="darkDot"></span></span>
+      <span class="msi" style="font-size:20px">light_mode</span>
+    </span>
+    <span class="wordmark">Singa</span>
   </div>
-  <div class="bottom-nav" id="bottomnav"></div>
+  <div id="screen"></div>
 </div>
-<button class="fab" id="fab" data-act="createNew" aria-label="Add a song"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
-<div class="toast" id="toast"></div>
+<div id="modalLayer"></div>
+<div class="toast-box" id="toastBox"></div>
+<input type="file" id="fileInput" accept="audio/*,video/*" style="display:none">
 <script>
-(function(){
 "use strict";
+/* ============================================================
+   DATA — ported verbatim from the authoritative design source
+   ============================================================ */
+const EX_LYRICS = "Don't go breaking my heart\nI couldn't if I tried\nHoney, if I get restless\nBaby, you're not that kind";
+const EX_SUB = "Dolly Parton and the booland. Long version 2009";
+const LETTERS = ['A','B','C','D','E','F','G'];
+const ACC = { A:'Ab', B:'Bb', C:'C#', D:'Db', E:'Eb', F:'F#', G:'G#' };
+const ROOTS = ['C','C#','D','Eb','E','F','F#','G','Ab','A','Bb','B'];
+const ALT = { Db:1, 'D#':3, Gb:6, 'G#':8, 'A#':10 };
+const SUFFIXES = ['','m','7','m7','maj7','6','sus2','sus4','dim','aug','add9','9'];
+const IV = { '':[0,4,7], m:[0,3,7], '7':[0,4,7,10], m7:[0,3,7,10], maj7:[0,4,7,11], '6':[0,4,7,9], sus2:[0,2,7], sus4:[0,5,7], dim:[0,3,6], aug:[0,4,8], add9:[0,4,7,14], '9':[0,4,7,10,14] };
+const E_SHAPE = { '':[0,2,2,1,0,0], m:[0,2,2,0,0,0], '7':[0,2,0,1,0,0], m7:[0,2,0,0,0,0], maj7:[0,2,1,1,0,0], '6':[0,2,2,1,2,0], sus4:[0,2,2,2,0,0], '9':[0,2,0,1,0,2] };
+const A_SHAPE = { '':[-1,0,2,2,2,0], m:[-1,0,2,2,1,0], '7':[-1,0,2,0,2,0], m7:[-1,0,2,0,1,0], maj7:[-1,0,2,1,2,0], '6':[-1,0,2,2,2,2], sus2:[-1,0,2,2,0,0], sus4:[-1,0,2,2,3,0], dim:[-1,0,1,2,1,-1], aug:[-1,0,3,2,2,1], add9:[-1,0,2,4,2,0], '9':[-1,0,2,4,2,3] };
+const OPEN_GUITAR = { A:[-1,0,2,2,2,0], Am:[-1,0,2,2,1,0], A7:[-1,0,2,0,2,0], Am7:[-1,0,2,0,1,0], Asus2:[-1,0,2,2,0,0], Asus4:[-1,0,2,2,3,0], C:[-1,3,2,0,1,0], C7:[-1,3,2,3,1,0], Cmaj7:[-1,3,2,0,0,0], D:[-1,-1,0,2,3,2], Dm:[-1,-1,0,2,3,1], D7:[-1,-1,0,2,1,2], Dsus2:[-1,-1,0,2,3,0], Dsus4:[-1,-1,0,2,3,3], E:[0,2,2,1,0,0], Em:[0,2,2,0,0,0], E7:[0,2,0,1,0,0], Em7:[0,2,0,0,0,0], F:[1,3,3,2,1,1], G:[3,2,0,0,0,3], G7:[3,2,0,0,0,1] };
+const OPEN_UKE = { C:[0,0,0,3], C7:[0,0,0,1], Cmaj7:[0,0,0,2], Am:[2,0,0,0], Am7:[0,0,0,0], A:[2,1,0,0], A7:[0,1,0,0], F:[2,0,1,0], G:[0,2,3,2], G7:[0,2,1,2], D:[2,2,2,0], Dm:[2,2,1,0], Em:[0,4,3,2], E7:[1,2,0,2] };
+const WHITE = [0,2,4,5,7,9,11,12,14,16,17,19,21,23];
+const BLACK = [[1,0],[3,1],[6,3],[8,4],[10,5],[13,7],[15,8],[18,10],[20,11],[22,12]];
+const STAGES = ['Politely asking your voice to step away from the guitar','Teaching every word to keep up with you','Eavesdropping on the chords','Polishing the teleprompter'];
+const DEMO_CHORDS = { '0-0':'Am','0-2':'F','0-4':'G','1-0':'Am','1-3':'G','2-0':'F','2-3':'G','3-0':'Am','3-2':'F' };
+const SORTS = [['az','A → Z'],['za','Z → A'],['played','Most played'],['recent','Recently added'],['mine','Added by you']];
+const INSTS = [['guitar','Guitar'],['piano','Piano'],['ukulele','Ukulele'],['none','No instrument']];
 
-/* ============================== icons ============================== */
-var ICONS = {
-  back:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>',
-  search:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>',
-  menu:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>',
-  dots:'<svg class="icon" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>',
-  person:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20c1.6-3.8 5-5.2 7.5-5.2s5.9 1.4 7.5 5.2"/></svg>',
-  add:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
-  camera:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l1.6-2.2h6.8L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.4"/></svg>',
-  share:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="2.4"/><circle cx="6" cy="12" r="2.4"/><circle cx="18" cy="19" r="2.4"/><path d="M8.1 10.7l7.8-4.4M8.1 13.3l7.8 4.4"/></svg>',
-  qr:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v3M17 20h4"/></svg>',
-  close:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
-  chevronR:'<svg class="icon icon-sm chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>',
-  edit:'<svg class="icon icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
-  people:'<svg class="icon icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M2.5 19c1.2-3.3 3.8-4.6 6.5-4.6s5.3 1.3 6.5 4.6"/><path d="M16 4.3a3 3 0 0 1 0 5.8"/><path d="M18.5 14.6c2 .5 3.3 1.9 4 4.4"/></svg>',
-  home:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11l8-7 8 7"/><path d="M6 10v9h12v-9"/></svg>',
-  library:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h4v16H5zM10.5 5l3.8-.9 3.2 15.6-3.8.9z"/></svg>',
-  play:'<svg class="icon icon-sm" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>',
-  sun:'<svg class="icon icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.3M12 19.2v2.3M4.5 4.5l1.6 1.6M17.9 17.9l1.6 1.6M2.5 12h2.3M19.2 12h2.3M4.5 19.5l1.6-1.6M17.9 6.1l1.6-1.6"/></svg>',
-  moon:'<svg class="icon icon-sm" viewBox="0 0 24 24" fill="currentColor"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4 8.5 8.5 0 1 0 20 14.5z"/></svg>',
-  mic:'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>'
-};
-function icon(name){ return ICONS[name]||""; }
-
-/* ============================== shared app state ============================== */
-var STORE_KEY = "singa_prototype_v2";
-
-function defaultState(){
-  var state = {
-    songs:{
-      dgbmh:{ id:"dgbmh", title:"Don't Go Breaking My Heart", sub:"Dolly Parton and the booland. Long version 2009", addedBy:"you", synced:true, instrument:"guitar",
-        lines:[
-          {text:"Don't go breaking my heart", chords:[{w:0,sym:"Am"},{w:2,sym:"F"},{w:4,sym:"G"}], marks:[]},
-          {text:"I couldn't if I tried", chords:[{w:0,sym:"Am"},{w:3,sym:"G"}], marks:[{w:3,text:"Hi note"}]},
-          {text:"Honey, if I get restless", chords:[{w:0,sym:"F"},{w:3,sym:"G"}], marks:[{w:0,text:"Before"}]},
-          {text:"Baby, you're not that kind", chords:[{w:0,sym:"Am"},{w:3,sym:"F"}], marks:[]}
-        ]},
-      shp:{ id:"shp", title:"Shiny Happy People", sub:"R.E.M.", addedBy:"you", synced:true, instrument:"guitar",
-        lines:[
-          {text:"Shiny happy people holding hands", chords:[{w:0,sym:"C"},{w:3,sym:"G"}], marks:[]},
-          {text:"Shiny happy people laughing", chords:[{w:0,sym:"Am"},{w:3,sym:"F"}], marks:[]}
-        ]},
-      nr:{ id:"nr", title:"November Rain", sub:"Guns 'n' Roses", addedBy:"you", synced:false, instrument:"piano",
-        lines:[
-          {text:"When I look into your eyes", chords:[{w:0,sym:"Bm"},{w:4,sym:"A"}], marks:[]},
-          {text:"I can see a love restrained", chords:[{w:0,sym:"G"},{w:3,sym:"D"}], marks:[]}
-        ]}
+function freshData(){
+  return {
+    songs: {
+      dgbmh:{ id:'dgbmh', title:"Don't Go Breaking My Heart", sub:EX_SUB, lyrics:EX_LYRICS, chords:{...DEMO_CHORDS}, notes:{'1-4':'Hi note','2-0':'Before','2-3':'Slide'}, synced:true, plays:42, added:5, mine:true, instrument:'guitar' },
+      shp:{ id:'shp', title:'Shiny happy people', sub:'REM', lyrics:'', chords:{}, notes:{}, synced:false, plays:12, added:4, mine:true },
+      nov:{ id:'nov', title:'November Rain', sub:"Guns 'n' Roses", lyrics:'', chords:{}, notes:{}, synced:false, plays:30, added:3, mine:false, by:'allhands232' },
+      bo:{ id:'bo', title:'Bo', sub:'Wooho', lyrics:'', chords:{}, notes:{}, synced:false, plays:3, added:2, mine:true },
+      angie:{ id:'angie', title:'Angie', sub:'Long version', lyrics:'', chords:{}, notes:{}, synced:false, plays:8, added:1, mine:true }
     },
-    playlists:[
-      {id:"mysongs", name:"My songs", source:"own", songs:["dgbmh","shp"]},
-      {id:"gnr", name:"Guns 'n' Roses", source:"spotify", songs:["nr"]},
-      {id:"aff", name:"Affirmations", source:"youtube", songs:[]}
+    order: ['dgbmh','shp','nov','bo','angie'],
+    playlists: [
+      { id:'my', title:'My songs', auto:true, ids:[], mine:true, added:1, plays:60 },
+      { id:'gnr', title:"Guns 'n' Roses", src:'spotify', ids:['nov'], mine:true, added:2, plays:14 },
+      { id:'aff', title:'Affirmations', src:'youtube', ids:['bo','angie'], mine:false, by:'johnnyboy', added:3, plays:5 }
     ],
-    gigs:{
-      nye:{ id:"nye", name:"New Year's Eve Party", url:"singa.app/tv/nye-2027-x7k2",
-        setlist:["dgbmh","shp","nr"], mode:"owner", live:false,
-        currentSongIdx:0, currentLineIdx:0, tvScreen:"next", guestCount:0,
-        requests:[{id:1,song:"Sweet Caroline",votes:5,voted:false},{id:2,song:"Hey Jude",votes:2,voted:false}],
-        chat:[{from:"Mia",text:"This is so fun!"}],
-        photos:["#c6481f","#4169c7","#2a9d6b"],
-        notif:{req:true,photos:true,chat:false}
-      }
-    },
-    collaborators:[{name:"Allan Jones", email:"allan@example.com", gigs:["nye"]}],
-    account:{nickname:"Ezra Dahan", email:"ezra@example.com"}
+    gigs: [
+      { id:'nye', title:"New year's eve party with Simon and Duncan", date:'Dec 31, 2026', setlist:['dgbmh','shp','nov','bo','angie'], plays:1, added:4, mine:true, settings:{} },
+      { id:'anna', title:"Anna's Party, Monday May 2026", date:'May 4, 2026', setlist:['shp','nov','bo','angie'], plays:1, added:3, mine:true, settings:{} },
+      { id:'john', title:"John's Cafe", date:'Every Thursday', setlist:['dgbmh','angie'], plays:22, added:2, mine:true, settings:{} },
+      { id:'pride', title:'Pride weekend', date:'Jun 27, 2026', setlist:['shp','bo'], plays:2, added:1, mine:false, by:'Allan Jones', settings:{} }
+    ],
+    collabs: [ { name:'johnnyboy', email:'johnny@gmail.com', gigs:['anna'] }, { name:'Allan Jones', email:'allan@gmail.com', gigs:['nye','anna','john','pride'] } ],
+    photos: [ {id:1,by:'Maya',span:1},{id:2,by:'Tom',span:1},{id:3,by:'Ezra',span:2},{id:4,by:'Lior',span:1},{id:5,by:'Maya',span:2},{id:6,by:'Sam',span:1} ]
   };
-  if(typeof window!=="undefined" && window.SINGA_GIG_OVERRIDE){
-    var ov = window.SINGA_GIG_OVERRIDE;
-    if(ov.name) state.gigs.nye.name = ov.name;
-    if(ov.url) state.gigs.nye.url = ov.url;
-  }
-  return state;
 }
 
-var STATE = loadState();
-function loadState(){
-  try{
-    var raw = localStorage.getItem(STORE_KEY);
-    if(raw) return JSON.parse(raw);
-  }catch(e){}
-  return defaultState();
-}
-function saveState(){
-  try{ localStorage.setItem(STORE_KEY, JSON.stringify(STATE)); }catch(e){}
-  render();
-}
-window.addEventListener("storage", function(e){
-  if(e.key !== STORE_KEY || !e.newValue) return;
-  try{ STATE = JSON.parse(e.newValue); render(); }catch(err){}
-});
+const EMPTY_SONG = { id:'none', title:'Untitled song', sub:'', lyrics:'', chords:{}, notes:{} };
+/* ============================================================
+   STATE
+   ============================================================ */
+const D = freshData();
+const ST = {
+  screen:'login', back:'home', email:'',
+  homeQuery:'', searchQuery:'', sort:'recent', sortOpen:false,
+  listKind:'songs', listPl:null, listQuery:'',
+  songId:'dgbmh', viewBy:null, viewChord:null, instrument:'guitar', menu:false, instMenu:false, chordH:230,
+  startMode:'countdown', vcd:0,
+  editId:null, createMode:'manual', step:'lyrics', similar:false, rootIdx:0, selRoot:'A', selSuffix:'m', selWord:null, noteDraft:'', autoChords:false,
+  phase:'idle', cd:0, recT:0, bars:[], procPct:0, isPublic:false,
+  t:0, playing:false, ctx:'view', guide:false, guideInst:'Piano',
+  gigId:'nye', gigCur:null, played:[], orderVotes:{}, gListening:false, gigSettings:false,
+  plan:'free', upgrade:false, collabFor:null, editList:null, qrOpen:false,
+  collabEdit:null, newItem:null, pick:null, songPick:null, spQuery:'',
+  notif:{req:true,photos:true,chat:false},
+  perfDark:false, toast:null, sampling:false, sampleLeft:0, part:'Keys'
+};
+let toastTimer = null;
 
-var UI = { screen:"home", history:[], viewerId:null, menuOpen:false, confirmDelete:false,
-  libTab:"songs", libQuery:"", draft:null };
-var GIG_ID = "nye";
-
-function newDraft(existing){
-  if(existing){
-    var lines = JSON.parse(JSON.stringify(existing.lines));
-    return { id:existing.id, title:existing.title, sub:existing.sub, lyricsText:lines.map(function(l){return l.text;}).join("\n"),
-      lines:lines, mode:"manual", step:"lyrics", rightsConfirmed:true, activeChordPos:null, activeMarkPos:null,
-      similarOpen:false, syncPhase:"idle", countdownN:3, recordSeconds:0, waveHeights:[],
-      addToPlaylist:true, addToGig:"", makePublic:false };
-  }
-  return { id:null, title:"", sub:"", lyricsText:"", lines:[], mode:"manual", step:"lyrics", rightsConfirmed:false,
-    activeChordPos:null, activeMarkPos:null, similarOpen:false, syncPhase:"idle", countdownN:3, recordSeconds:0,
-    waveHeights:[], addToPlaylist:true, addToGig:"", makePublic:false };
-}
-UI.draft = newDraft(null);
-
-/* ============================== helpers ============================== */
-function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g, function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];}); }
-function words(line){ return line.text.split(/\s+/).filter(Boolean); }
-function chordAt(line, wi){ var f=(line.chords||[]).filter(function(c){return c.w===wi;}); return f[0]||null; }
-function marksAt(line, wi){ return (line.marks||[]).filter(function(m){return m.w===wi;}); }
-function srcIcon(source){
-  if(source==="spotify") return '<span class="icon-src" style="background:var(--spotify)">♫</span>';
-  if(source==="youtube") return '<span class="icon-src" style="background:var(--youtube)">▶</span>';
-  return "";
-}
-function songsIn(playlist){ return playlist.songs.map(function(id){return STATE.songs[id];}).filter(Boolean); }
-function hashNum(str){ var h=0; for(var i=0;i<str.length;i++){h=(h*31+str.charCodeAt(i))>>>0;} return h; }
-function fretDots(sym){
-  var h = hashNum(sym||"X");
-  var cells=[];
-  for(var i=0;i<24;i++){ cells.push(((h>>i)&1) && (i%4!==3) ? 1:0); }
-  return cells;
-}
-function qrPattern(seed, size, cell){
-  var h = hashNum(seed);
-  var out = '<div class="qr" style="grid-template-columns:repeat('+size+','+cell+'px)">';
-  for(var i=0;i<size*size;i++){
-    var bit = (h >> (i%30)) & 1;
-    var corner = (i<9 && i%size<3) || (i>=size*(size-3) && i%size<3) || (i<3*size && i%size>=size-3);
-    var on = corner || bit;
-    out += '<div style="width:'+cell+'px;height:'+cell+'px;opacity:'+(on?1:0)+'"></div>';
-  }
-  out += '</div>';
-  return out;
-}
-var toastTimer;
+/* ============================================================
+   HELPERS
+   ============================================================ */
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function icon(name, size){ return `<span class="msi" style="font-size:${size||24}px">${name}</span>`; }
+function song(id){ return D.songs[id] || EMPTY_SONG; }
+function gigObj(){ return D.gigs.find(g=>g.id===ST.gigId) || D.gigs[0]; }
+function gigName(id){ return (D.gigs.find(g=>g.id===id)||{}).title || id; }
 function toast(msg){
-  var el = document.getElementById("toast");
-  if(!el) return;
-  el.textContent = msg;
-  el.classList.add("show");
+  ST.toast = msg; render();
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(function(){ el.classList.remove("show"); }, 2200);
+  toastTimer = setTimeout(()=>{ ST.toast=null; render(); }, 2200);
 }
-function go(screen, extra){
-  UI.history.push(UI.screen);
-  UI.screen = screen;
-  if(extra) for(var k in extra) UI[k]=extra[k];
+function parseLyrics(text){ return (text||'').split('\n').map(l=>l.trim()).filter(Boolean).map(l=>l.split(/\s+/)); }
+function timing(s){
+  const lines = parseLyrics(s && s.lyrics); const words = [];
+  lines.forEach((ws,li)=>ws.forEach((w,wi)=>words.push({li,wi,t:1+li*4+wi*(3.2/ws.length)})));
+  return { lines, words, total: 1+lines.length*4+1.5 };
 }
-function back(){
-  UI.screen = UI.history.pop() || "home";
-}
+function curWord(tm,t){ let i=-1; for(let k=0;k<tm.words.length;k++){ if(tm.words[k].t<=t) i=k; else break; } return i; }
+function chordAt(s,tm,i){ let c=null; for(let k=0;k<=i&&k<tm.words.length;k++){ const w=tm.words[k]; const ch=s.chords[w.li+'-'+w.wi]; if(ch) c=ch; } return c; }
+function chordSeq(s){ const tm=timing(s); const seq=[]; tm.words.forEach((w,k)=>{ const ch=s.chords[w.li+'-'+w.wi]; if(ch) seq.push({k,ch}); }); return seq; }
+function fmtTime(x){ return Math.floor(x/60)+':'+String(Math.floor(x%60)).padStart(2,'0'); }
 
-/* ============================== status bar ============================== */
-function renderStatusBar(){
-  var el = document.getElementById("statusbar");
-  if(!el) return;
-  var d = new Date();
-  var h = d.getHours(), m = d.getMinutes();
-  var label = (h%12||12)+":"+(m<10?"0":"")+m;
-  el.innerHTML = '<span>'+label+'</span><span class="right">'+
-    '<svg viewBox="0 0 18 12" width="16" height="11" fill="currentColor"><rect x="0" y="7" width="3" height="5" rx=".5"/><rect x="4.5" y="5" width="3" height="7" rx=".5"/><rect x="9" y="2.5" width="3" height="9.5" rx=".5"/><rect x="13.5" y="0" width="3" height="12" rx=".5"/></svg>'+
-    '<svg viewBox="0 0 16 12" width="15" height="11" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M1.5 4.5a10 10 0 0 1 13 0"/><path d="M4 7.3a6 6 0 0 1 8 0"/><circle cx="8" cy="10" r="1" fill="currentColor" stroke="none"/></svg>'+
-    '<svg viewBox="0 0 25 12" width="22" height="11" fill="none" stroke="currentColor" stroke-width="1"><rect x="0.5" y="0.5" width="20" height="11" rx="2.5"/><rect x="2" y="2" width="15" height="8" rx="1.3" fill="currentColor" stroke="none"/><rect x="21.5" y="4" width="2" height="4" rx="1" fill="currentColor" stroke="none"/></svg>'+
-    '</span>';
+function parseChord(ch){ const m=/^([A-G][#b]?)(.*)$/.exec(ch||''); if(!m) return null; const r=ROOTS.indexOf(m[1]); return { r: r>=0?r:ALT[m[1]], q:m[2] }; }
+function pianoSet(ch){ const p=parseChord(ch); if(!p) return []; return (IV[p.q]||IV['']).map(i=>{ let n=p.r+i; if(n>23) n-=12; return n; }); }
+function guitarShape(ch){
+  if(OPEN_GUITAR[ch]) return OPEN_GUITAR[ch];
+  const p=parseChord(ch); if(!p) return [-1,-1,-1,-1,-1,-1];
+  const q=IV[p.q]?p.q:'';
+  const eOff=(p.r-4+12)%12, aOff=(p.r-9+12)%12;
+  const useE = E_SHAPE[q] && (eOff<=aOff || !A_SHAPE[q]);
+  const shape = useE?E_SHAPE[q]:A_SHAPE[q], off = useE?eOff:aOff;
+  return shape.map(v=>v<0?-1:v+off);
 }
-setInterval(renderStatusBar, 15000);
-
-/* ============================== render: lyric lines ============================== */
-function renderLineDisplay(line){
-  var w = words(line);
-  var html = '<div class="lyricline"><div class="wordrow">';
-  var noteTexts = [];
-  w.forEach(function(word, wi){
-    var ch = chordAt(line, wi);
-    var mk = marksAt(line, wi);
-    if(mk.length) mk.forEach(function(m){ noteTexts.push('"'+esc(m.text)+'" near "'+esc(word)+'"'); });
-    html += '<span class="wordcell"><span class="chordlabel">'+(ch?esc(ch.sym):"")+'</span><span class="word">'+esc(word)+(mk.length?'<span class="markflag" title="'+esc(mk.map(function(m){return m.text;}).join(", "))+'"> ✦</span>':'')+'</span></span>';
-  });
-  html += '</div>';
-  if(noteTexts.length) html += '<div class="marknote">'+noteTexts.join(" · ")+'</div>';
-  html += '</div>';
-  return html;
-}
-
-function renderLineEditable(line, li, kind, activePos){
-  var w = words(line);
-  var html = '<div class="lyricline"><div class="wordrow">';
-  w.forEach(function(word, wi){
-    var ch = chordAt(line, wi);
-    var mk = marksAt(line, wi);
-    html += '<span class="wordcell"><span class="chordlabel">'+(kind==="chords"&&ch?esc(ch.sym):"")+'</span>'+
-      '<button class="word clickable" data-act="pickword" data-li="'+li+'" data-wi="'+wi+'" data-kind="'+kind+'">'+esc(word)+
-      (kind==="markings"&&mk.length?'<span class="markflag"> ✦</span>':"")+'</button></span>';
-  });
-  html += '</div>';
-  if(kind==="markings" && line.marks && line.marks.length){
-    html += '<div class="marknote">'+line.marks.map(function(m){return '"'+esc(m.text)+'"';}).join(" · ")+'</div>';
-  }
-  if(activePos && activePos.li===li){
-    var wi2 = activePos.wi, wordTxt = w[wi2];
-    if(kind==="chords"){
-      var existing = chordAt(line, wi2);
-      html += '<div class="inline-editor"><div class="section-h" style="margin-top:0">Chord on "'+esc(wordTxt)+'"</div>'+
-        '<div class="row"><input class="input" id="chordInput" placeholder="e.g. Am" value="'+(existing?esc(existing.sym):"")+'">'+
-        '<button class="btn btn-primary btn-sm" data-act="addChord" data-li="'+li+'" data-wi="'+wi2+'">Add</button></div>'+
-        '<div class="row" style="margin-top:6px">'+
-        (existing?'<button class="btn btn-outline btn-sm" data-act="removeChord" data-li="'+li+'" data-wi="'+wi2+'">Remove</button>':'')+
-        '<button class="btn-ghost" data-act="cancelPick">Cancel</button></div></div>';
-    } else {
-      var exM = marksAt(line, wi2)[0];
-      html += '<div class="inline-editor"><div class="section-h" style="margin-top:0">Marking on "'+esc(wordTxt)+'"</div>'+
-        '<textarea class="input" id="markInput" placeholder="e.g. Hi note, Before cue…">'+(exM?esc(exM.text):"")+'</textarea>'+
-        '<div class="row" style="margin-top:6px"><button class="btn btn-primary btn-sm" data-act="addMark" data-li="'+li+'" data-wi="'+wi2+'">Add</button>'+
-        (exM?'<button class="btn btn-outline btn-sm" data-act="removeMark" data-li="'+li+'" data-wi="'+wi2+'">Remove</button>':'')+
-        '<button class="btn-ghost" data-act="cancelPick">Cancel</button></div></div>';
+function ukeShape(ch){
+  if(OPEN_UKE[ch]) return OPEN_UKE[ch];
+  const p=parseChord(ch); if(!p) return [-1,-1,-1,-1];
+  const tones=(IV[p.q]||IV['']).map(i=>(p.r+i)%12), open=[7,0,4,9];
+  let best=null, bs=-1e9;
+  for(let b=0;b<=7;b++){
+    const opts = open.map(o=>{ const a=[]; for(let f=b;f<=b+3;f++) if(tones.includes((o+f)%12)) a.push(f); return a; });
+    if(opts.some(a=>!a.length)) continue;
+    for(const a of opts[0]) for(const c of opts[1]) for(const d of opts[2]) for(const e of opts[3]){
+      const fr=[a,c,d,e], pcs=new Set(fr.map((x,i)=>(open[i]+x)%12));
+      if(!pcs.has(tones[0])) continue;
+      const pos=fr.filter(x=>x>0), span = pos.length?Math.max(...pos)-Math.min(...pos):0;
+      if(span>3) continue;
+      const sc = pcs.size*100 - span*8 - fr.reduce((x,y)=>x+y,0)*2;
+      if(sc>bs){ bs=sc; best=fr; }
     }
   }
-  html += '</div>';
-  return html;
+  return best || [-1,-1,-1,-1];
+}
+function diagram(ch,next,inst){
+  const base = { name: ch||'–', next: next||'–', isPiano:false, isGuitar:false };
+  if(!ch || inst==='none') return base;
+  if(inst==='piano'){
+    const set = pianoSet(ch);
+    return { ...base, isPiano:true,
+      white: WHITE.map((s,i)=>({k:i,on:set.includes(s)})),
+      black: BLACK.map(([s,i])=>({k:s,left:(i+1)*22-8,on:set.includes(s)})) };
+  }
+  const f = inst==='ukulele'?ukeShape(ch):guitarShape(ch), n=f.length;
+  const pos=f.filter(v=>v>0), max=pos.length?Math.max(...pos):0, min=pos.length?Math.min(...pos):0;
+  const shift = max>5?min-1:0, dots=[], marks=[];
+  f.forEach((v,i)=>{ if(v>0) dots.push({k:i,left:i*20-7,top:(v-shift-0.5)*24-7}); else marks.push({k:i,left:i*20-6,txt: shift ? (v===0?'':'x') : (v===0?'o':'x')}); });
+  return { ...base, isGuitar:true, w:(n-1)*20, nut: shift?1.5:4, hasBase: shift>0, base: shift+1,
+    strings: f.map((_,i)=>({k:i,left:i*20})), frets:[1,2,3,4,5].map(j=>({k:j,top:j*24-1})), dots, marks };
+}
+function diagramHTML(dia, dotColor){
+  dotColor = dotColor || '#1b1b1b';
+  let inner = '';
+  if(dia.isGuitar){
+    inner += `<div class="fretboard" style="width:${dia.w}px;height:120px;border-top:${dia.nut}px solid #1b1b1b">`;
+    if(dia.hasBase) inner += `<div style="position:absolute;right:100%;margin-right:8px;top:4px;font-size:12px;font-weight:700;white-space:nowrap">${dia.base}fr</div>`;
+    dia.strings.forEach(x=> inner += `<div style="position:absolute;top:0;bottom:0;left:${x.left}px;width:1.5px;background:#1b1b1b"></div>`);
+    dia.frets.forEach(x=> inner += `<div style="position:absolute;left:0;right:-1px;top:${x.top}px;height:1.5px;background:#1b1b1b"></div>`);
+    dia.dots.forEach(x=> inner += `<div style="position:absolute;left:${x.left}px;top:${x.top}px;width:15px;height:15px;border-radius:50%;background:${dotColor}"></div>`);
+    dia.marks.forEach(x=> inner += `<div style="position:absolute;left:${x.left}px;top:-24px;width:14px;text-align:center;font-size:12px;font-weight:700">${x.txt}</div>`);
+    inner += `</div>`;
+  } else if(dia.isPiano){
+    inner += `<div class="piano">`;
+    dia.white.forEach(k=> inner += `<div style="width:22px;height:100%;border-right:1px solid #1b1b1b;background:${k.on?dotColor:'#fff'}"></div>`);
+    dia.black.forEach(k=> inner += `<div style="position:absolute;top:0;left:${k.left}px;width:14px;height:56px;background:${k.on?dotColor:'#1b1b1b'};border-radius:0 0 3px 3px;border:1px solid #1b1b1b"></div>`);
+    inner += `</div>`;
+  }
+  return `<div class="diagram-row"><div style="display:flex;align-items:center;gap:26px">${inner}<div class="diaName">${esc(dia.name)}</div><div class="diaNext">» ${esc(dia.next)}</div></div></div>`;
+}
+function makeQr(seed){
+  let x = seed; const rnd=()=>{ x=(x*9301+49297)%233280; return x/233280; };
+  const N=25, out=[];
+  const finder=(r,c,R,C)=>{ const a=r-R,b=c-C; if(a<0||b<0||a>6||b>6) return null; if(a===0||a===6||b===0||b===6) return 1; return (a>=2&&a<=4&&b>=2&&b<=4)?1:0; };
+  for(let r=0;r<N;r++) for(let c=0;c<N;c++){
+    let v=finder(r,c,0,0); if(v===null) v=finder(r,c,0,18); if(v===null) v=finder(r,c,18,0);
+    if(v===null){ const zone=(r<8&&c<8)||(r<8&&c>16)||(r>16&&c<8); v = zone?0:(rnd()>0.52?1:0); }
+    out.push(v?'#111':'#fff');
+  }
+  return out;
+}
+const QR = makeQr(42);
+function qrHTML(){ return `<div class="qrgrid">${QR.map(c=>`<div style="background:${c}"></div>`).join('')}</div>`; }
+
+function buildLines(s, mode, opt){
+  opt = opt || {};
+  const tm = timing(s);
+  const ci = opt.t!=null ? curWord(tm, opt.t) : -1;
+  const cw = ci>=0 ? tm.words[ci] : null;
+  let curChordK = -1; if(ci>=0) for(let k=0;k<=ci;k++){ const w=tm.words[k]; if(s.chords[w.li+'-'+w.wi]) curChordK=k; }
+  const notes = { ...(s.notes||{}), ...(opt.extraNotes||{}) };
+  const sel = ST.selRoot + ST.selSuffix;
+  let g = 0;
+  return tm.lines.map((ws,li)=>{
+    const curLine = cw && cw.li===li, last = ws.length-1;
+    let hasUp = false;
+    const w2 = ws.map((w,wi)=>{
+      const id = li+'-'+wi, ch = opt.hideChords ? '' : (s.chords[id]||''), gi = g++;
+      const mark = notes[id] || '';
+      const o = { id, w, chord:ch, col:'#333', chordCol:'#9a9a9a', weight:400, cursor:'default', mark,
+        markBefore: !!mark && wi===0, markAfter: !!mark && wi===last && wi!==0, markUp: !!mark && wi>0 && wi<last };
+      if(o.markUp) hasUp = true;
+      if(mode==='chords'){
+        o.col='#a3a3a3'; o.chordCol='#1b1b1b'; o.cursor='pointer'; o.clickAct='placeChord'; o.clickId=id;
+      } else if(mode==='markings'){
+        o.cursor='pointer'; o.clickAct='pickMarkWord'; o.clickId=id; o.selected = ST.selWord===id;
+      } else if(mode==='view'){
+        o.chordCol = ch && ch===opt.selChord ? '#f24822' : '#9a9a9a';
+        if(ch){ o.cursor='pointer'; o.clickAct='setViewChord'; o.clickId=ch; }
+      } else if(mode==='play'){
+        const past = cw && li<cw.li;
+        o.weight=700;
+        o.col = curLine ? (gi<=ci?'#1b1b1b':'#b8b8b8') : (past?'#d2d2d2':'#a8a8a8');
+        o.chordCol = gi===curChordK ? '#f24822' : (curLine?'#8a8a8a':'#cfcfcf');
+      }
+      return o;
+    });
+    const isPlay = mode==='play', on = isPlay && curLine;
+    return { li, words:w2, padTop:(hasUp?30:0)+(on?10:0), mb: on?10:0, scale: on?1.12:1, op: isPlay && cw && li<cw.li ? 0.75:1, cur: on };
+  });
+}
+function linesHTML(lines, big){
+  return `<div class="lyrics-wrap">` + lines.map(l=>{
+    const style = `margin-top:${l.padTop}px;margin-bottom:${l.mb}px;transform:scale(${l.scale});transform-origin:left center;opacity:${l.op}`;
+    const words = l.words.map(w=>{
+      let marks = '';
+      if(w.markUp) marks += `<span class="markup"><span class="mtext">${esc(w.mark)}</span><svg width="16" height="18" viewBox="0 0 16 18" fill="none" stroke="#2f8fe0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 1.5c2.5 4 3.4 8.5 2.4 14"></path><path d="M4.3 11.8l4.1 4.2 3.6-4.6"></path></svg></span>`;
+      if(w.markBefore) marks += `<span class="markbefore"><span class="mtext">${esc(w.mark)}</span><svg width="24" height="14" viewBox="0 0 24 14" fill="none" stroke="#2f8fe0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 8c5-3 11-3.2 19-.8"></path><path d="M16 3l4.6 4.3-5.4 3.2"></path></svg></span>`;
+      if(w.markAfter) marks += `<span class="markafter"><svg width="24" height="14" viewBox="0 0 24 14" fill="none" stroke="#2f8fe0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22.5 8c-5-3-11-3.2-19-.8"></path><path d="M8 3L3.4 7.3l5.4 3.2"></path></svg><span class="mtext">${esc(w.mark)}</span></span>`;
+      const act = w.clickAct ? `data-act="${w.clickAct}" data-id="${esc(w.clickId)}"` : '';
+      const bg = w.selected ? 'background:#e5f0fc' : '';
+      const fsz = big ? 'font-size:32px;padding:0 2px' : 'font-size:24px';
+      const fszc = big ? 'font-size:15px;font-weight:700' : 'font-size:14px;font-weight:600';
+      return `<span class="lword" style="cursor:${w.cursor};border-radius:5px;${bg}" ${act}>${marks}<span class="lchord" style="${fszc};color:${w.chordCol}">${esc(w.chord)}</span><span class="ltext" style="${fsz};font-weight:${w.weight};color:${w.col}">${esc(w.w)}</span></span>`;
+    }).join('');
+    return `<div class="lline" style="${style}">${words}</div>`;
+  }).join('') + `</div>`;
+}
+/* ============================================================
+   SCREENS: Login / Home / List / Search
+   ============================================================ */
+function renderLogin(){
+  return `<div class="scr center" style="padding-top:24px">
+    <svg class="mascot" style="height:300px;margin-top:10px" viewBox="0 0 160 160" fill="none" aria-hidden="true"><circle cx="80" cy="80" r="74" fill="var(--accent)"/><path d="M50 83l19 19 41-46" stroke="#fff" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/><circle cx="18" cy="34" r="6" fill="var(--accent)"/><circle cx="142" cy="46" r="5" fill="#2a9d6b"/><circle cx="136" cy="124" r="7" fill="#4169c7"/><circle cx="16" cy="118" r="5" fill="#8e4fd6"/></svg>
+    <div style="font-size:46px;font-weight:800;letter-spacing:-0.02em;margin-top:18px">make some noise!</div>
+    <div style="width:100%;max-width:380px;display:flex;flex-direction:column;gap:12px;margin-top:36px">
+      <input class="ipt" placeholder="Email" value="${esc(ST.email)}" data-bind="email">
+      <button class="btn ${ST.email.trim()?'btn-dark':'btn-disabled'}" data-act="login">Continue</button>
+      <div style="display:flex;align-items:center;gap:12px;color:#9a9a9a;font-size:13px;margin:6px 0"><div style="flex:1;height:1px;background:#e2e2e2"></div>or<div style="flex:1;height:1px;background:#e2e2e2"></div></div>
+      <button class="btn btn-outline" data-act="loginSocial">Continue with Apple</button>
+      <button class="btn btn-outline" data-act="loginSocial">Continue with Google</button>
+      <button class="btn btn-outline" data-act="loginSocial">Continue with Facebook</button>
+    </div>
+  </div>`;
 }
 
-/* ============================== screens ============================== */
-function screenHeader(title, showBack){
-  if(!showBack && !title) return "";
-  return '<div style="display:flex;align-items:center;gap:10px;margin:14px 0 16px">'+
-    (showBack!==false && UI.history.length ? '<button class="iconbtn" style="padding:4px;margin-left:-6px" data-act="back">'+icon("back")+'</button>' : '')+
-    (title?'<h2 style="font-size:21px">'+esc(title)+'</h2>':'')+
-    '</div>';
+function playlistRow(p){
+  const ids = p.auto ? D.order : p.ids;
+  const sub = p.auto ? (ids.length+' songs') : (p.src ? 'Imported playlist' : (ids.length+' songs'+(p.mine?'':' · by '+p.by)));
+  const badge = p.src==='spotify'
+    ? `<svg width="18" height="18" viewBox="0 0 24 24"><circle cx="12" cy="12" r="12" fill="#1ed760"></circle><path d="M6.5 9.2c3.8-1.1 7.6-.8 11 1M7.2 12.4c3-.8 6.1-.6 8.8.9M7.9 15.4c2.3-.6 4.6-.4 6.6.7" stroke="#000" stroke-width="1.6" fill="none" stroke-linecap="round"></path></svg>`
+    : p.src==='youtube'
+    ? `<svg width="24" height="17" viewBox="0 0 24 17"><rect width="24" height="17" rx="4.5" fill="#ff0000"></rect><path d="M9.6 4.8v7.4l6.2-3.7z" fill="#fff"></path></svg>` : '';
+  return `<div class="list-row" data-act="openPlaylist" data-id="${p.id}"><div><div class="t">${esc(p.title)}${badge}</div><div class="s">${esc(sub)}</div></div></div>`;
+}
+function gigRowHome(g){
+  return `<div class="list-row" data-act="openGig" data-id="${g.id}"><div style="min-width:0"><div class="t" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(g.title)}</div><div class="s">${esc(g.date)}</div></div>${g.id==='nye'?'<span style="font-size:11px;font-weight:700;letter-spacing:.06em;color:#f24822">LIVE</span>':''}</div>`;
+}
+function songRowHome(s){
+  return `<div class="list-row" data-act="openSongFrom" data-id="${s.id}" data-from="home" style="border-bottom:1px solid var(--b2)"><div><div class="t">${esc(s.title||'Untitled song')}</div><div class="s">${esc(s.sub || (s.synced?'':'Draft'))}</div></div></div>`;
 }
 
 function renderHome(){
-  var h = '<div class="input-icon-wrap" style="margin:10px 0 4px">'+
-    '<input class="input" placeholder="Search songs, playlists or gigs" value="'+esc(UI.libQuery||"")+'" data-bind="homesearch">'+icon("search")+'</div>';
-  var q = (UI.libQuery||"").toLowerCase();
-  h += '<div class="section-h">Playlists</div><div class="list">';
-  STATE.playlists.filter(function(p){return !q || p.name.toLowerCase().indexOf(q)>-1;}).forEach(function(p){
-    h += '<div class="list-row" data-act="openPlaylist" data-id="'+p.id+'"><div class="meta"><div class="t">'+esc(p.name)+'</div><div class="s">'+songsIn(p).length+' songs</div></div>'+srcIcon(p.source)+icon("chevronR")+'</div>';
-  });
-  h += '</div>';
-  h += '<div class="section-h">Gigs</div><div class="list">';
-  Object.keys(STATE.gigs).filter(function(id){var g=STATE.gigs[id]; return !q || g.name.toLowerCase().indexOf(q)>-1;}).forEach(function(id){
-    var g = STATE.gigs[id];
-    h += '<div class="list-row" data-act="openGig" data-id="'+id+'"><div class="meta"><div class="t">'+esc(g.name)+'</div><div class="s">'+g.setlist.length+' songs</div></div>'+(g.live?'<span class="badge badge-live">Live</span>':'')+icon("chevronR")+'</div>';
-  });
-  h += '</div>';
-  h += '<div class="section-h">Recent Songs</div><div class="list">';
-  Object.keys(STATE.songs).filter(function(id){var s=STATE.songs[id]; return !q || s.title.toLowerCase().indexOf(q)>-1;}).forEach(function(id){
-    var s = STATE.songs[id];
-    h += '<div class="list-row" data-act="openSong" data-id="'+id+'"><div class="meta"><div class="t">'+esc(s.title)+'</div><div class="s">'+esc(s.sub)+'</div></div>'+(s.synced?'<span class="badge badge-synced">Synced</span>':'<span class="badge badge-notake">No take</span>')+icon("chevronR")+'</div>';
-  });
-  h += '</div>';
-  return h;
+  const playlists = D.playlists.slice(0,3).map(playlistRow).join('');
+  const gigs = D.gigs.slice(0,3).map(gigRowHome).join('');
+  const recent = D.order.slice(0,4).map(id=>songRowHome(song(id))).join('');
+  return `<div class="scr">
+    <div class="row" style="gap:16px;margin-bottom:36px">
+      <div class="search-field" style="flex:1;max-width:340px">
+        <input placeholder="Search songs, playlists or gigs" value="${esc(ST.homeQuery)}" data-bind="homeQuery" data-key="runSearch">
+        <button class="icon-btn" style="width:36px;height:36px" data-act="runSearch">${icon('search',22)}</button>
+      </div>
+      <div style="flex:1"></div>
+      <button class="icon-btn" title="Account" data-act="nav" data-to="account" style="width:48px;height:48px;border-radius:50%;border:1.5px solid var(--fg);background:#fff">${icon('person',24)}</button>
+    </div>
+    <div class="home-grid">
+      <div style="display:flex;flex-direction:column;gap:48px">
+        <div>
+          <div class="row" style="justify-content:space-between;margin-bottom:8px"><span style="font-size:26px;font-weight:700">Playlists</span><span class="icon-btn" title="New playlist" data-act="newItem" data-kind="playlist">${icon('add',24)}</span></div>
+          ${playlists}
+          <a class="link" style="display:inline-block;margin-top:14px;text-decoration:underline" data-act="openList" data-kind="playlists">All Playlists</a>
+        </div>
+        <div>
+          <div class="row" style="justify-content:space-between;margin-bottom:8px"><span style="font-size:26px;font-weight:700">Gigs</span><span class="icon-btn" title="New gig" data-act="newItem" data-kind="gig">${icon('add',24)}</span></div>
+          ${gigs}
+          <a class="link" style="display:inline-block;margin-top:14px;text-decoration:underline" data-act="openList" data-kind="gigs">All Gigs</a>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:48px">
+        <div class="row" style="flex-direction:column;gap:12px;padding:16px 0;cursor:pointer" data-act="newSong">
+          <div style="width:84px;height:84px;border-radius:50%;background:var(--fg);color:#fff;display:flex;align-items:center;justify-content:center">${icon('add',40)}</div>
+          <div style="font-size:17px;font-weight:600">Add a Song</div>
+        </div>
+        <div>
+          <div style="font-size:26px;font-weight:700;margin-bottom:8px">Recent Songs</div>
+          ${recent}
+          <a class="link" style="display:inline-block;margin-top:14px;text-decoration:underline" data-act="openList" data-kind="songs">All Songs</a>
+        </div>
+      </div>
+    </div>
+  </div>`;
 }
 
-function renderLibrary(){
-  var h = screenHeader("Library");
-  h += '<div class="seg" style="margin-bottom:12px">'+
-    ["songs","playlists","gigs"].map(function(t){return '<button class="'+(UI.libTab===t?"active":"")+'" data-act="libTab" data-tab="'+t+'">'+t[0].toUpperCase()+t.slice(1)+'</button>';}).join("")+
-    '</div>';
-  h += '<div class="input-icon-wrap" style="margin-bottom:10px"><input class="input" placeholder="Search '+UI.libTab+'" value="'+esc(UI.libQuery||"")+'" data-bind="libsearch">'+icon("search")+'</div>';
-  var q = (UI.libQuery||"").toLowerCase();
-  h += '<div class="list">';
-  if(UI.libTab==="songs"){
-    Object.keys(STATE.songs).filter(function(id){return STATE.songs[id].title.toLowerCase().indexOf(q)>-1;}).forEach(function(id){
-      var s = STATE.songs[id];
-      h += '<div class="list-row" data-act="openSong" data-id="'+id+'"><div class="meta"><div class="t">'+esc(s.title)+'</div><div class="s">'+esc(s.sub)+'</div></div>'+(s.synced?'<span class="badge badge-synced">Synced</span>':'<span class="badge badge-notake">No take</span>')+icon("chevronR")+'</div>';
-    });
-  } else if(UI.libTab==="playlists"){
-    STATE.playlists.filter(function(p){return p.name.toLowerCase().indexOf(q)>-1;}).forEach(function(p){
-      h += '<div class="list-row" data-act="openPlaylist" data-id="'+p.id+'"><div class="meta"><div class="t">'+esc(p.name)+'</div><div class="s">'+songsIn(p).length+' songs</div></div>'+srcIcon(p.source)+icon("chevronR")+'</div>';
-    });
+function sortRows(rows){
+  const r = ST.sort==='mine' ? rows.filter(x=>x.mine) : rows;
+  const by = { az:(a,b)=>a.title.localeCompare(b.title), za:(a,b)=>b.title.localeCompare(a.title), played:(a,b)=>b.plays-a.plays, recent:(a,b)=>b.added-a.added, mine:(a,b)=>b.added-a.added }[ST.sort];
+  return [...r].sort(by);
+}
+function sortDropdown(){
+  const label = SORTS.find(x=>x[0]===ST.sort)[1];
+  const opts = ST.sortOpen ? `<div style="position:absolute;right:0;top:calc(100% + 6px);width:210px;background:#fff;border:1.5px solid var(--fg);border-radius:12px;padding:6px;box-shadow:0 12px 30px rgba(0,0,0,.1);display:flex;flex-direction:column;z-index:4">
+    ${SORTS.map(([v,l])=>`<button style="border:0;border-radius:8px;background:${v===ST.sort?'#f2f2f2':'transparent'};text-align:left;padding:10px 12px;font-size:14px;font-weight:${v===ST.sort?700:500};display:flex;justify-content:space-between;align-items:center" data-act="setSort" data-id="${v}">${l}<span class="msi" style="font-size:18px;opacity:${v===ST.sort?1:0}">check</span></button>`).join('')}
+  </div>` : '';
+  return `<div style="position:relative"><button class="row" style="border:0;background:transparent;gap:4px;font-size:13px;color:#6f6f6f" data-act="toggleSort">Sort by: <span style="font-weight:600;color:var(--fg)">${label}</span>${icon(ST.sortOpen?'expand_less':'expand_more',18)}</button>${opts}</div>`;
+}
+function songRowList(id, badgeText, badgeCol, from){
+  const s = song(id);
+  return `<div class="list-row" data-act="openSongFrom" data-id="${id}" data-from="${from}"><div><div class="t">${esc(s.title||'Untitled song')}</div><div class="s">${esc(s.sub || (s.synced?'':'Draft'))}</div></div><div class="row" style="gap:12px"><span style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:${badgeCol}">${esc(badgeText)}</span>${icon('chevron_right',22)}</div></div>`;
+}
+function gigRowList(g){
+  const sub = g.date+' · '+g.setlist.length+' songs'+(g.mine?'':' · by '+g.by);
+  return `<div class="list-row" data-act="openGig" data-id="${g.id}"><div><div class="t">${esc(g.title)}</div><div class="s">${esc(sub)}</div></div><div class="row" style="gap:12px"><span style="font-size:11px;font-weight:700;letter-spacing:.05em;color:#f24822">${g.id==='nye'?'LIVE':''}</span>${icon('chevron_right',22)}</div></div>`;
+}
+
+function renderList(){
+  const curPl = ST.listPl ? D.playlists.find(p=>p.id===ST.listPl) : null;
+  let title, rowsHtml, empty;
+  if(ST.listKind==='songs'){
+    const ids = curPl ? (curPl.auto?D.order:curPl.ids) : D.order;
+    let rows = ids.map(id=>({ id, ...song(id) }));
+    const q = ST.listQuery.trim().toLowerCase();
+    if(q) rows = rows.filter(r=>((r.title||'')+' '+(r.sub||'')).toLowerCase().includes(q));
+    rows = sortRows(rows);
+    title = curPl ? curPl.title : 'Songs';
+    rowsHtml = rows.map(r=>songRowList(r.id, r.synced?'SYNCED':'NO TAKE', r.synced?'#1b1b1b':'#b0b0b0', 'list')).join('');
+    empty = !rows.length;
+  } else if(ST.listKind==='playlists'){
+    let rows = D.playlists.slice();
+    const q = ST.listQuery.trim().toLowerCase();
+    if(q) rows = rows.filter(r=>r.title.toLowerCase().includes(q));
+    rows = sortRows(rows);
+    title='Playlists'; rowsHtml = rows.map(playlistRow).join(''); empty = !rows.length;
   } else {
-    Object.keys(STATE.gigs).filter(function(id){return STATE.gigs[id].name.toLowerCase().indexOf(q)>-1;}).forEach(function(id){
-      var g = STATE.gigs[id];
-      h += '<div class="list-row" data-act="openGig" data-id="'+id+'"><div class="meta"><div class="t">'+esc(g.name)+'</div><div class="s">'+g.setlist.length+' songs</div></div>'+(g.live?'<span class="badge badge-live">Live</span>':'')+icon("chevronR")+'</div>';
-    });
+    let rows = D.gigs.slice();
+    const q = ST.listQuery.trim().toLowerCase();
+    if(q) rows = rows.filter(r=>r.title.toLowerCase().includes(q));
+    rows = sortRows(rows);
+    title='Gigs'; rowsHtml = rows.map(gigRowList).join(''); empty = !rows.length;
   }
-  h += '</div>';
-  return h;
+  return `<div class="scr">
+    <div class="search-field" style="max-width:340px;margin-bottom:28px">
+      <input placeholder="Search" value="${esc(ST.listQuery)}" data-bind="listQuery">${icon('search',22)}
+    </div>
+    <div class="row" style="gap:14px;position:relative;z-index:2;margin-bottom:24px">
+      <span class="icon-btn" data-act="nav" data-to="home">${icon('chevron_left',26)}</span>
+      <span style="font-size:28px;font-weight:700">${esc(title)}</span>
+      <span class="icon-btn" title="Add" data-act="listAdd" style="margin-left:36px">${icon('add',24)}</span>
+      <div style="flex:1"></div>
+      ${sortDropdown()}
+    </div>
+    <div style="overflow:auto">${rowsHtml}${empty?'<div style="padding:24px 0;color:#8a8a8a">Nothing here yet.</div>':''}</div>
+  </div>`;
 }
 
-function renderPlaylist(){
-  var p = STATE.playlists.find(function(x){return x.id===UI.openPlaylistId;});
-  if(!p) return screenHeader("Playlist")+"<p>Not found.</p>";
-  var h = screenHeader(p.name);
-  h += '<div class="list">';
-  songsIn(p).forEach(function(s){
-    h += '<div class="list-row" data-act="openSong" data-id="'+s.id+'"><div class="meta"><div class="t">'+esc(s.title)+'</div><div class="s">'+esc(s.sub)+'</div></div>'+icon("chevronR")+'</div>';
-  });
-  if(!songsIn(p).length) h += '<p style="color:var(--fg-muted);font-size:13px;padding:10px 0">No songs yet.</p>';
-  h += '</div>';
-  return h;
+function renderSearch(){
+  const q = ST.searchQuery.trim().toLowerCase();
+  const match = r => !q || ((r.title||'')+' '+(r.sub||'')).toLowerCase().includes(q);
+  const songsRows = sortRows(D.order.map(id=>({id,...song(id)})).filter(match));
+  const plRows = sortRows(D.playlists.filter(match));
+  const gigRows = sortRows(D.gigs.filter(match));
+  const sections = [];
+  if(songsRows.length) sections.push(`<div><div style="font-size:24px;font-weight:700;padding-bottom:8px;border-bottom:1px solid var(--b2)">Songs</div>${songsRows.map(r=>songRowList(r.id, r.synced?'SYNCED':'NO TAKE', r.synced?'#1b1b1b':'#b0b0b0','search')).join('')}</div>`);
+  if(plRows.length) sections.push(`<div><div style="font-size:24px;font-weight:700;padding-bottom:8px;border-bottom:1px solid var(--b2)">Playlists</div>${plRows.map(playlistRow).join('')}</div>`);
+  if(gigRows.length) sections.push(`<div><div style="font-size:24px;font-weight:700;padding-bottom:8px;border-bottom:1px solid var(--b2)">Gigs</div>${gigRows.map(gigRowList).join('')}</div>`);
+  return `<div class="scr">
+    <div class="search-field" style="max-width:340px;margin-bottom:28px">
+      <input placeholder="Search songs, playlists or gigs" value="${esc(ST.searchQuery)}" data-bind="searchQuery" autofocus>${icon('search',22)}
+    </div>
+    <div class="row" style="gap:14px;position:relative;z-index:2;margin-bottom:24px">
+      <span class="icon-btn" data-act="nav" data-to="home">${icon('chevron_left',26)}</span>
+      <span style="font-size:28px;font-weight:700">Search Results</span>
+      <div style="flex:1"></div>
+      ${sortDropdown()}
+    </div>
+    <div style="display:flex;flex-direction:column;gap:40px;overflow:auto">
+      ${sections.join('') || `<div style="color:#8a8a8a;font-size:15px">No songs, playlists or gigs match "${esc(ST.searchQuery)}".</div>`}
+    </div>
+  </div>`;
+}
+/* ============================================================
+   SCREENS: Account / Collaborators
+   ============================================================ */
+function renderAccount(){
+  const planName = ST.plan==='rockstar' ? 'RockStar' : 'Free';
+  const planSub = ST.plan==='rockstar' ? '$4.99 / month · renews Nov 2, 2026' : 'Basic features for performing with Singa';
+  const planBadgeBg = ST.plan==='rockstar' ? '#f24822' : '#ececec';
+  const planBadgeCol = ST.plan==='rockstar' ? '#fff' : '#6f6f6f';
+  const collabRows = D.collabs.map((c,i)=>`<div class="list-row" data-act="editCollab" data-id="${i}"><div><div class="t">${esc(c.name)}</div><div class="s">${c.gigs.length} ${c.gigs.length===1?'gig':'gigs'}</div></div>${icon('chevron_right',22)}</div>`).join('');
+  const instRadio = INSTS.map(([v,label])=>`<div class="row" style="gap:8px;cursor:pointer;padding:6px 0" data-act="setInstrument" data-id="${v}">
+    <span style="width:20px;height:20px;border-radius:50%;border:1.5px solid var(--fg);display:flex;align-items:center;justify-content:center"><span style="width:10px;height:10px;border-radius:50%;background:var(--fg);opacity:${ST.instrument===v?1:0}"></span></span>
+    <span style="font-size:15px;font-weight:600">${label}</span></div>`).join('');
+  const startHint = ST.startMode==='countdown' ? 'Press play and Singa counts down from 3.' : 'Singa listens and starts playback when you start singing.';
+  const notifRows = [['req','Song requests'],['photos','Guest photos'],['chat','Chat messages']].map(([k,label])=>{
+    const on = ST.notif[k];
+    return `<div class="row" style="gap:14px;padding:10px 0;cursor:pointer" data-act="toggleNotif" data-id="${k}">
+      <div class="toggle" style="background:${on?'#1b1b1b':'#fff'}"><div class="dot" style="left:${on?20:2}px;background:${on?'#fff':'#1b1b1b'}"></div></div>
+      <span style="font-size:15px;font-weight:600">${label}</span></div>`;
+  }).join('');
+  return `<div class="scr" style="overflow:auto;gap:30px;padding-bottom:60px">
+    <div class="row" style="gap:14px"><span class="icon-btn" data-act="nav" data-to="home">${icon('chevron_left',26)}</span><span style="font-size:28px;font-weight:700">My Account</span></div>
+    <div>
+      <div style="font-size:21px;font-weight:700;margin-bottom:6px">Account Details</div>
+      <div style="padding:14px 0;border-bottom:1px solid var(--b2);display:flex;justify-content:space-between;align-items:center;cursor:pointer" data-act="editNickname"><div><div style="font-size:12px;color:#8a8a8a">Nickname</div><div style="font-size:16px;font-weight:600;margin-top:3px">${esc(ST.nickname||'Ezra Dahan')}</div></div>${icon('chevron_right',22)}</div>
+      <div style="padding:14px 0;border-bottom:1px solid var(--b2)"><div style="font-size:12px;color:#8a8a8a">Email</div><div style="font-size:16px;font-weight:600;margin-top:3px">${esc(ST.email||'ezra@gmail.com')}</div></div>
+    </div>
+    <div>
+      <div style="font-size:21px;font-weight:700;margin-bottom:6px">Subscription</div>
+      <div class="row" style="justify-content:space-between;gap:16px;padding:14px 0;border-bottom:1px solid var(--b2)">
+        <div><div class="row" style="gap:8px"><span style="font-size:16px;font-weight:700">${planName}</span><span style="font-size:11px;font-weight:800;letter-spacing:.06em;padding:3px 7px;border-radius:5px;background:${planBadgeBg};color:${planBadgeCol}">CURRENT</span></div><div style="font-size:13px;color:#8a8a8a;margin-top:3px">${planSub}</div></div>
+        ${ST.plan!=='rockstar'
+          ? `<button class="btn btn-accent btn-sm" data-act="openUpgrade">${icon('bolt',20)}Upgrade to RockStar</button>`
+          : `<a class="link link-muted" style="text-decoration:underline" data-act="downgrade">Switch to Free</a>`}
+      </div>
+    </div>
+    <div>
+      <div style="font-size:21px;font-weight:700;margin-bottom:6px">Collaborators</div>
+      ${collabRows}
+      <a class="link" style="display:inline-flex;align-items:center;gap:6px;margin-top:12px" data-act="newCollab">${icon('person_add',20)}Add collaborator</a>
+    </div>
+    <div>
+      <div style="font-size:21px;font-weight:700;margin-bottom:10px">Default instrument</div>
+      <div style="display:flex;gap:24px;flex-wrap:wrap">${instRadio}</div>
+    </div>
+    <div>
+      <div style="font-size:21px;font-weight:700;margin-bottom:6px">Start playback with</div>
+      <div style="font-size:13px;color:#8a8a8a;margin-bottom:14px">${startHint}</div>
+      <div class="seg">
+        <button class="${ST.startMode==='countdown'?'on':''}" data-act="setStartMode" data-id="countdown">Countdown</button>
+        <button class="${ST.startMode==='detect'?'on':''}" data-act="setStartMode" data-id="detect">Start detection</button>
+      </div>
+    </div>
+    <div>
+      <div style="font-size:21px;font-weight:700;margin-bottom:10px">Notify me during gigs</div>
+      ${notifRows}
+    </div>
+    <a class="link link-accent" data-act="signOut">Sign out</a>
+  </div>`;
 }
 
-function renderSongViewer(){
-  var s = STATE.songs[UI.viewerId];
-  if(!s) return screenHeader("Song")+"<p>Song not found.</p>";
-  var firstChord = s.lines[0] && s.lines[0].chords[0];
-  var nextChord = s.lines[0] && s.lines[0].chords[1];
-  var h = '<div style="display:flex;align-items:center;gap:10px;margin:14px 0 4px">'+
-    (UI.history.length?'<button class="iconbtn" style="padding:4px;margin-left:-6px" data-act="back">'+icon("back")+'</button>':'')+
-    '<span style="margin-left:auto;position:relative"><button class="iconbtn" data-act="toggleMenu">'+icon("menu")+'</button>'+
-    (UI.menuOpen? renderOverflowMenu() : "")+
-    '</span></div>';
-  h += '<h2 style="font-size:21px">'+esc(s.title)+'</h2><div style="color:var(--fg-muted);font-size:13px;margin:3px 0 10px">'+esc(s.sub)+'</div>';
-  if(s.addedBy && s.addedBy!=="you") h += '<div class="chip" style="margin-bottom:10px">added by '+esc(s.addedBy)+'</div>';
-  if(firstChord){
-    h += '<div class="chorddiagram"><div class="fretgrid">'+fretDots(firstChord.sym).map(function(on){return '<div class="fret'+(on?" on":"")+'"></div>';}).join("")+
-      '</div><div class="row"><span class="chordname">'+esc(firstChord.sym)+'</span>'+(nextChord?'<span style="color:var(--fg-muted)">» '+esc(nextChord.sym)+'</span>':'')+'</div>'+
-      '<button class="btn btn-outline btn-sm" data-act="playSample">'+icon("play")+' Play Sample</button></div>';
-  }
-  h += '<div style="margin-top:8px">'+s.lines.map(renderLineDisplay).join("")+'</div>';
-  return h;
+function renderCollab(){
+  const cg = ST.collabFor ? D.gigs.find(g=>g.id===ST.collabFor) : null;
+  const rows = D.collabs.map((c,i)=>{
+    const inGig = cg && c.gigs.includes(cg.id);
+    const addBtn = cg ? `<span class="icon-btn" title="${inGig?'Remove from gig':'Add to gig'}" data-act="toggleCollabInGig" data-id="${i}">${icon(inGig?'check_circle':'add_circle',24)}</span>` : '<span></span>';
+    return `<div style="display:grid;grid-template-columns:1fr 32px 32px;align-items:center;gap:16px;padding:18px 0;border-bottom:1px solid var(--b2)">
+      <div><div style="font-size:16px;font-weight:600">${esc(c.name)}</div><div style="font-size:13px;color:#8a8a8a;margin-top:4px">${esc(c.gigs.map(gigName).join(' · ') || 'No gigs yet')}</div></div>
+      <span class="icon-btn" data-act="editCollab" data-id="${i}">${icon('edit',22)}</span>
+      ${addBtn}
+    </div>`;
+  }).join('');
+  return `<div class="scr" style="gap:28px">
+    <div class="row" style="gap:14px">
+      <span class="icon-btn" data-act="back" data-to="${esc(ST.back)}">${icon('chevron_left',26)}</span>
+      <div><div style="font-size:28px;font-weight:700">Collaborators</div>${cg?`<div style="font-size:14px;color:#6f6f6f;margin-top:4px">Tap + to add someone to ${esc(cg.title)}</div>`:''}</div>
+      <div style="flex:1"></div>
+      <span class="icon-btn" title="Add collaborator" data-act="newCollab">${icon('person_add',26)}</span>
+    </div>
+    <div>${rows}</div>
+  </div>`;
+}
+/* ============================================================
+   SCREEN: Create Song (Manual / From Recording / From File)
+   ============================================================ */
+function confirmFootnote(){
+  return `<div style="text-align:center;font-size:12px;color:#8a8a8a">You hereby confirm that you have permission to reproduce these lyrics</div>`;
+}
+function processingBlock(){
+  return `<div style="display:flex;flex-direction:column;align-items:center;gap:14px;margin-top:40px">
+    <div style="font-size:22px;font-weight:700">Applying magic…</div>
+    <div style="width:300px;height:8px;border-radius:4px;background:#e6e6e6;overflow:hidden"><div style="height:100%;width:${Math.round(ST.procPct)}%;background:#1b1b1b;border-radius:4px"></div></div>
+    <div style="font-size:14px;color:#6f6f6f">${STAGES[Math.min(3,Math.floor(ST.procPct/25))]}</div>
+  </div>`;
+}
+function waveformBlock(){
+  const bars = (ST.bars.length?ST.bars:[20,40,30]).slice(-18);
+  return `<div style="display:flex;flex-direction:column;align-items:center;gap:28px">
+    <div style="display:flex;align-items:center;gap:5px;height:96px">
+      ${bars.map(h=>`<div style="width:6px;border-radius:3px;background:#1b1b1b;height:${h}px"></div>`).join('')}
+      <div style="width:2px;height:96px;background:#f24822;margin:0 6px"></div>
+      ${[0,1,2,3,4,5,6,7,8].map(()=>`<div style="width:6px;height:6px;border-radius:50%;background:#1b1b1b"></div>`).join('')}
+    </div>
+    <div style="font-size:14px;color:#6f6f6f;font-variant-numeric:tabular-nums">${fmtTime(ST.recT)}</div>
+    <div class="row" style="gap:12px">
+      <button class="btn btn-accent" style="width:150px" data-act="stopRecord">Stop</button>
+      <button class="btn btn-outline" style="width:150px" data-act="abortRecord">Abort</button>
+    </div>
+  </div>`;
+}
+function countdownBlock(){
+  return `<div style="position:relative;top:40px;display:flex;justify-content:center;font-size:160px;font-weight:800;line-height:1">${Math.max(1,Math.ceil(ST.cd))}</div>`;
 }
 
-function renderOverflowMenu(){
-  return '<div class="sheet-backdrop" data-act="toggleMenu" style="background:transparent"></div><div class="sheet">'+
-    '<button data-act="menuEdit">Edit</button>'+
-    '<button data-act="menuInstrument">Change instrument</button>'+
-    '<button data-act="menuSettings">Full settings</button>'+
-    '<hr>'+
-    '<button data-act="menuAddNew">Add a new song</button>'+
-    '<hr>'+
-    '<button class="danger" data-act="menuDelete">'+(UI.confirmDelete?"Click again to confirm":"Delete song")+'</button>'+
-    '</div>';
+function renderManualLyrics(d){
+  const hasLyrics = !!d.lyrics.trim();
+  return `<div style="width:100%;flex:1;display:flex;flex-direction:column;gap:14px;margin-top:28px;max-width:640px;margin-left:auto;margin-right:auto">
+    <div class="row" style="gap:14px">
+      <input class="ipt" style="height:64px;font-size:18px;font-weight:600" placeholder="Title" value="${esc(d.title)}" data-bind="draftTitle">
+      <button class="icon-btn" title="Find similar titles" style="width:48px;height:48px" data-act="openSimilar">${icon('search',26)}</button>
+    </div>
+    <input class="ipt" style="height:64px" placeholder="Sub title — artist, version" value="${esc(d.sub)}" data-bind="draftSub">
+    <textarea class="ipt" style="min-height:300px;font-size:18px" placeholder="Type or paste lyrics, one line per row" data-bind="draftLyrics">${esc(d.lyrics)}</textarea>
+    ${!hasLyrics?`<a class="link" style="text-decoration:underline;align-self:flex-start" data-act="fillExample">Paste example lyrics</a>`:''}
+    ${confirmFootnote()}
+    <button class="btn ${hasLyrics?'btn-dark':'btn-disabled'}" style="align-self:center;width:170px;height:48px" data-act="lyricsNext">Next</button>
+  </div>`;
+}
+
+function renderChordWheel(){
+  const roots = LETTERS.map((r,i)=>`<div style="flex:none;width:100px;height:72px;display:flex;align-items:center;justify-content:center;font-size:${i===ST.rootIdx?44:26}px;font-weight:700;color:${i===ST.rootIdx?'#1b1b1b':'#a8a8a8'};cursor:pointer" data-act="pickRoot" data-id="${i}">${r}</div>`).join('');
+  const letter = LETTERS[ST.rootIdx];
+  const variants = [letter, ACC[letter]].flatMap(rt => SUFFIXES.map(q=>{
+    const on = rt===ST.selRoot && q===ST.selSuffix;
+    return `<button style="height:48px;border-radius:12px;border:1.5px solid var(--fg);background:${on?'#1b1b1b':'#fff'};color:${on?'#fff':'#1b1b1b'};font-size:17px;font-weight:700" data-act="pickVariant" data-root="${rt}" data-q="${q}">${rt}${q}</button>`;
+  })).join('');
+  return `<div style="display:flex;flex-direction:column;align-items:center;gap:10px;margin-top:26px">
+    <div style="font-size:13px;color:#6f6f6f">Pick a chord, then tap a word to place it. Tap again to remove.</div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:12px">
+      <div style="position:relative;width:300px;height:72px">
+        <div style="position:absolute;left:100px;top:0;width:100px;height:72px;border-radius:14px;background:#f2f2f2"></div>
+        <div style="position:relative;width:300px;height:72px;overflow-x:auto;overflow-y:hidden;display:flex;mask-image:linear-gradient(90deg,transparent 0,#000 24%,#000 76%,transparent 100%)">
+          <div style="flex:none;width:100px"></div>${roots}<div style="flex:none;width:100px"></div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(2,76px);gap:6px;max-width:580px;grid-template-columns:repeat(auto-fit,76px);justify-content:center">${variants}</div>
+    </div>
+    <a class="link" style="text-decoration:underline" data-act="detectChords">Detect chords from a recording instead</a>
+  </div>`;
+}
+
+function renderNoteEditor(d){
+  if(ST.selWord==null) return '';
+  const [li, wi] = ST.selWord.split('-').map(Number);
+  const ws = parseLyrics(d.lyrics)[li] || [];
+  const w = ws[wi] || '';
+  const placement = wi===0 ? 'Shown before the line' : (wi===ws.length-1 ? 'Shown after the line' : 'Shown above the word, with an arrow');
+  return `<div style="margin-top:28px;width:100%;max-width:440px;border:1.5px solid #2f8fe0;border-radius:12px;background:#f3f8ff;padding:16px;display:flex;flex-direction:column;gap:12px">
+    <div style="font-size:13px;font-weight:600;color:#2f8fe0">Mark on "${esc(w)}"</div>
+    <input class="ipt" style="height:44px;border:1px solid #cfe0f5;font-family:Caveat,cursive;font-size:24px;color:#2f8fe0;background:#fff" placeholder="e.g. Hi note, breathe, key change" value="${esc(ST.noteDraft)}" data-bind="noteDraft">
+    <div class="row" style="gap:8px">
+      <span style="font-size:12px;color:#6f6f6f">${placement}</span>
+      <div style="flex:1"></div>
+      <a class="link link-accent" data-act="removeNote">Remove</a>
+      <button class="btn btn-dark btn-sm" data-act="saveNote">Save</button>
+    </div>
+  </div>`;
+}
+
+function renderSongBody(d){
+  const editMode = ST.step==='chords' ? 'chords' : ST.step==='markings' ? 'markings' : 'static';
+  const lines = buildLines(d, editMode, ST.phase==='recording' ? {t:ST.recT} : null);
+  const opacity = (ST.phase==='countdown'||ST.phase==='processing') ? 0.12 : 1;
+  return `<div style="width:100%;flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;margin-top:24px;position:relative">
+    <div style="opacity:${opacity};display:flex;flex-direction:column;align-items:center;width:100%;overflow:auto;padding-bottom:16px">
+      <div style="font-size:40px;font-weight:800;letter-spacing:-0.02em;text-align:center">${esc(d.title||'Untitled song')}</div>
+      <div style="font-size:15px;color:#6f6f6f;margin-top:6px">${esc(d.sub)}</div>
+      ${ST.step==='chords' ? renderChordWheel() : ''}
+      ${ST.step==='markings' ? `<div style="font-size:13px;color:#6f6f6f;margin-top:26px">Tap a word to add a mark. Marks on the first or last word sit beside the line; others point at the word.</div>` : ''}
+      <div style="margin-top:34px">${linesHTML(lines)}</div>
+    </div>
+    ${ST.step==='markings' ? renderNoteEditor(d) : ''}
+    ${ST.phase==='countdown' ? `<div style="position:absolute;top:60px;left:0;right:0">${countdownBlock()}</div>` : ''}
+    ${ST.phase==='processing' ? `<div style="position:absolute;top:60px;left:0;right:0">${processingBlock()}</div>` : ''}
+    ${(ST.step==='chords'||ST.step==='markings') ? `<div style="display:flex;flex-direction:column;align-items:center;gap:12px;padding-top:12px;border-top:1px solid #f0f0f0;width:100%;margin-top:20px">
+        <div style="font-size:12px;color:#8a8a8a">You hereby confirm that you have permission to reproduce these lyrics</div>
+        <button class="btn btn-dark" style="width:170px" data-act="createNextStep">Next</button>
+        <a class="link" style="color:#9a9a9a" data-act="createNextStep">Skip</a>
+      </div>` : ''}
+    ${ST.step==='sync' && ST.phase==='idle' ? `<div style="display:flex;flex-direction:column;align-items:center;gap:12px;width:100%;max-width:340px;margin:0 auto">
+        ${ST.autoChords?`<div style="font-size:13px;color:#2f8fe0;text-align:center;margin-bottom:6px">Chords will be detected from the instruments in your recording.</div>`:''}
+        <button class="btn btn-grey" style="width:100%" data-act="practiceDraft">Practice</button>
+        <button class="btn btn-accent" style="width:100%" data-act="startRecord">Record</button>
+        <a class="link" style="text-decoration:underline;margin-top:4px" data-act="startUpload">Upload</a>
+        <div style="font-size:12px;color:#8a8a8a;text-align:center">Sing and play it once. Singa isolates your vocal, aligns every word and detects the chords.</div>
+      </div>` : ''}
+    ${ST.step==='sync' && (ST.phase==='countdown'||ST.phase==='recording') ? waveformBlock() : ''}
+  </div>`;
+}
+
+function renderSimilarModal(){
+  const rows = [
+    {title:"Don't Go Breaking My Heart", sub:'Dolly Parton', by:'joesnow'},
+    {title:"Don't Go Breaking My Heart", sub:'Dolly Parton & Rick Stein', by:'allhands232'}
+  ];
+  return `<div class="modal-backdrop" data-act="closeSimilar" style="align-items:flex-start;padding-top:140px">
+    <div class="modal" style="max-width:420px" onclick="event.stopPropagation()">
+      <div class="mhead"><span style="font-size:15px;font-weight:700">Similar titles</span><span class="icon-btn" data-act="closeSimilar">${icon('close',22)}</span></div>
+      <div class="msub">Already on Singa. Copy one instead of starting from scratch.</div>
+      ${rows.map((r,i)=>`<div class="list-row" style="padding:12px 14px;border:1px solid #ececec;border-radius:10px" data-act="useSimilar" data-id="${i}"><div><div style="font-size:15px;font-weight:600">${esc(r.title)}</div><div style="font-size:12px;color:#8a8a8a;margin-top:2px">${esc(r.sub)} · added by ${esc(r.by)}</div></div>${icon('chevron_right',22)}</div>`).join('')}
+      <button class="btn btn-dark" style="margin-top:8px" data-act="closeSimilar">Keep creating my own</button>
+    </div>
+  </div>`;
 }
 
 function renderCreate(){
-  var d = UI.draft;
-  var h = '<div style="display:flex;align-items:center;gap:10px;margin:14px 0 16px">'+
-    (UI.history.length?'<button class="iconbtn" style="padding:4px;margin-left:-6px" data-act="back">'+icon("back")+'</button>':'')+'</div>';
-  h += '<div class="seg" style="margin-bottom:16px">'+["manual","recording","file"].map(function(m){
-    return '<button class="'+(d.mode===m?"active":"")+'" data-act="createMode" data-mode="'+m+'">'+(m==="manual"?"Manual":m==="recording"?"From Recording":"From File")+'</button>';
-  }).join("")+'</div>';
-  if(d.mode!=="manual" && d.step==="lyrics" && !d.lyricsText){
-    h += '<div class="center-col" style="padding:30px 10px"><p style="font-size:14px;color:var(--fg-muted);max-width:320px">'+(d.mode==="recording"?"Record or pick an existing take — Singa will transcribe it and prefill the lyrics for you.":"Upload a lyrics/chord file, or link a cloud drive — Singa will import it.")+'</p>'+
-      (d.mode==="recording"?'<button class="btn btn-accent" style="width:auto;padding:13px 26px;margin-top:6px" data-act="startRecord">'+icon("mic")+' Record</button><button class="btn-ghost" data-act="useSample" style="margin-top:4px">Use sample instead</button>'
-        :'<div class="row" style="gap:28px;margin-top:10px"><button class="btn-ghost" data-act="useSample" style="display:flex;flex-direction:column;gap:6px;align-items:center">Upload</button><button class="btn-ghost" data-act="useSample" style="display:flex;flex-direction:column;gap:6px;align-items:center">Link Cloud</button></div>')+
-      '</div>';
-    return h;
-  }
-  h += '<div class="subtabs">'+["lyrics","chords","markings","sync"].map(function(st){
-    return '<button class="'+(d.step===st?"active":"")+'" data-act="createStep" data-step="'+st+'">'+st[0].toUpperCase()+st.slice(1)+'</button>';
-  }).join("")+'</div>';
+  const d = D.songs[ST.editId] || { id:'x', title:'', sub:'', lyrics:'', chords:{}, notes:{} };
+  const phaseIdle = ST.phase==='idle';
+  const modeLocked = !phaseIdle || (ST.createMode==='manual' && ST.step!=='lyrics');
+  const modes = [['manual','Manual'],['recording','From Recording'],['file','From File']];
+  const modeSeg = `<div class="seg" style="opacity:${modeLocked?0.4:1};border-color:${modeLocked?'#bdbdbd':'#1b1b1b'}">
+    ${modes.map(([v,l])=>`<button class="${v===ST.createMode?'on':''}" ${modeLocked?'':`data-act="setCreateMode" data-id="${v}"`}>${l}</button>`).join('')}
+  </div>`;
+  const hasLyrics = !!d.lyrics.trim();
+  const stepTabs = ['lyrics','chords','markings','sync'];
+  const isManual = ST.createMode==='manual';
+  const stepTabsHTML = isManual ? `<div style="display:flex;border-bottom:1.5px solid #e2e2e2">
+    ${stepTabs.map(k=>`<button style="border:0;background:transparent;width:104px;height:42px;font-size:15px;font-weight:${k===ST.step?700:500};color:${k===ST.step?'#1b1b1b':(hasLyrics||k==='lyrics'?'#8a8a8a':'#c8c8c8')};border-bottom:2.5px solid ${k===ST.step?'#1b1b1b':'transparent'};margin-bottom:-1.5px" data-act="goCreateStep" data-id="${k}">${k[0].toUpperCase()+k.slice(1)}</button>`).join('')}
+  </div>` : '';
 
-  if(d.step==="lyrics"){
-    h += '<div class="stack">'+
-      '<input class="input" placeholder="Title" value="'+esc(d.title)+'" data-bind="draftTitle">'+
-      '<input class="input" placeholder="Sub title" value="'+esc(d.sub)+'" data-bind="draftSub">'+
-      '<textarea class="input" style="min-height:160px" placeholder="Paste or type the lyrics, one line per line…" data-bind="draftLyrics">'+esc(d.lyricsText)+'</textarea>'+
-      '<div style="font-size:12px;color:var(--fg-muted);text-align:center">You hereby confirm that you have permission to reproduce these lyrics</div>'+
-      '<button class="btn btn-primary" data-act="lyricsNext">Next</button>'+
-      '</div>';
-    if(d.similarOpen){
-      h += '<div class="inline-editor" style="margin-top:14px"><div class="section-h" style="margin-top:0">Similar titles</div>'+
-        '<div class="list-row" style="border-bottom:none"><div class="meta"><div class="t">My songs</div><div class="s">your existing version</div></div></div>'+
-        '<div class="list-row" style="border-bottom:none"><div class="meta"><div class="t">Guns \'n\' Roses</div><div class="s">community, via Spotify</div></div></div>'+
-        '<div class="row" style="margin-top:8px"><button class="btn btn-outline btn-sm" data-act="useExisting">View their version</button>'+
-        '<button class="btn btn-primary btn-sm" data-act="continueMine">Use my own</button></div></div>';
+  let body = '';
+  if(isManual && ST.step==='lyrics'){
+    body = renderManualLyrics(d);
+  } else if(isManual){
+    body = renderSongBody(d);
+  } else if(ST.createMode==='recording'){
+    if(phaseIdle){
+      body = `<div style="width:100%;display:flex;flex-direction:column;align-items:center;gap:28px;margin-top:40px;max-width:420px;margin-left:auto;margin-right:auto">
+        <input class="ipt" placeholder="Song title" value="${esc(d.title)}" data-bind="draftTitle">
+        <div class="row" style="gap:22px;margin-top:40px">
+          <button class="btn btn-accent" style="width:150px" data-act="startRecord">Record</button>
+          <a class="link" style="text-decoration:underline" data-act="startUpload">Upload</a>
+        </div>
+        <div style="font-size:13px;color:#6f6f6f;text-align:center;max-width:420px;line-height:1.5">No lyrics needed. Singa transcribes your words and detects the chords from the recording. You can correct them afterwards.</div>
+        <div style="font-size:12px;color:#8a8a8a">You hereby confirm that you have permission to reproduce these lyrics</div>
+      </div>`;
+    } else {
+      body = `<div style="width:100%;flex:1;display:flex;flex-direction:column;align-items:center;gap:40px;margin-top:80px">
+        <div style="font-size:40px;font-weight:800;letter-spacing:-0.02em;color:${ST.phase==='countdown'?'#d0d0d0':'#1b1b1b'}">${esc(d.title||'Untitled song')}</div>
+        ${ST.phase==='countdown'?countdownBlock():''}
+        ${ST.phase==='recording'?waveformBlock():''}
+        ${ST.phase==='processing'?processingBlock():''}
+      </div>`;
     }
-  } else if(d.step==="chords"){
-    h += '<h3 style="font-size:19px;margin-bottom:2px">'+esc(d.title||"Untitled")+'</h3><div style="color:var(--fg-muted);font-size:12.5px;margin-bottom:14px">'+esc(d.sub)+'</div>';
-    h += '<p style="font-size:12.5px;color:var(--fg-muted);margin-bottom:12px">Tap a word to add or edit a chord above it.</p>';
-    h += d.lines.map(function(line,li){return renderLineEditable(line, li, "chords", d.activeChordPos);}).join("");
-    h += '<button class="btn btn-primary" data-act="toStep" data-step="markings">Next</button><button class="btn-ghost" data-act="toStep" data-step="markings" style="width:100%;text-align:center">Skip</button>';
-  } else if(d.step==="markings"){
-    h += '<h3 style="font-size:19px;margin-bottom:2px">'+esc(d.title||"Untitled")+'</h3><div style="color:var(--fg-muted);font-size:12.5px;margin-bottom:14px">'+esc(d.sub)+'</div>';
-    h += '<p style="font-size:12.5px;color:var(--fg-muted);margin-bottom:12px">Tap a word to pin a performance note (a reminder, a cue) to it.</p>';
-    h += d.lines.map(function(line,li){return renderLineEditable(line, li, "markings", d.activeMarkPos);}).join("");
-    h += '<button class="btn btn-primary" data-act="toStep" data-step="sync">Next</button><button class="btn-ghost" data-act="toStep" data-step="sync" style="width:100%;text-align:center">Skip</button>';
-  } else if(d.step==="sync"){
-    h += renderSyncStep(d);
+  } else if(ST.createMode==='file'){
+    if(phaseIdle){
+      body = `<div style="display:flex;flex-direction:column;align-items:center;gap:28px;margin-top:80px">
+        <div class="row" style="gap:28px">
+          <button class="btn-outline" style="width:170px;height:150px;border-radius:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px" data-act="startUpload">${icon('upload',36)}<span style="font-size:15px;font-weight:600">Upload</span></button>
+          <button class="btn-outline" style="width:170px;height:150px;border-radius:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px" data-act="startCloud">${icon('cloud',36)}<span style="font-size:15px;font-weight:600">Link Cloud</span></button>
+        </div>
+        <div style="font-size:13px;color:#6f6f6f">Audio or video of you performing the song.</div>
+        <div style="font-size:12px;color:#8a8a8a">You hereby confirm that you have permission to reproduce these lyrics</div>
+      </div>`;
+    } else {
+      body = `<div style="margin-top:120px">${processingBlock()}</div>`;
+    }
   }
-  return h;
+
+  return `<div class="scr center" style="padding-top:16px">
+    ${modeSeg}
+    <div style="width:100%;display:flex;align-items:center;margin-top:20px;min-height:44px;max-width:760px">
+      <span class="icon-btn" data-act="createBack">${icon('chevron_left',26)}</span>
+      <div style="flex:1;display:flex;justify-content:center">${stepTabsHTML}</div>
+      <span style="width:26px"></span>
+    </div>
+    ${body}
+  </div>${ST.similar?renderSimilarModal():''}`;
+}
+/* ============================================================
+   SCREENS: Completion / Incomplete / Song Viewer (+menu)
+   ============================================================ */
+function renderDone(){
+  const d = D.songs[ST.editId] || EMPTY_SONG;
+  return `<div class="scr center" style="padding-top:20px">
+    <svg class="mascot" style="height:280px" viewBox="0 0 160 160" fill="none" aria-hidden="true"><circle cx="80" cy="80" r="74" fill="var(--accent)"/><path d="M50 83l19 19 41-46" stroke="#fff" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/><circle cx="18" cy="34" r="6" fill="var(--accent)"/><circle cx="142" cy="46" r="5" fill="#2a9d6b"/><circle cx="136" cy="124" r="7" fill="#4169c7"/><circle cx="16" cy="118" r="5" fill="#8e4fd6"/></svg>
+    <div style="font-size:64px;font-weight:800;letter-spacing:-0.03em;margin-top:12px">Congrats!</div>
+    <div style="font-size:22px;text-align:center;line-height:1.4;margin-top:4px">${esc(d.title||'Your song')}<br>was added</div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:12px;margin-top:30px">
+      <a class="link link-muted" data-act="openPicker" data-kind="playlist">Add to playlist</a>
+      <a class="link link-muted" data-act="openPicker" data-kind="gig">Add to a gig</a>
+      <a class="link" style="color:${ST.isPublic?'#1b1b1b':'#6f6f6f'}" data-act="togglePublic">${ST.isPublic?'Public · anyone can copy it':'Make publicly available'}</a>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:12px;width:100%;max-width:340px;margin-top:30px">
+      <button class="btn btn-grey" style="height:64px" data-act="viewDone">View Song</button>
+      <button class="btn btn-dark" style="height:64px" data-act="newSong">Add New Song</button>
+    </div>
+  </div>`;
 }
 
-function renderSyncStep(d){
-  var h = '<h3 style="font-size:19px;margin-bottom:2px">'+esc(d.title||"Untitled")+'</h3><div style="color:var(--fg-muted);font-size:12.5px;margin-bottom:18px">'+esc(d.sub)+'</div>';
-  h += d.lines.map(renderLineDisplay).join("");
-  if(d.syncPhase==="idle"){
-    h += '<div class="stack" style="margin-top:18px">'+
-      '<button class="btn btn-outline" data-act="practiceSong">Practice</button>'+
-      '<button class="btn btn-accent" data-act="startRecord">Record</button>'+
-      '<button class="btn-ghost" style="width:100%;text-align:center" data-act="uploadTake">Upload</button>'+
-      '<div style="font-size:12px;color:var(--fg-muted);text-align:center">You hereby confirm that you have permission to reproduce these lyrics</div>'+
-      '<button class="btn-ghost" style="width:100%;text-align:center" data-act="skipSync">Skip</button>'+
-      '</div>';
-  } else if(d.syncPhase==="countdown"){
-    h += '<div style="text-align:center;font-family:var(--font-display);font-size:70px;font-weight:700;margin:24px 0">'+d.countdownN+'</div>';
-  } else if(d.syncPhase==="recording"){
-    h += '<div class="wave" id="waveEl">'+(d.waveHeights.length?d.waveHeights.map(function(v){return '<span style="height:'+v+'px"></span>';}).join(""):"")+'</div>';
-    h += '<div style="text-align:center;color:var(--fg-muted);margin-bottom:12px">'+d.recordSeconds+'s</div>';
-    h += '<div class="row"><button class="btn btn-accent" data-act="stopRecord">Stop</button><button class="btn btn-outline" data-act="abortRecord">Abort</button></div>';
-  } else if(d.syncPhase==="syncing"){
-    h += '<div style="text-align:center;font-weight:700;margin:16px 0 10px">Syncing…</div>'+
-      '<div style="height:8px;background:var(--canvas);border-radius:999px;overflow:hidden"><div id="syncBar" style="height:100%;width:0%;background:var(--accent);transition:width 1.8s linear"></div></div>';
-  } else if(d.syncPhase==="done"){
-    h += '<div class="center-col" style="margin:14px 0 10px"><svg class="mascot" viewBox="0 0 160 160" fill="none" aria-hidden="true"><circle cx="80" cy="80" r="74" fill="var(--accent)"/><path d="M50 83l19 19 41-46" stroke="#fff" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/><circle cx="18" cy="34" r="6" fill="var(--accent)"/><circle cx="142" cy="46" r="5" fill="#2a9d6b"/><circle cx="136" cy="124" r="7" fill="#4169c7"/><circle cx="16" cy="118" r="5" fill="#8e4fd6"/></svg><h2 style="font-size:26px;margin-top:10px">Congrats!</h2><div style="color:var(--fg-muted)">'+esc(d.title)+' was added</div></div>'+
-      '<div class="stack">'+
-      '<label style="display:flex;gap:8px;align-items:center;font-size:13.5px"><input type="checkbox" '+(d.addToPlaylist?"checked":"")+' data-bind="draftAddPlaylist"> Add to "My songs" playlist</label>'+
-      '<label style="display:flex;gap:8px;align-items:center;font-size:13.5px"><input type="checkbox" '+(d.addToGig?"checked":"")+' data-bind="draftAddGig"> Add to "'+esc(STATE.gigs[GIG_ID].name)+'"</label>'+
-      '<label style="display:flex;gap:8px;align-items:center;font-size:13.5px"><input type="checkbox" '+(d.makePublic?"checked":"")+' data-bind="draftPublic"> Make publicly available</label>'+
-      '<button class="btn btn-outline" data-act="viewFinishedSong">View Song</button>'+
-      '<button class="btn btn-primary" data-act="addAnotherSong">Add New Song</button>'+
-      '</div>';
-  }
-  return h;
+function renderIncomplete(){
+  const s = song(ST.songId);
+  return `<div class="scr center" style="padding-top:20px">
+    <div style="align-self:flex-start"><span class="icon-btn" data-act="back" data-to="${esc(ST.back)}">${icon('chevron_left',26)}</span></div>
+    <div style="font-size:40px;font-weight:800;letter-spacing:-0.02em;margin-top:40px;text-align:center">${esc(s.title||'Untitled song')}</div>
+    <span class="msi" style="font-size:48px;margin-top:60px;color:#6f6f6f">folder</span>
+    <div style="font-size:17px;font-weight:700;margin-top:10px">Nothing here yet</div>
+    <div style="font-size:13px;color:#8a8a8a;margin-top:4px">This song is incomplete</div>
+    <button class="btn btn-dark btn-sm" style="margin-top:18px" data-act="continueSong">Continue</button>
+  </div>`;
 }
 
-function renderGigDetail(){
-  var g = STATE.gigs[UI.gigId];
-  if(!g) return screenHeader("Gig")+"<p>Not found.</p>";
-  var h = screenHeader(null);
-  h += '<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:14px">'+
-    (UI.history.length?'<button class="iconbtn" style="padding:4px;margin-top:2px" data-act="back">'+icon("back")+'</button>':'')+
-    '<h2 style="font-size:21px;flex:1">'+esc(g.name)+(g.live?' <span class="badge badge-live">Live</span>':'')+'</h2></div>';
-  h += '<div class="row" style="flex-wrap:wrap;gap:22px;margin-bottom:18px">'+
-    gigAction("add","Add a song","createNew",g.id)+gigAction("edit","Edit","gigEdit",g.id)+gigAction("camera","Photos","gigPhotos",g.id)+
-    gigAction("people","Add Collaborator","openCollaborators",g.id)+gigAction("share","Share","copyLink",g.id)+gigAction("qr","QR Code","gigQr",g.id)+
-    '</div>';
-  h += '<div class="section-h">Setlist</div><div class="list">';
-  g.setlist.forEach(function(sid, i){
-    var s = STATE.songs[sid];
-    if(!s) return;
-    h += '<div class="list-row"><div class="meta" data-act="openSong" data-id="'+sid+'"><div class="t">'+esc(s.title)+'</div><div class="s">'+esc(s.sub)+'</div></div>'+
-      (s.synced?'<span class="badge badge-synced">Synced</span>':'<span class="badge badge-notake">No take</span>')+
-      '<button class="btn-ghost" data-act="moveUp" data-gig="'+g.id+'" data-i="'+i+'" '+(i===0?"disabled":"")+'>↑</button>'+
-      '<button class="btn-ghost" data-act="moveDown" data-gig="'+g.id+'" data-i="'+i+'" '+(i===g.setlist.length-1?"disabled":"")+'>↓</button></div>';
-  });
-  h += '</div>';
-  h += '<div style="height:16px"></div>';
-  h += g.live
-    ? '<button class="btn btn-outline" data-act="openGigPlayer" data-gig="'+g.id+'">Open Gig Player</button><div style="height:8px"></div><button class="btn btn-outline" data-act="endGig" data-gig="'+g.id+'">End Gig</button>'
-    : '<button class="btn btn-accent" data-act="startGig" data-gig="'+g.id+'">Start Gig</button>';
-  return h;
-}
-function gigAction(ic, label, act, gigId){
-  return '<button class="btn-ghost" style="display:flex;flex-direction:column;gap:6px;align-items:center;width:auto;color:var(--fg)" data-act="'+act+'" data-gig="'+gigId+'">'+icon(ic)+'<span style="font-size:11px;font-weight:600">'+label+'</span></button>';
+function renderSongMenu(){
+  const s = song(ST.songId);
+  const instOpts = INSTS.map(([v,l])=>`<a class="link" style="display:flex;align-items:center;gap:8px;font-weight:${v===ST.instrument?700:500};color:${v===ST.instrument?'#1b1b1b':'#6f6f6f'}" data-act="setInstrumentMenu" data-id="${v}">${icon('check',18)}${l}</a>`).join('');
+  return `<div class="modal-backdrop" style="background:rgba(255,255,255,.9);align-items:flex-start;justify-content:flex-end;padding:20px 64px 0" data-act="toggleMenu">
+    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:12px;text-align:right" onclick="event.stopPropagation()">
+      <span class="icon-btn" data-act="toggleMenu">${icon('close',28)}</span>
+      <a class="link" style="font-size:17px;font-weight:700" data-act="editSong">Edit</a>
+      <a class="link" style="font-size:17px;font-weight:700;display:flex;align-items:center;gap:4px" data-act="toggleInstMenu">Change instrument${icon(ST.instMenu?'expand_less':'expand_more',20)}</a>
+      ${ST.instMenu?`<div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;margin:-4px 0 4px">${instOpts}</div>`:''}
+      <a class="link" style="font-size:17px;font-weight:700" data-act="menuAddGig">Add to a gig</a>
+      <a class="link" style="font-size:17px;font-weight:700" data-act="nav" data-to="account">Full settings</a>
+      <a class="link" style="font-size:17px;font-weight:700;margin-top:16px;display:flex;align-items:center;gap:6px" data-act="newSong">Add a new song${icon('add_circle',22)}</a>
+      <a class="link link-accent" style="font-size:17px;font-weight:700;margin-top:16px" data-act="deleteSong">Delete song</a>
+    </div>
+  </div>`;
 }
 
-function renderGigShare(){
-  var g = STATE.gigs[UI.gigId];
-  var h = screenHeader("QR Code");
-  h += '<div class="center-col" style="padding:20px 10px 10px">'+qrPattern(g.id, 13, 9)+
-    '<div style="margin-top:16px"><b>'+esc(g.name)+'</b></div></div>';
-  return h;
+function renderSong(){
+  const s = song(ST.songId);
+  const inst = ST.instrument, hasInst = inst!=='none';
+  const seq = chordSeq(s);
+  const vtm = timing(s);
+  const vLive = ST.playing || ST.t>0;
+  const vci = curWord(vtm, ST.t);
+  let diaChord, diaNext;
+  if(vLive){ diaChord = chordAt(s,vtm,Math.max(vci,0)) || (seq[0]||{}).ch; diaNext = (seq.find(x=>x.k>vci && x.ch!==diaChord)||{}).ch; }
+  else { diaChord = ST.viewChord || (seq[0]&&seq[0].ch); const vi = seq.findIndex(x=>x.ch===diaChord); diaNext = seq[vi+1] ? seq[vi+1].ch : (seq[0]&&seq[0].ch); }
+  const dia = diagram(diaChord, diaNext, inst);
+  const lines = buildLines(s, vLive?'play':'view', { t: vLive?ST.t:null, selChord: diaChord, hideChords: !hasInst });
+  const vPlaying = ST.playing;
+  const chordScale = Math.max(0.55, Math.min(1.9, ST.chordH/230));
+  return `<div class="scr" style="padding-bottom:0">
+    <div class="row" style="gap:14px;align-items:flex-start">
+      <span class="icon-btn" style="margin-top:4px" data-act="back" data-to="${esc(ST.back)}">${icon('chevron_left',26)}</span>
+      <div style="flex:1">
+        <div style="font-size:28px;font-weight:700;letter-spacing:-0.01em">${esc(s.title||'Untitled song')}</div>
+        <div style="font-size:14px;color:#6f6f6f;margin-top:4px">${esc(s.sub)}</div>
+        ${ST.viewBy?`<div class="row" style="gap:6px;font-size:13px;margin-top:8px">${icon('account_circle',18)}added by ${esc(ST.viewBy)}</div>`:''}
+      </div>
+      <span class="icon-btn" data-act="toggleMenu">${icon('menu',28)}</span>
+    </div>
+    ${ST.viewBy?`<button class="btn btn-dark btn-sm" style="align-self:flex-start;margin:18px 0 0 40px" data-act="copySong">Copy to your playlist</button>`:''}
+    ${hasInst?`<div style="height:${Math.round(ST.chordH)}px;display:flex;align-items:center;justify-content:center;overflow:hidden;margin-top:8px">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:14px;transform:scale(${chordScale})">
+          ${diagramHTML(dia)}
+          <button class="link" style="display:flex;align-items:center;gap:6px" data-act="playSample">${icon(ST.sampling?'stop_circle':'play_circle',22)}${ST.sampling?'Stop sample · '+Math.ceil(ST.sampleLeft)+'s':'Play Sample'}</button>
+        </div>
+      </div>
+      <div class="row" style="justify-content:center;cursor:ns-resize;height:30px" title="Drag to resize">${icon('drag_handle',26)}</div>`:''}
+    <div style="flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;align-items:center;padding:20px 0 40%" id="lyricsScroll">
+      ${linesHTML(lines)}
+    </div>
+    <div style="flex:none;min-height:92px;display:flex;align-items:center;justify-content:center;padding:10px 0">
+      ${ST.startMode==='countdown'
+        ? `<button class="icon-btn" title="Play" style="width:68px;height:68px;border-radius:50%;background:#1b1b1b;color:#fff" data-act="viewPlay">${icon(vPlaying?'pause':'play_arrow',38)}</button>`
+        : `<div class="row" style="gap:12px;cursor:pointer;max-width:520px" data-act="viewPlay">${icon('mic',30)}<div><div style="font-size:16px;font-weight:600">${vPlaying?'Following your voice':"I'm listening. Playback will start playing when you start singing."}</div><div style="font-size:12px;color:#8a8a8a;margin-top:3px">${vPlaying?'Tap to pause':'Prototype: tap here to simulate singing'}</div></div></div>`}
+    </div>
+  </div>
+  ${ST.vcd>0?`<div class="modal-backdrop" style="background:rgba(255,255,255,.75);font-size:180px;font-weight:800">${Math.max(1,Math.ceil(ST.vcd))}</div>`:''}
+  ${ST.menu?renderSongMenu():''}`;
 }
+/* ============================================================
+   SCREEN: Practice Player
+   ============================================================ */
+function renderPractice(){
+  const s = song(ST.songId);
+  const tm = timing(s);
+  const seq = chordSeq(s);
+  const ci = curWord(tm, ST.t);
+  const chord = chordAt(s,tm,Math.max(ci,0)) || (seq[0]||{}).ch;
+  const next = (seq.find(x=>x.k>ci && x.ch!==chord)||{}).ch;
+  const dia = diagram(chord, next || (seq[0]||{}).ch, ST.instrument);
+  const lines = buildLines(s, 'play', { t: ST.t, hideChords: ST.instrument==='none' });
+  const progress = tm.total ? Math.min(100, ST.t/tm.total*100) : 0;
+  const guideSegs = ['Piano','Strings','Flute','Synth'].map(v=>`<button class="${v===ST.guideInst?'on':''}" style="padding:4px 10px;font-size:12px;border-radius:8px;border:1.5px solid var(--fg)" data-act="setGuideInst" data-id="${v}">${v}</button>`).join('');
+  const practiceNote = s.synced ? 'Playing along with your recorded take. Guide melody is generated from your pitch-corrected vocal.' : 'Not recorded yet — timing is estimated. Record a take on the Sync step for word-level sync.';
+  return `<div class="scr" style="padding-bottom:30px">
+    <div class="row" style="gap:14px;align-items:flex-start">
+      <span class="icon-btn" style="margin-top:18px" data-act="exitPractice">${icon('chevron_left',26)}</span>
+      <div style="flex:1">
+        <div style="font-size:12px;font-weight:700;letter-spacing:.08em;color:#f24822">PRACTICE</div>
+        <div style="font-size:28px;font-weight:700;margin-top:4px">${esc(s.title||'Untitled song')}</div>
+        <div style="font-size:14px;color:#6f6f6f;margin-top:4px">${esc(s.sub)}</div>
+      </div>
+    </div>
+    ${ST.instrument!=='none' ? `<div style="margin-top:30px;min-height:140px">${diagramHTML(dia,'#f24822')}</div>` : ''}
+    <div style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center">
+      ${linesHTML(lines, true)}
+    </div>
+    <div style="border-top:1px solid #ececec;padding-top:22px;display:flex;flex-direction:column;gap:18px">
+      <div style="height:22px;display:flex;align-items:center;cursor:pointer" data-act="seek"><div style="flex:1;height:6px;border-radius:3px;background:#e6e6e6;position:relative"><div style="position:absolute;left:0;top:0;bottom:0;width:${progress}%;background:#1b1b1b;border-radius:3px"></div></div></div>
+      <div class="row" style="gap:16px">
+        <button class="icon-btn" style="width:48px;height:48px;border-radius:50%;border:1.5px solid var(--fg)" data-act="restart">${icon('replay',24)}</button>
+        <button class="icon-btn" style="width:64px;height:64px;border-radius:50%;background:#1b1b1b;color:#fff" data-act="togglePlay">${icon(ST.playing?'pause':'play_arrow',34)}</button>
+        <div style="font-size:14px;color:#6f6f6f;font-variant-numeric:tabular-nums">${fmtTime(ST.t)} / ${fmtTime(tm.total)}</div>
+        <div style="flex:1"></div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px">
+          <div class="row" style="gap:10px;cursor:pointer" data-act="toggleGuide">
+            <span style="font-size:14px;font-weight:600">Guide melody</span>
+            <div class="toggle" style="background:${ST.guide?'#1b1b1b':'#fff'}"><div class="dot" style="left:${ST.guide?20:2}px;background:${ST.guide?'#fff':'#1b1b1b'}"></div></div>
+          </div>
+          <div class="row" style="gap:4px;opacity:${ST.guide?1:0.35}">${guideSegs}</div>
+        </div>
+      </div>
+      <div style="font-size:12px;color:#9a9a9a">${practiceNote}</div>
+    </div>
+  </div>`;
+}
+/* ============================================================
+   SCREENS: Gig / Gig Photos / Gig Edit / Gig Player
+   ============================================================ */
+function gigSettings(g){ return { photos:true, chat:true, dm:false, order:false, requests:true, browse:true, ...(g.settings||{}) }; }
+
+function renderGig(){
+  const g = gigObj();
+  const setRows = g.setlist.map((id,i)=>{
+    const s = song(id);
+    return `<div class="list-row" data-act="openGigSong" data-id="${id}"><div><div class="t">${esc(s.title||'Untitled song')}</div><div class="s">${esc(s.sub)}</div></div><div class="row" style="gap:10px"><span style="font-size:11px;font-weight:700;letter-spacing:.05em;color:${s.synced?'#1b1b1b':'#b0b0b0'}">${s.synced?'SYNCED':'NO TAKE'}</span>${icon('chevron_right',22)}</div></div>`;
+  }).join('');
+  const rail = [
+    ['add','Add songs','gigAddSongs',true],
+    ['edit','Edit','gigEditOpen'],
+    ['image','Photos','gigPhotosOpen'],
+    ['person_add','Add Collaborator','gigAddCollab'],
+    ['settings','Settings','openGigSettings'],
+    ['share','Share','gigShare'],
+    ['qr_code_2','QR Code','openQr']
+  ];
+  const railHTML = rail.map(([ic,label,act,big])=>{
+    if(big) return `<div class="row" style="flex-direction:column;gap:6px;cursor:pointer" data-act="${act}"><div style="width:40px;height:40px;border-radius:50%;background:#1b1b1b;color:#fff;display:flex;align-items:center;justify-content:center">${icon(ic,24)}</div><span style="font-size:13px;font-weight:600">${label}</span></div>`;
+    return `<div class="row" style="flex-direction:column;gap:6px;cursor:pointer" data-act="${act}">${icon(ic,28)}<span style="font-size:13px;color:#444">${label}</span></div>`;
+  }).join('');
+  return `<div class="scr">
+    <div class="gig-grid">
+      <div style="display:flex;flex-direction:column;gap:22px">
+        <div class="search-field" style="max-width:340px;color:#8a8a8a"><span style="flex:1">Search this gig</span>${icon('search',22)}</div>
+        <div class="row" style="gap:14px;align-items:flex-start;margin-top:10px">
+          <span class="icon-btn" style="margin-top:4px" data-act="nav" data-to="home">${icon('chevron_left',26)}</span>
+          <div><div style="font-size:30px;font-weight:700;line-height:1.25">${esc(g.title)}</div><div style="font-size:14px;color:#6f6f6f;margin-top:6px">${esc(g.date)} · ${g.setlist.length} songs</div></div>
+        </div>
+        <div>${setRows}</div>
+      </div>
+      <div class="gig-rail">${railHTML}</div>
+    </div>
+    <div style="position:fixed;left:0;right:0;bottom:40px;display:flex;justify-content:center;pointer-events:none">
+      <button class="icon-btn" title="Start gig player" style="pointer-events:auto;width:68px;height:68px;border-radius:50%;background:#1b1b1b;color:#fff;box-shadow:0 10px 30px rgba(0,0,0,.2)" data-act="goLive">${icon('play_arrow',38)}</button>
+    </div>
+  </div>
+  ${ST.qrOpen?`<div class="modal-backdrop" data-act="closeQr"><div class="modal" style="align-items:center;text-align:center;max-width:380px" onclick="event.stopPropagation()">
+    ${qrHTML()}
+    <div style="font-size:15px;font-weight:700">singa.live/g/${esc(g.id)}</div>
+    <div style="font-size:13px;color:#6f6f6f;text-align:center">Guests scan to follow the lyrics, request songs, share photos and chat. No app needed.</div>
+  </div></div>`:''}`;
+}
+
 function renderGigPhotos(){
-  var g = STATE.gigs[UI.gigId];
-  var h = screenHeader("Photos");
-  h += '<div style="margin-bottom:12px">'+esc(g.name)+'</div>';
-  h += '<div class="photo-grid" style="padding:0">'+g.photos.map(function(c){return '<div class="photo-tile" style="background:'+c+'"></div>';}).join("")+'</div>';
-  h += '<button class="btn btn-outline" style="margin-top:14px" data-act="addPhotoOwner" data-gig="'+g.id+'">'+icon("camera")+' Add a photo</button>';
-  return h;
-}
-function renderGigEdit(){
-  var g = STATE.gigs[UI.gigId];
-  var h = screenHeader("Edit");
-  h += '<div style="margin-bottom:14px">'+esc(g.name)+'</div>';
-  h += '<div class="list">';
-  g.setlist.forEach(function(sid,i){
-    var s = STATE.songs[sid];
-    if(!s) return;
-    h += '<div class="list-row"><div class="meta"><div class="t">'+esc(s.title)+'</div><div class="s">'+esc(s.sub)+'</div></div><button class="iconbtn" data-act="removeFromSetlist" data-gig="'+g.id+'" data-i="'+i+'">'+icon("close")+'</button></div>';
-  });
-  h += '</div>';
-  return h;
+  const g = gigObj();
+  return `<div class="scr" style="gap:28px">
+    <div class="row" style="align-items:flex-end;gap:14px">
+      <span class="icon-btn" style="margin-bottom:6px" data-act="nav" data-to="gig">${icon('chevron_left',26)}</span>
+      <div style="flex:1"><div style="font-size:13px;font-weight:700">Photos</div><div style="font-size:26px;font-weight:700;line-height:1.25;max-width:420px">${esc(g.title)}</div></div>
+      <span class="icon-btn" data-act="addPhoto">${icon('photo_camera',30)}</span>
+      <span class="icon-btn" data-act="addPhoto">${icon('upload',30)}</span>
+    </div>
+    <div class="photogrid">${D.photos.slice().reverse().map(p=>`<div class="phototile" style="grid-column:span ${p.span}"><span>photo · ${esc(p.by)}</span></div>`).join('')}</div>
+  </div>`;
 }
 
-function renderCollaborators(){
-  var g = STATE.gigs[UI.gigId];
-  var h = screenHeader("Collaborators");
-  h += '<div class="list">';
-  STATE.collaborators.forEach(function(c){
-    h += '<div class="list-row"><div class="meta"><div class="t">'+esc(c.name)+'</div><div class="s">'+c.gigs.map(function(gid){return STATE.gigs[gid]?STATE.gigs[gid].name:gid;}).join(", ")+'</div></div>'+icon("edit")+'</div>';
-  });
-  h += '</div>';
-  h += '<div class="inline-editor" style="margin-top:16px"><div class="section-h" style="margin-top:0">Edit / Add Collaborator</div>'+
-    '<div class="stack"><input class="input" id="invName" placeholder="Nickname"><input class="input" id="invEmail" placeholder="Email">'+
-    '<div style="font-size:12px;color:var(--fg-muted);margin-top:4px">Gigs</div>'+
-    Object.keys(STATE.gigs).map(function(gid){return '<label style="display:flex;gap:8px;align-items:center;font-size:13.5px"><input type="checkbox" class="invGig" value="'+gid+'" '+(gid===UI.gigId?"checked":"")+'> '+esc(STATE.gigs[gid].name)+'</label>';}).join("")+
-    '<button class="btn btn-primary" data-act="inviteCollaborator">Invite</button></div></div>';
-  return h;
+function renderGigEdit(){
+  const g = gigObj();
+  const list = ST.editList || g.setlist;
+  const rows = list.map((id,i)=>{
+    const s = song(id);
+    return `<div class="row" style="gap:12px;padding:14px 0;border-bottom:1px solid var(--b2)">
+      ${icon('drag_indicator',20)}
+      <div style="flex:1"><div style="font-size:16px;font-weight:600">${esc(s.title||'Untitled song')}</div><div style="font-size:13px;color:#8a8a8a;margin-top:3px">${esc(s.sub)}</div></div>
+      <span class="icon-btn" ${i===0?'style="opacity:.3"':''} data-act="editRowUp" data-id="${i}">${icon('arrow_upward',20)}</span>
+      <span class="icon-btn" data-act="editRowRemove" data-id="${i}">${icon('close',22)}</span>
+    </div>`;
+  }).join('');
+  return `<div class="scr" style="gap:24px">
+    <div class="row" style="align-items:flex-end;gap:14px">
+      <span class="icon-btn" style="margin-bottom:6px" data-act="nav" data-to="gig">${icon('chevron_left',26)}</span>
+      <div style="flex:1"><div style="font-size:13px;font-weight:700">Edit</div><div style="font-size:26px;font-weight:700;line-height:1.25;max-width:420px">${esc(g.title)}</div></div>
+      <a class="link" style="text-decoration:underline;margin-bottom:8px" data-act="saveGigEdit">Save</a>
+    </div>
+    <div style="max-width:460px">
+      <div class="row" style="justify-content:space-between;padding:14px 0;cursor:pointer" data-act="addToSetlist"><span style="font-size:15px;font-weight:700">Add a song</span>${icon('add',22)}</div>
+      ${rows}
+    </div>
+  </div>`;
+}
+
+function renderGigSettingsModal(){
+  const g = gigObj(), gs = gigSettings(g);
+  const rows = [['photos','Enable audience photos','Guests can share photos to the gig album'],
+    ['chat','Enable audience chat','A group chat for everyone at the gig'],
+    ['dm','Allow direct messages','Guests can message the band privately'],
+    ['browse','Allow audience to browse songs','Guests can see the setlist'],
+    ['order','Allow audience to choose songs order','Guest votes reorder the upcoming songs'],
+    ['requests','Allow audience to choose songs',"Guests can request songs that aren't on the setlist"]];
+  return `<div class="modal-backdrop" data-act="closeGigSettings"><div class="modal" onclick="event.stopPropagation()">
+    <div class="mhead"><span style="font-size:21px;font-weight:600">Gig settings</span><span class="icon-btn" data-act="closeGigSettings">${icon('close',22)}</span></div>
+    <div class="msub" style="margin-bottom:6px">${esc(g.title)}</div>
+    ${rows.map(([k,label,sub])=>{ const on=gs[k]; return `<div class="row" style="gap:14px;padding:11px 0;cursor:pointer" data-act="toggleGigSetting" data-id="${k}">
+      <div class="toggle" style="flex:none;background:${on?'#1b1b1b':'#fff'}"><div class="dot" style="left:${on?20:2}px;background:${on?'#fff':'#1b1b1b'}"></div></div>
+      <div><div style="font-size:15px;font-weight:600">${label}</div><div style="font-size:12px;color:#8a8a8a;margin-top:2px">${sub}</div></div></div>`; }).join('')}
+    <button class="btn btn-dark" style="margin-top:14px" data-act="closeGigSettings">Done</button>
+  </div></div>`;
+}
+
+/* ---- Gig Player ---- */
+function queueFor(g){
+  const gs = gigSettings(g);
+  const played = ST.played.filter(id=>g.setlist.includes(id));
+  const rest = g.setlist.filter(id=>!played.includes(id));
+  const cur = ST.gigCur && rest.includes(ST.gigCur) ? ST.gigCur : null;
+  let up = rest.filter(id=>id!==cur);
+  if(gs.order) up = up.map((id,i)=>({id,i,v:ST.orderVotes[id]||0})).sort((a,b)=>b.v-a.v||a.i-b.i).map(x=>x.id);
+  const cued = cur || up[0] || null;
+  if(!cur && cued) up = up.slice(1);
+  return { played, cued, up };
+}
+function gigSongId(){ const q = queueFor(gigObj()); return q.cued || gigObj().setlist[0]; }
+function openPlayer(id){
+  const g = gigObj(); const fresh = ST._liveGig !== g.id;
+  ST.screen='gigplayer'; ST.ctx='gig'; ST._liveGig=g.id;
+  ST.gigCur = id || (fresh ? null : ST.gigCur);
+  ST.played = fresh ? [] : (id ? ST.played.filter(x=>x!==id) : ST.played);
+  ST.t=0; ST.playing=false; ST.vcd=0; ST.gListening=false;
 }
 
 function renderGigPlayer(){
-  var g = STATE.gigs[UI.gigId];
-  if(!g || !g.live) return screenHeader("Gig Player")+"<p>Gig is not live.</p>";
-  var songId = g.setlist[g.currentSongIdx];
-  var song = STATE.songs[songId];
-  var h = screenHeader("Gig Player — Live");
-  h += '<h3 style="font-size:19px">'+esc(song.title)+'</h3><div style="color:var(--fg-muted);font-size:12.5px;margin-bottom:12px">'+esc(song.sub)+'</div>';
-  song.lines.forEach(function(line, li){
-    var isCur = li===g.currentLineIdx;
-    h += '<div style="opacity:'+(isCur?1:.4)+';font-weight:'+(isCur?700:400)+';margin-bottom:9px;font-size:16px">'+esc(line.text)+'</div>';
-  });
-  h += '<div class="row" style="margin-top:14px"><button class="btn btn-outline btn-sm" data-act="prevLine" data-gig="'+g.id+'">◀ Line</button><button class="btn btn-outline btn-sm" data-act="nextLine" data-gig="'+g.id+'">Line ▶</button></div>';
-  h += '<div class="row" style="margin-top:8px"><button class="btn btn-outline btn-sm" data-act="prevSong" data-gig="'+g.id+'" '+(g.currentSongIdx===0?"disabled":"")+'>◀ Song</button><button class="btn btn-outline btn-sm" data-act="nextSong" data-gig="'+g.id+'" '+(g.currentSongIdx>=g.setlist.length-1?"disabled":"")+'>Song ▶</button></div>';
-  h += '<div class="section-h">TV shows</div><div class="seg">'+["lyrics","next"].map(function(m){
-    return '<button class="'+(g.tvScreen===m?"active":"")+'" data-act="tvScreen" data-mode="'+m+'" data-gig="'+g.id+'">'+(m==="lyrics"?"Lyrics":"Up next + QR")+'</button>';
-  }).join("")+'</div>';
-  h += '<div style="height:14px"></div><button class="btn btn-outline" data-act="endGig" data-gig="'+g.id+'">End Gig</button>';
-  return h;
+  const g = gigObj();
+  const gq = queueFor(g), gs = gigSettings(g);
+  const isCollab = !g.mine;
+  const gStarted = ST.playing || ST.t>0;
+  const curId = gigSongId();
+  const s = song(curId);
+  const tm = timing(s);
+  const ci = curWord(tm, ST.t);
+  const seq = chordSeq(s);
+  const chord = chordAt(s,tm,Math.max(ci,0)) || (seq[0]||{}).ch;
+  const next = (seq.find(x=>x.k>ci && x.ch!==chord)||{}).ch;
+  const hasInst = ST.instrument!=='none';
+  const gigShowChords = hasInst || isCollab;
+  const dia = diagram(chord, next || (seq[0]||{}).ch, isCollab ? (ST.part==='Keys'?'piano':'guitar') : ST.instrument);
+  const gigHasLyrics = !!(s.lyrics && s.lyrics.trim());
+  const lines = gigHasLyrics ? buildLines(s, gStarted?'play':'view', { t: gStarted?ST.t:null, selChord: chord, hideChords: !isCollab && !hasInst }) : [];
+
+  const qRow = (id, kind) => {
+    const x = song(id), isCur = kind==='cur';
+    const tag = isCur ? (ST.playing?'NOW PLAYING':(gStarted?'PAUSED':(ST.gListening?'LISTENING':'UP NEXT'))) : '';
+    const tagCol = isCur && (ST.playing||ST.gListening) ? '#f24822' : '#8a8a8a';
+    const col = kind==='played' ? '#b0b0b0' : '#1b1b1b';
+    const subCol = kind==='played' ? '#c4c4c4' : (isCur?'#1b1b1b':'#8a8a8a');
+    const iconName = kind==='played' ? 'check' : (isCur ? (ST.playing?'pause':'play_arrow') : '');
+    const hasVotes = kind==='up' && gs.order && (ST.orderVotes[id]||0)>0;
+    return `<div class="row" style="gap:8px;padding:12px 0;border-bottom:1px solid var(--b2);cursor:pointer;justify-content:space-between" data-act="startGig" data-id="${id}">
+      <div style="min-width:0;flex:1">
+        ${isCur?`<div style="font-size:10px;font-weight:800;letter-spacing:.08em;color:${tagCol};margin-bottom:3px">${tag}</div>`:''}
+        <div style="font-size:14px;font-weight:${isCur?700:400};color:${col};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(x.title||'Untitled song')}</div>
+        <div style="font-size:11px;color:${subCol};font-weight:${isCur?600:400};margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(x.sub)}</div>
+      </div>
+      ${hasVotes?`<span style="font-size:11px;font-weight:700;color:#6f6f6f;display:flex;align-items:center">${icon('arrow_drop_up',16)}${ST.orderVotes[id]||0}</span>`:''}
+      <span style="color:${kind==='played'?'#c4c4c4':'#1b1b1b'}">${iconName?icon(iconName,18):''}</span>
+    </div>`;
+  };
+  let queueHTML = '';
+  if(gq.cued) queueHTML += qRow(gq.cued,'cur');
+  gq.up.forEach(id=> queueHTML += qRow(id,'up'));
+  if(gq.played.length){ queueHTML += `<div style="font-size:11px;font-weight:800;letter-spacing:.08em;color:#9a9a9a;padding:22px 0 6px">PLAYED</div>`; gq.played.forEach(id=> queueHTML += qRow(id,'played')); }
+
+  const guestCount = 23 + ' guests';
+  const chordScale = Math.max(0.55, Math.min(1.9, ST.chordH/230));
+  const hint = !gigHasLyrics ? 'Tap another song to continue' : (ST.playing ? 'Tap the song in the list to pause' : (gStarted ? 'Paused · tap the song to resume' : (ST.startMode==='countdown' ? 'Tap a song in the list to start · 3-2-1 countdown' : 'Tap a song in the list to start listening')));
+
+  return `<div class="gigplayer-grid">
+    <div class="gigplayer-side">
+      <div class="row" style="gap:8px">
+        <span class="icon-btn" data-act="exitGig">${icon('chevron_left',24)}</span>
+        <span style="background:#f24822;color:#fff;font-size:10px;font-weight:800;letter-spacing:.08em;padding:3px 6px;border-radius:4px">LIVE</span>
+        <span style="font-size:12px;color:#6f6f6f;display:flex;align-items:center;gap:3px">${icon('group',16)}${guestCount}</span>
+      </div>
+      <div style="font-size:18px;font-weight:700;line-height:1.25;margin:22px 16px 18px 0">${esc(g.title)}</div>
+      <div style="flex:1;min-height:0;overflow:auto">${queueHTML}</div>
+    </div>
+    <div style="padding:20px clamp(16px,4vw,48px) 20px;display:flex;flex-direction:column;min-height:0;position:relative;flex:1">
+      <div>
+        <div style="font-size:26px;font-weight:700;letter-spacing:-0.01em">${esc(s.title||'Untitled song')}</div>
+        <div style="font-size:14px;color:#6f6f6f;margin-top:4px">${esc(s.sub)}</div>
+        ${s.by?`<div class="row" style="gap:6px;font-size:13px;margin-top:8px">${icon('account_circle',18)}added by ${esc(s.by)}</div>`:''}
+      </div>
+      ${gigHasLyrics ? `
+        ${gigShowChords ? `<div style="height:${Math.round(ST.chordH)}px;display:flex;align-items:center;justify-content:center;overflow:hidden">
+          <div style="display:flex;flex-direction:column;align-items:center;gap:14px;transform:scale(${chordScale})">${diagramHTML(dia)}
+            <button class="link" style="display:flex;align-items:center;gap:6px" data-act="playSample">${icon(ST.sampling?'stop_circle':'play_circle',22)}${ST.sampling?'Stop sample':'Play Sample'}</button>
+          </div></div>
+        <div class="row" style="justify-content:center;cursor:ns-resize;height:30px">${icon('drag_handle',26)}</div>` : ''}
+        <div style="flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;align-items:center;padding:16px 0 30%">${linesHTML(lines)}</div>
+      ` : `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:#6f6f6f">
+          ${icon('lyrics',40)}
+          <div style="font-size:16px;font-weight:600;color:#1b1b1b">No synced take for this song yet</div>
+          <div style="font-size:13px;text-align:center">Guests see "Up next" until you move on. Tap the next song to continue.</div>
+        </div>`}
+      ${isCollab ? `<div style="border:1px solid #e6e6e6;border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:12px;margin-top:10px">
+          ${icon('edit_note',24)}<div style="flex:1;font-size:12px;color:#6f6f6f;line-height:1.4"><span style="font-weight:700;color:#1b1b1b">You're a collaborator on this gig.</span> Your own chords and notes are layered on the owner's track. Only you see them.</div>
+          <button class="btn btn-outline btn-sm" data-act="editPart">Edit my part</button>
+        </div>` : ''}
+      <div style="min-height:64px;display:flex;align-items:center;justify-content:center;padding-top:8px">
+        ${ST.gListening ? `<div class="row" style="gap:12px;cursor:pointer" data-act="gigHeard">${icon('mic',30)}<div><div style="font-size:16px;font-weight:600">I'm listening. Playback will start playing when you start singing.</div><div style="font-size:12px;color:#8a8a8a;margin-top:3px">Prototype: tap here to simulate singing</div></div></div>`
+        : `<div style="font-size:13px;color:#8a8a8a;display:flex;align-items:center;gap:6px">${icon('touch_app',18)}${hint}</div>`}
+      </div>
+    </div>
+  </div>
+  ${ST.vcd>0?`<div class="modal-backdrop" style="background:rgba(255,255,255,.75);font-size:180px;font-weight:800">${Math.max(1,Math.ceil(ST.vcd))}</div>`:''}`;
+}
+/* ============================================================
+   MODALS: Upgrade / Picker / New / Collaborator editor
+   ============================================================ */
+function renderUpgradeModal(){
+  return `<div class="modal-backdrop" data-act="closeUpgrade"><div class="modal" style="max-width:520px" onclick="event.stopPropagation()">
+    <div class="mhead"><span style="font-size:21px;font-weight:600">Choose your plan</span><span class="icon-btn" data-act="closeUpgrade">${icon('close',22)}</span></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div style="border:1.5px solid #e2e2e2;border-radius:12px;padding:18px;display:flex;flex-direction:column;gap:6px">
+        <div style="font-size:17px;font-weight:700">Free</div><div style="font-size:26px;font-weight:800">$0</div><div style="font-size:12px;color:#8a8a8a">Your current plan</div>
+      </div>
+      <div style="border:2px solid #f24822;border-radius:12px;padding:18px;display:flex;flex-direction:column;gap:6px">
+        <div style="font-size:17px;font-weight:700;display:flex;align-items:center;gap:4px">${icon('bolt',20)}RockStar</div>
+        <div style="font-size:26px;font-weight:800">$4.99<span style="font-size:13px;font-weight:600;color:#6f6f6f"> / month</span></div>
+        <div style="font-size:12px;color:#8a8a8a">Billed monthly. Cancel anytime.</div>
+      </div>
+    </div>
+    <div style="font-size:13px;color:#8a8a8a;border:1px dashed #d4d4d4;border-radius:10px;padding:14px;text-align:center">RockStar features will be listed here.</div>
+    <button class="btn btn-accent" data-act="doUpgrade">Upgrade to RockStar</button>
+  </div></div>`;
 }
 
-function renderAccount(){
-  var h = screenHeader("My Account");
-  h += '<div class="section-h">Account Details</div><div class="list">'+
-    '<div class="list-row" style="flex-direction:column;align-items:flex-start;gap:2px"><div style="font-size:11px;color:var(--fg-muted)">Nickname</div><input class="input" style="border:none;padding:0;font-weight:600" value="'+esc(STATE.account.nickname)+'" data-bind="acctName"></div>'+
-    '<div class="list-row" style="flex-direction:column;align-items:flex-start;gap:2px"><div style="font-size:11px;color:var(--fg-muted)">Email</div><input class="input" style="border:none;padding:0;font-weight:600" value="'+esc(STATE.account.email)+'" data-bind="acctEmail"></div>'+
-    '</div>';
-  h += '<div class="section-h">Notifications per gig</div>';
-  Object.keys(STATE.gigs).forEach(function(gid){
-    var g = STATE.gigs[gid];
-    h += '<div class="inline-editor" style="margin-bottom:10px"><b style="font-size:13.5px">'+esc(g.name)+'</b>'+
-      ["req","photos","chat"].map(function(k){
-        var label = k==="req"?"Song requests":k==="photos"?"Guest photos":"Chat messages";
-        return '<label style="display:flex;gap:8px;align-items:center;font-size:13.5px;margin-top:7px"><input type="checkbox" '+(g.notif[k]?"checked":"")+' data-act="toggleNotif" data-gig="'+gid+'" data-k="'+k+'"> '+label+'</label>';
-      }).join("")+'</div>';
-  });
-  return h;
-}
-
-function screenContent(){
-  switch(UI.screen){
-    case "home": return renderHome();
-    case "library": return renderLibrary();
-    case "playlist": return renderPlaylist();
-    case "song": return renderSongViewer();
-    case "create": return renderCreate();
-    case "gig": return renderGigDetail();
-    case "gigqr": return renderGigShare();
-    case "gigphotos": return renderGigPhotos();
-    case "gigedit": return renderGigEdit();
-    case "collaborators": return renderCollaborators();
-    case "gigplayer": return renderGigPlayer();
-    case "account": return renderAccount();
-    default: return renderHome();
-  }
-}
-
-/* ============================== shell: header / sidebar / bottomnav ============================== */
-var NAV_ITEMS = [["home","Home","home"],["library","Library","library"],["account","Account","person"]];
-
-function renderHeader(){
-  var el = document.getElementById("header");
-  if(!el) return;
-  el.innerHTML = '<button class="iconbtn" data-act="toggleMenuRoot" style="visibility:hidden">'+icon("menu")+'</button>'+
-    '<div class="wordmark">Singa</div>'+
-    '<button class="iconbtn" data-act="goto" data-screen="account">'+icon("person")+'</button>';
-}
-function renderBottomNav(){
-  var el = document.getElementById("bottomnav");
-  if(!el) return;
-  el.innerHTML = NAV_ITEMS.map(function(n){
-    return '<button class="'+(UI.screen===n[0]?"active":"")+'" data-act="goto" data-screen="'+n[0]+'">'+icon(n[2])+'<span>'+n[1]+'</span></button>';
-  }).join("");
-}
-function renderSidebar(){
-  var el = document.getElementById("sidebar");
-  if(!el) return;
-  var h = '<div class="wordmark" style="margin:4px 0 16px">Singa</div>';
-  h += '<div class="navtabs">'+NAV_ITEMS.map(function(n){
-    return '<button class="'+(UI.screen===n[0]?"active":"")+'" data-act="goto" data-screen="'+n[0]+'">'+icon(n[2])+' '+n[1]+'</button>';
-  }).join("")+'</div>';
-  h += '<button class="btn btn-outline btn-sm" style="width:100%;margin-bottom:6px" data-act="createNew">'+icon("add")+' Add a Song</button>';
-  if(UI.screen==="song" && UI.viewerId){
-    var s = STATE.songs[UI.viewerId];
-    h += '<div class="side-title">This song</div><div class="list">'+Object.keys(STATE.songs).map(function(id){
-      var ss = STATE.songs[id];
-      return '<div class="list-row" style="padding:9px 6px" data-act="openSong" data-id="'+id+'"><div class="meta"><div class="t" style="font-size:13.5px">'+esc(ss.title)+(id===UI.viewerId?' •':'')+'</div><div class="s">'+esc(ss.sub)+'</div></div></div>';
-    }).join("")+'</div>';
-  } else if(UI.screen==="gig" || UI.screen==="gigplayer" || UI.screen==="gigqr" || UI.screen==="gigphotos" || UI.screen==="gigedit" || UI.screen==="collaborators"){
-    var g = STATE.gigs[UI.gigId];
-    if(g){
-      h += '<div class="side-title">'+esc(g.name)+'</div><div class="list">'+g.setlist.map(function(sid){
-        var ss = STATE.songs[sid]; if(!ss) return "";
-        return '<div class="list-row" style="padding:9px 6px" data-act="openSong" data-id="'+sid+'"><div class="meta"><div class="t" style="font-size:13.5px">'+esc(ss.title)+'</div><div class="s">'+esc(ss.sub)+'</div></div></div>';
-      }).join("")+'</div>';
+function renderPickerModal(){
+  const pick = ST.pick, sp = ST.songPick;
+  let heading, sub, rows, hasSearch=false, hasNew=false, newLabel='', closeAct, query='';
+  if(sp){
+    const isPl = sp.kind==='playlist';
+    const target = isPl ? D.playlists.find(p=>p.id===sp.id) : D.gigs.find(g=>g.id===sp.id);
+    const ids = target ? (isPl?target.ids:target.setlist) : [];
+    const q = (ST.spQuery||'').trim().toLowerCase();
+    heading = 'Add songs'; sub = target?target.title:''; hasSearch=true; query = ST.spQuery||'';
+    rows = D.order.filter(id=>{ const x=song(id); return !q || ((x.title||'')+' '+(x.sub||'')).toLowerCase().includes(q); })
+      .map(id=>{ const x=song(id), on=ids.includes(id); return `<div class="row" style="gap:14px;padding:12px 0;border-bottom:1px solid #f0f0f0;cursor:pointer" data-act="toggleSongPick" data-id="${id}"><span style="width:22px;height:22px;flex:none;border-radius:6px;border:1.5px solid var(--fg);background:${on?'#1b1b1b':'#fff'};color:#fff;display:flex;align-items:center;justify-content:center">${on?icon('check',16):''}</span><div style="min-width:0"><div style="font-size:15px;font-weight:600">${esc(x.title||'Untitled song')}</div><div style="font-size:12px;color:#8a8a8a;margin-top:2px">${esc(x.sub||(x.synced?'':'Draft'))}</div></div></div>`; }).join('');
+    closeAct = 'closeSongPick';
+  } else if(pick){
+    const isPl = pick.kind==='playlist', sid = pick.songId;
+    heading = isPl ? 'Add to playlist' : 'Add to a gig'; sub = song(sid).title || 'Untitled song'; hasNew = true; newLabel = isPl?'New playlist':'New gig';
+    if(isPl){
+      rows = D.playlists.filter(p=>!p.auto).map(p=>{ const on=p.ids.includes(sid); return `<div class="row" style="gap:14px;padding:12px 0;border-bottom:1px solid #f0f0f0;cursor:pointer" data-act="togglePickPlaylist" data-id="${p.id}"><span style="width:22px;height:22px;flex:none;border-radius:6px;border:1.5px solid var(--fg);background:${on?'#1b1b1b':'#fff'};color:#fff;display:flex;align-items:center;justify-content:center">${on?icon('check',16):''}</span><div><div style="font-size:15px;font-weight:600">${esc(p.title)}</div><div style="font-size:12px;color:#8a8a8a;margin-top:2px">${p.ids.length} songs</div></div></div>`; }).join('');
+    } else {
+      rows = D.gigs.map(g=>{ const on=g.setlist.includes(sid); return `<div class="row" style="gap:14px;padding:12px 0;border-bottom:1px solid #f0f0f0;cursor:pointer" data-act="togglePickGig" data-id="${g.id}"><span style="width:22px;height:22px;flex:none;border-radius:6px;border:1.5px solid var(--fg);background:${on?'#1b1b1b':'#fff'};color:#fff;display:flex;align-items:center;justify-content:center">${on?icon('check',16):''}</span><div><div style="font-size:15px;font-weight:600">${esc(g.title)}</div><div style="font-size:12px;color:#8a8a8a;margin-top:2px">${esc(g.date)} · ${g.setlist.length} songs</div></div></div>`; }).join('');
     }
-  } else {
-    h += '<div class="side-title">Playlists</div><div class="list">'+STATE.playlists.map(function(p){
-      return '<div class="list-row" style="padding:9px 6px" data-act="openPlaylist" data-id="'+p.id+'"><div class="meta"><div class="t" style="font-size:13.5px">'+esc(p.name)+'</div></div></div>';
-    }).join("")+'</div>';
-    h += '<div class="side-title">Gigs</div><div class="list">'+Object.keys(STATE.gigs).map(function(id){
-      var g = STATE.gigs[id];
-      return '<div class="list-row" style="padding:9px 6px" data-act="openGig" data-id="'+id+'"><div class="meta"><div class="t" style="font-size:13.5px">'+esc(g.name)+(g.live?' · Live':'')+'</div></div></div>';
-    }).join("")+'</div>';
+    closeAct = 'closePick';
   }
-  el.innerHTML = h;
+  return `<div class="modal-backdrop" data-act="${closeAct}"><div class="modal" style="max-width:440px" onclick="event.stopPropagation()">
+    <div class="mhead"><span style="font-size:21px;font-weight:600">${esc(heading)}</span><span class="icon-btn" data-act="${closeAct}">${icon('close',22)}</span></div>
+    <div class="msub">${esc(sub)}</div>
+    ${hasSearch?`<div class="search-field" style="margin-bottom:6px"><input placeholder="Search your songs" value="${esc(query)}" data-bind="spQuery">${icon('search',20)}</div>`:''}
+    <div style="max-height:380px;overflow:auto">${rows}</div>
+    ${hasNew?`<a class="link" style="display:flex;align-items:center;gap:6px;margin-top:8px" data-act="openNew" data-id="${heading==='Add to playlist'?'playlist':'gig'}">${icon('add',20)}${newLabel}</a>`:''}
+    <button class="btn btn-dark" style="margin-top:14px" data-act="${closeAct}">Done</button>
+  </div></div>`;
 }
 
+function renderNewModal(){
+  const ni = ST.newItem;
+  const heading = ni.kind==='playlist' ? 'New playlist' : 'New gig';
+  const placeholder = ni.kind==='playlist' ? 'e.g. Campfire songs' : "e.g. Maya's birthday";
+  return `<div class="modal-backdrop" data-act="closeNew"><div class="modal" style="max-width:420px" onclick="event.stopPropagation()">
+    <div class="mhead"><span style="font-size:21px;font-weight:600">${heading}</span><span class="icon-btn" data-act="closeNew">${icon('close',22)}</span></div>
+    <label style="display:flex;flex-direction:column;gap:4px;border-bottom:1px solid #e2e2e2;padding-bottom:8px"><span style="font-size:12px;color:#8a8a8a">Name</span><input style="border:0;outline:none;font-size:16px;font-weight:600" placeholder="${placeholder}" value="${esc(ni.name)}" data-bind="newName" data-key="createNew" autofocus></label>
+    ${ni.kind==='gig'?`<label style="display:flex;flex-direction:column;gap:4px;border-bottom:1px solid #e2e2e2;padding-bottom:8px"><span style="font-size:12px;color:#8a8a8a">Date</span><input style="border:0;outline:none;font-size:16px;font-weight:600" placeholder="e.g. Oct 12, 2026" value="${esc(ni.date)}" data-bind="newDate" data-key="createNew"></label>`:''}
+    <button class="btn" style="background:${ni.name.trim()?'#1b1b1b':'#d6d6d6'};color:#fff;margin-top:6px" data-act="createNew">Create</button>
+  </div></div>`;
+}
+
+function renderCollabEditModal(){
+  const ce = ST.collabEdit;
+  const heading = ce.i==null ? 'Add Collaborator' : 'Edit Collaborator';
+  const gigRows = D.gigs.map(g=>{ const on = ce.gigs.includes(g.id); return `<div class="row" style="gap:14px;padding:9px 0;cursor:pointer" data-act="toggleCeGig" data-id="${g.id}">
+    <div class="toggle" style="background:${on?'#1b1b1b':'#fff'}"><div class="dot" style="left:${on?20:2}px;background:${on?'#fff':'#1b1b1b'}"></div></div>
+    <span style="font-size:14px;font-weight:600">${esc(g.title)}</span></div>`; }).join('');
+  return `<div class="modal-backdrop" data-act="closeCollabEdit"><div class="modal" style="max-width:440px" onclick="event.stopPropagation()">
+    <div class="mhead"><span style="font-size:21px;font-weight:600">${heading}</span><span class="icon-btn" data-act="closeCollabEdit">${icon('close',22)}</span></div>
+    <label style="display:flex;flex-direction:column;gap:4px;border-bottom:1px solid #e2e2e2;padding-bottom:8px"><span style="font-size:12px;color:#8a8a8a">Name</span><input style="border:0;outline:none;font-size:16px;font-weight:600" value="${esc(ce.name)}" data-bind="ceName"></label>
+    <label style="display:flex;flex-direction:column;gap:4px;border-bottom:1px solid #e2e2e2;padding-bottom:8px"><span style="font-size:12px;color:#8a8a8a">Email</span><input style="border:0;outline:none;font-size:16px;font-weight:600" value="${esc(ce.email)}" data-bind="ceEmail"></label>
+    <div style="font-size:12px;color:#8a8a8a;margin-top:6px">Gigs</div>
+    <div>${gigRows}</div>
+    <button class="btn btn-dark" style="margin-top:8px" data-act="saveCollab">Save</button>
+  </div></div>`;
+}
+
+function renderModals(){
+  let html = '';
+  if(ST.gigSettings) html += renderGigSettingsModal();
+  if(ST.upgrade) html += renderUpgradeModal();
+  if(ST.pick || ST.songPick) html += renderPickerModal();
+  if(ST.newItem) html += renderNewModal();
+  if(ST.collabEdit) html += renderCollabEditModal();
+  return html;
+}
+/* ============================================================
+   RENDER DISPATCH
+   ============================================================ */
 function render(){
-  var main = document.getElementById("main");
-  if(!main) return;
-  main.innerHTML = screenContent();
-  renderHeader();
-  renderBottomNav();
-  renderSidebar();
-  var fab = document.getElementById("fab");
-  if(fab) fab.hidden = UI.screen!=="home";
-}
-
-/* ============================== event handling ============================== */
-document.addEventListener("click", function(e){
-  var btn = e.target.closest("[data-act]");
-  if(!btn) return;
-  var act = btn.getAttribute("data-act");
-  handleAction(act, btn);
-});
-document.addEventListener("change", function(e){
-  var bindEl = e.target.closest("[data-bind]");
-  if(!bindEl) return;
-  handleBind(bindEl.getAttribute("data-bind"), bindEl);
-});
-document.addEventListener("input", function(e){
-  var bindEl = e.target.closest("[data-bind]");
-  if(!bindEl) return;
-  var bind = bindEl.getAttribute("data-bind");
-  if(bind==="homesearch" || bind==="libsearch"){ UI.libQuery = bindEl.value; render(); }
-  else if(bind==="draftTitle"){ UI.draft.title = bindEl.value; }
-  else if(bind==="draftSub"){ UI.draft.sub = bindEl.value; }
-  else if(bind==="draftLyrics"){ UI.draft.lyricsText = bindEl.value; }
-  else if(bind==="acctName"){ STATE.account.nickname = bindEl.value; }
-  else if(bind==="acctEmail"){ STATE.account.email = bindEl.value; }
-});
-
-function handleBind(bind, el){
-  if(bind==="draftRights"){ UI.draft.rightsConfirmed = el.checked; }
-  else if(bind==="draftAddPlaylist"){ UI.draft.addToPlaylist = el.checked; }
-  else if(bind==="draftAddGig"){ UI.draft.addToGig = el.checked ? GIG_ID : ""; }
-  else if(bind==="draftPublic"){ UI.draft.makePublic = el.checked; }
-  render();
-}
-
-function handleAction(act, btn){
-  var id = btn.getAttribute("data-id");
-  var gigId = btn.getAttribute("data-gig") || UI.gigId;
-  switch(act){
-    case "back": back(); break;
-    case "goto": go(btn.getAttribute("data-screen")); break;
-    case "openSong": go("song", {viewerId:id, menuOpen:false, confirmDelete:false}); break;
-    case "openPlaylist": go("playlist", {openPlaylistId:id}); break;
-    case "openGig": go("gig", {gigId:id}); break;
-    case "openCollaborators": go("collaborators", {gigId:gigId}); break;
-    case "openGigPlayer": go("gigplayer", {gigId:gigId}); break;
-    case "gigEdit": go("gigedit", {gigId:gigId}); break;
-    case "gigPhotos": go("gigphotos", {gigId:gigId}); break;
-    case "gigQr": go("gigqr", {gigId:gigId}); break;
-    case "libTab": UI.libTab = btn.getAttribute("data-tab"); UI.libQuery=""; render(); return;
-    case "createNew": UI.draft = newDraft(null); go("create"); break;
-    case "menuEdit": UI.menuOpen=false; UI.draft = newDraft(STATE.songs[UI.viewerId]); go("create"); break;
-    case "menuAddNew": UI.menuOpen=false; UI.draft = newDraft(null); go("create"); break;
-    case "menuInstrument": {
-      var s = STATE.songs[UI.viewerId];
-      var order = ["guitar","ukulele","piano"];
-      s.instrument = order[(order.indexOf(s.instrument)+1)%order.length];
-      UI.menuOpen=false; saveState(); return;
-    }
-    case "menuSettings": UI.menuOpen=false; toast("Full settings — not wired in this prototype"); render(); return;
-    case "menuDelete": {
-      if(UI.confirmDelete){
-        var sid = UI.viewerId;
-        delete STATE.songs[sid];
-        STATE.playlists.forEach(function(p){ p.songs = p.songs.filter(function(x){return x!==sid;}); });
-        Object.keys(STATE.gigs).forEach(function(gid){ STATE.gigs[gid].setlist = STATE.gigs[gid].setlist.filter(function(x){return x!==sid;}); });
-        UI.confirmDelete=false; UI.menuOpen=false; back(); saveState();
-      } else { UI.confirmDelete = true; render(); }
-      return;
-    }
-    case "toggleMenu": UI.menuOpen = !UI.menuOpen; render(); return;
-    case "createMode": UI.draft.mode = btn.getAttribute("data-mode"); render(); return;
-    case "createStep": case "toStep": UI.draft.step = btn.getAttribute("data-step"); render(); return;
-    case "useSample": {
-      var sample = STATE.songs.dgbmh;
-      UI.draft.title = sample.title; UI.draft.sub = sample.sub;
-      UI.draft.lines = JSON.parse(JSON.stringify(sample.lines));
-      UI.draft.lyricsText = sample.lines.map(function(l){return l.text;}).join("\n");
-      UI.draft.step="chords"; render(); return;
-    }
-    case "lyricsNext": {
-      var d = UI.draft;
-      if(!d.lyricsText.trim()){ toast("Add some lyrics first"); render(); return; }
-      if(!d.lines.length){ d.lines = d.lyricsText.split("\n").filter(function(l){return l.trim();}).map(function(t){return {text:t.trim(), chords:[], marks:[]};}); }
-      var looksSimilar = d.title.toLowerCase().indexOf("breaking my heart")>-1 || d.title.toLowerCase().indexOf("don't go")>-1;
-      if(looksSimilar && !d.similarOpen){ d.similarOpen = true; render(); return; }
-      d.step = "chords"; render(); return;
-    }
-    case "useExisting": toast("Opening community version (prototype)"); render(); return;
-    case "continueMine": UI.draft.similarOpen=false; UI.draft.step="chords"; render(); return;
-    case "pickword": {
-      var li = parseInt(btn.getAttribute("data-li"),10), wi = parseInt(btn.getAttribute("data-wi"),10), kind = btn.getAttribute("data-kind");
-      if(kind==="chords") UI.draft.activeChordPos = {li:li,wi:wi};
-      else UI.draft.activeMarkPos = {li:li,wi:wi};
-      render(); return;
-    }
-    case "cancelPick": UI.draft.activeChordPos=null; UI.draft.activeMarkPos=null; render(); return;
-    case "addChord": case "removeChord": {
-      var li2 = parseInt(btn.getAttribute("data-li"),10), wi2 = parseInt(btn.getAttribute("data-wi"),10);
-      var line = UI.draft.lines[li2];
-      line.chords = (line.chords||[]).filter(function(c){return c.w!==wi2;});
-      if(act==="addChord"){
-        var val = document.getElementById("chordInput").value.trim();
-        if(val) line.chords.push({w:wi2, sym:val});
-      }
-      UI.draft.activeChordPos=null; render(); return;
-    }
-    case "addMark": case "removeMark": {
-      var li3 = parseInt(btn.getAttribute("data-li"),10), wi3 = parseInt(btn.getAttribute("data-wi"),10);
-      var line2 = UI.draft.lines[li3];
-      line2.marks = (line2.marks||[]).filter(function(m){return m.w!==wi3;});
-      if(act==="addMark"){
-        var val2 = document.getElementById("markInput").value.trim();
-        if(val2) line2.marks.push({w:wi3, text:val2});
-      }
-      UI.draft.activeMarkPos=null; render(); return;
-    }
-    case "practiceSong": toast("No synced take yet to practice against"); return;
-    case "startRecord": {
-      UI.draft.syncPhase="countdown"; UI.draft.countdownN=3; render();
-      var tick = function(){
-        UI.draft.countdownN--;
-        if(UI.draft.countdownN<=0){ UI.draft.syncPhase="recording"; UI.draft.recordSeconds=0; UI.draft.waveHeights=new Array(28).fill(6); render(); runRecordTimers(); }
-        else { render(); setTimeout(tick,700); }
-      };
-      setTimeout(tick,700);
-      return;
-    }
-    case "stopRecord": clearInterval(UI._recTimer); clearInterval(UI._waveTimer); UI.draft.syncPhase="syncing"; render(); runSyncTimer(); return;
-    case "abortRecord": clearInterval(UI._recTimer); clearInterval(UI._waveTimer); UI.draft.syncPhase="idle"; render(); return;
-    case "uploadTake": UI.draft.syncPhase="syncing"; render(); runSyncTimer(); return;
-    case "skipSync": finalizeDraft(false); render(); return;
-    case "viewFinishedSong": go("song",{viewerId:UI.draft.id}); break;
-    case "addAnotherSong": UI.draft = newDraft(null); go("create"); break;
-    case "startGig": {
-      var g = STATE.gigs[gigId]; g.live=true; g.currentSongIdx=0; g.currentLineIdx=0; g.tvScreen="lyrics"; saveState(); toast("Gig is live — Audience and TV are now following"); return;
-    }
-    case "endGig": { var g2 = STATE.gigs[gigId]; g2.live=false; g2.tvScreen="next"; saveState(); back(); return; }
-    case "moveUp": case "moveDown": {
-      var i = parseInt(btn.getAttribute("data-i"),10);
-      var list = STATE.gigs[gigId].setlist;
-      var j = act==="moveUp" ? i-1 : i+1;
-      if(j<0||j>=list.length) return;
-      var tmp=list[i]; list[i]=list[j]; list[j]=tmp; saveState(); return;
-    }
-    case "removeFromSetlist": {
-      var i2 = parseInt(btn.getAttribute("data-i"),10);
-      STATE.gigs[gigId].setlist.splice(i2,1); saveState(); return;
-    }
-    case "copyLink": {
-      var url = "https://"+STATE.gigs[gigId].url.replace("/tv/","/g/");
-      if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(url).then(function(){toast("Link copied");}).catch(function(){toast("Link ready to share");}); }
-      else toast("Link ready to share");
-      return;
-    }
-    case "addPhotoOwner": {
-      var colors=["#c6481f","#4169c7","#2a9d6b","#8e4fd6","#d6a84f"];
-      STATE.gigs[gigId].photos.unshift(colors[Math.floor(Math.random()*colors.length)]);
-      saveState(); return;
-    }
-    case "inviteCollaborator": {
-      var nameEl = document.getElementById("invName"), emailEl = document.getElementById("invEmail");
-      var gigsChecked = Array.prototype.slice.call(document.querySelectorAll(".invGig:checked")).map(function(c){return c.value;});
-      if(!nameEl.value.trim()){ toast("Enter a nickname"); return; }
-      STATE.collaborators.push({name:nameEl.value.trim(), email:emailEl.value.trim(), gigs:gigsChecked});
-      saveState(); toast("Invited"); return;
-    }
-    case "prevLine": { var g3=STATE.gigs[gigId]; if(g3.currentLineIdx>0){g3.currentLineIdx--; saveState();} return; }
-    case "nextLine": {
-      var g4=STATE.gigs[gigId]; var song4=STATE.songs[g4.setlist[g4.currentSongIdx]];
-      if(g4.currentLineIdx<song4.lines.length-1){g4.currentLineIdx++; saveState();} return;
-    }
-    case "prevSong": { var g5=STATE.gigs[gigId]; if(g5.currentSongIdx>0){g5.currentSongIdx--; g5.currentLineIdx=0; saveState();} return; }
-    case "nextSong": { var g6=STATE.gigs[gigId]; if(g6.currentSongIdx<g6.setlist.length-1){g6.currentSongIdx++; g6.currentLineIdx=0; saveState();} return; }
-    case "tvScreen": STATE.gigs[gigId].tvScreen = btn.getAttribute("data-mode"); saveState(); return;
-    case "toggleNotif": {
-      var gid=btn.getAttribute("data-gig"), k=btn.getAttribute("data-k");
-      STATE.gigs[gid].notif[k] = !STATE.gigs[gid].notif[k]; saveState(); return;
-    }
-    case "playSample": toast("Playing sample chord…"); return;
-    default: break;
+  document.body.classList.toggle('dark-invert', ST.perfDark);
+  document.getElementById('darkToggle').style.display = ST.screen==='login' ? 'none' : 'flex';
+  document.getElementById('darkPill').style.background = ST.perfDark ? '#1b1b1b' : '#fff';
+  document.getElementById('darkDot').style.left = (ST.perfDark?20:2)+'px';
+  document.getElementById('darkDot').style.background = ST.perfDark ? '#fff' : '#1b1b1b';
+  let html = '';
+  switch(ST.screen){
+    case 'login': html = renderLogin(); break;
+    case 'home': html = renderHome(); break;
+    case 'list': html = renderList(); break;
+    case 'search': html = renderSearch(); break;
+    case 'account': html = renderAccount(); break;
+    case 'collab': html = renderCollab(); break;
+    case 'create': html = renderCreate(); break;
+    case 'done': html = renderDone(); break;
+    case 'incomplete': html = renderIncomplete(); break;
+    case 'song': html = renderSong(); break;
+    case 'practice': html = renderPractice(); break;
+    case 'gig': html = renderGig(); break;
+    case 'gigphotos': html = renderGigPhotos(); break;
+    case 'gigedit': html = renderGigEdit(); break;
+    case 'gigplayer': html = renderGigPlayer(); break;
+    default: html = renderHome();
   }
-  render();
+  document.getElementById('screen').innerHTML = html;
+  document.getElementById('modalLayer').innerHTML = renderModals();
+  document.getElementById('toastBox').innerHTML = ST.toast ? `<div class="toast">${esc(ST.toast)}</div>` : '';
+  // autofocus search on search screen
+  if(ST.screen==='search'){ const el = document.querySelector('#screen input[data-bind="searchQuery"]'); if(el){ el.focus(); const v=el.value; el.value=''; el.value=v; } }
+  // scroll current lyric line into view
+  const sc = document.getElementById('lyricsScroll');
+  if(sc){ const cur = sc.querySelector('[data-cur]'); }
 }
 
-function runRecordTimers(){
-  UI._recTimer = setInterval(function(){
-    UI.draft.recordSeconds++;
-    render();
-  }, 1000);
-  UI._waveTimer = setInterval(function(){
-    UI.draft.waveHeights = UI.draft.waveHeights.map(function(){ return 6 + Math.round(Math.random()*44); });
-    var el = document.getElementById("waveEl");
-    if(el) el.innerHTML = UI.draft.waveHeights.map(function(v){return '<span style="height:'+v+'px"></span>';}).join("");
-  }, 140);
+/* ============================================================
+   ACTIONS
+   ============================================================ */
+function autoChordsFor(lyrics){
+  const cyc = ['Am','F','G','C'], out = {};
+  parseLyrics(lyrics).forEach((ws,li)=>{ out[li+'-0']=cyc[li%4]; if(ws.length>3) out[li+'-'+Math.floor(ws.length/2)]=cyc[(li+1)%4]; });
+  return out;
 }
-function runSyncTimer(){
-  setTimeout(function(){
-    var bar = document.getElementById("syncBar");
-    if(bar) bar.style.width = "100%";
-  }, 50);
-  setTimeout(function(){
-    finalizeDraft(true);
-    render();
-  }, 1900);
+function openSongOrIncomplete(id, from){
+  const s = song(id);
+  const ok = s.lyrics && s.lyrics.trim();
+  ST.songId = id; ST.viewBy=null; ST.viewChord=null; ST.menu=false; ST.instMenu=false; ST.ctx='view'; ST.t=0; ST.playing=false; ST.vcd=0; ST.sortOpen=false;
+  ST.screen = ok ? 'song' : 'incomplete';
+  ST.back = from || ST.screen;
 }
-function finalizeDraft(synced){
-  var d = UI.draft;
-  var id = d.id || ("song"+Date.now());
-  if(!d.lines.length && d.lyricsText.trim()){ d.lines = d.lyricsText.split("\n").filter(function(l){return l.trim();}).map(function(t){return {text:t.trim(), chords:[], marks:[]};}); }
-  STATE.songs[id] = { id:id, title:d.title||"Untitled", sub:d.sub||"", addedBy:"you", synced:synced, instrument:"guitar", lines:d.lines.length?d.lines:[{text:"(no lyrics)",chords:[],marks:[]}] };
-  if(d.addToPlaylist){ var pl = STATE.playlists.find(function(p){return p.id==="mysongs";}); if(pl && pl.songs.indexOf(id)===-1) pl.songs.push(id); }
-  if(d.addToGig){ var g = STATE.gigs[d.addToGig]; if(g && g.setlist.indexOf(id)===-1) g.setlist.push(id); }
-  d.id = id;
-  d.syncPhase = "done";
-  saveState();
+function newSongDraft(){
+  const id = 'n'+Date.now();
+  D.songs[id] = { id, title:'', sub:'', lyrics:'', chords:{}, notes:{}, synced:false, plays:0, added:Date.now(), mine:true };
+  D.order = [id, ...D.order];
+  ST.editId = id; ST.screen='create'; ST.createMode='manual'; ST.step='lyrics'; ST.phase='idle'; ST.selWord=null; ST.similar=false; ST.menu=false; ST.isPublic=false; ST.sortOpen=false;
+}
+function finishSong(){
+  const id = ST.editId, s = D.songs[id];
+  const patch = { synced:true };
+  if(!s.lyrics.trim()) patch.lyrics = EX_LYRICS;
+  if(!s.title.trim()) patch.title = "Don't Go Breaking My Heart";
+  if(!Object.keys(s.chords).length || ST.autoChords) patch.chords = autoChordsFor(patch.lyrics || s.lyrics);
+  Object.assign(s, patch);
+  ST.phase='idle'; ST.procPct=0; ST.screen='done'; ST.autoChords=false; ST.songId=id;
 }
 
-/* ============================== init ============================== */
-renderStatusBar();
+const Actions = {
+  login(){ if(ST.email.trim()) ST.screen='home'; render(); },
+  loginSocial(){ ST.screen='home'; ST.email = ST.email || 'ezra@gmail.com'; render(); },
+  nav(d){ ST.screen=d.to; ST.menu=false; ST.qrOpen=false; ST.sortOpen=false; render(); },
+  back(d){ ST.screen = d.to && d.to!==ST.screen ? d.to : 'home'; ST.menu=false; render(); },
+  signOut(){ ST.screen='login'; ST.email=''; render(); },
+  runSearch(){ ST.screen='search'; ST.searchQuery = ST.homeQuery; ST.sortOpen=false; render(); },
+  newItem(d){ ST.newItem = { kind:d.kind, name:'', date:'' }; render(); },
+  newSong(){ newSongDraft(); render(); },
+  openPlaylist(d){ ST.screen='list'; ST.listKind='songs'; ST.listPl=d.id; ST.listQuery=''; ST.sortOpen=false; render(); },
+  openGig(d){ ST.gigId=d.id; ST.screen='gig'; ST.qrOpen=false; render(); },
+  openSongFrom(d){ openSongOrIncomplete(d.id, d.from); render(); },
+  openList(d){ ST.screen='list'; ST.listKind=d.kind; ST.listPl=null; ST.listQuery=''; ST.sortOpen=false; render(); },
+  listAdd(){ if(ST.listKind==='playlists') Actions.newItem({kind:'playlist'}); else if(ST.listKind==='gigs') Actions.newItem({kind:'gig'}); else { const curPl = ST.listPl ? D.playlists.find(p=>p.id===ST.listPl) : null; if(curPl && !curPl.auto) { ST.songPick = { kind:'playlist', id:curPl.id }; render(); } else { newSongDraft(); render(); } } },
+  toggleSort(){ ST.sortOpen = !ST.sortOpen; render(); },
+  setSort(d){ ST.sort = d.id; ST.sortOpen=false; render(); },
+
+  editNickname(){ toast('Nickname editing coming soon'); },
+  openUpgrade(){ ST.upgrade=true; render(); },
+  closeUpgrade(){ ST.upgrade=false; render(); },
+  doUpgrade(){ ST.plan='rockstar'; ST.upgrade=false; render(); toast("You're a RockStar now"); },
+  downgrade(){ ST.plan='free'; render(); toast('Switched to Free'); },
+  newCollab(){ ST.collabEdit = { i:null, name:'', email:'', gigs: ST.collabFor ? [ST.collabFor] : [] }; render(); },
+  editCollab(d){ const i = +d.id; const c = D.collabs[i]; ST.collabEdit = { i, name:c.name, email:c.email, gigs:[...c.gigs] }; render(); },
+  closeCollabEdit(){ ST.collabEdit=null; render(); },
+  toggleCeGig(d){ const ce = ST.collabEdit; const on = ce.gigs.includes(d.id); ce.gigs = on ? ce.gigs.filter(x=>x!==d.id) : [...ce.gigs, d.id]; render(); },
+  saveCollab(){ const ce = ST.collabEdit; if(!ce.name.trim()) return; const c = { name:ce.name, email:ce.email, gigs:ce.gigs }; if(ce.i==null) D.collabs.push(c); else D.collabs[ce.i]=c; ST.collabEdit=null; render(); toast(ce.i==null?'Invite sent to '+(ce.email||ce.name):'Saved'); },
+  setInstrument(d){ ST.instrument = d.id; render(); },
+  setStartMode(d){ ST.startMode = d.id; render(); },
+  toggleNotif(d){ ST.notif[d.id] = !ST.notif[d.id]; render(); },
+  toggleCollabInGig(d){ const i = +d.id; const cg = D.gigs.find(g=>g.id===ST.collabFor); if(!cg) return; const c = D.collabs[i]; const inGig = c.gigs.includes(cg.id); c.gigs = inGig ? c.gigs.filter(x=>x!==cg.id) : [...c.gigs, cg.id]; render(); toast(inGig ? c.name+' removed from '+cg.title : c.name+' added to '+cg.title); },
+
+  setCreateMode(d){ ST.createMode=d.id; ST.phase='idle'; ST.step='lyrics'; render(); },
+  createBack(){
+    if(ST.phase!=='idle'){ ST.phase='idle'; render(); return; }
+    const order=['lyrics','chords','markings','sync'], i=order.indexOf(ST.step);
+    if(ST.createMode==='manual' && i>0){ ST.step=order[i-1]; ST.selWord=null; } else ST.screen='home';
+    render();
+  },
+  goCreateStep(d){
+    const s = D.songs[ST.editId]; const hasLyrics = !!(s && s.lyrics.trim());
+    if(ST.phase!=='idle') return;
+    if(!hasLyrics && d.id!=='lyrics'){ toast('Add lyrics first'); return; }
+    ST.step=d.id; ST.selWord=null; render();
+  },
+  createNextStep(){ const order=['lyrics','chords','markings','sync']; const i=order.indexOf(ST.step); ST.step=order[Math.min(3,i+1)]; ST.selWord=null; render(); },
+  lyricsNext(){ const s = D.songs[ST.editId]; if(s.lyrics.trim()) Actions.createNextStep(); },
+  openSimilar(){ ST.similar=true; render(); },
+  closeSimilar(){ ST.similar=false; render(); },
+  useSimilar(){ ST.similar=false; ST.screen='song'; ST.songId='dgbmh'; ST.viewBy = 'allhands232'; ST.back='create'; ST.ctx='view'; ST.t=0; ST.playing=false; render(); },
+  fillExample(){ const s = D.songs[ST.editId]; s.lyrics = EX_LYRICS; if(!s.title) s.title = "Don't Go Breaking My Heart"; if(!s.sub) s.sub = EX_SUB; render(); },
+  pickRoot(d){ ST.rootIdx = +d.id; ST.selRoot = LETTERS[+d.id]; render(); },
+  pickVariant(d){ ST.selRoot = d.root; ST.selSuffix = d.q; render(); },
+  placeChord(d){ const s = D.songs[ST.editId]; const sel = ST.selRoot+ST.selSuffix; if(s.chords[d.id]===sel) delete s.chords[d.id]; else s.chords[d.id]=sel; render(); },
+  pickMarkWord(d){ const s = D.songs[ST.editId]; ST.selWord = d.id; ST.noteDraft = (s.notes||{})[d.id] || ''; render(); },
+  saveNote(){ const s = D.songs[ST.editId]; const n = {...s.notes}; if(ST.noteDraft.trim()) n[ST.selWord]=ST.noteDraft.trim(); else delete n[ST.selWord]; s.notes=n; ST.selWord=null; render(); },
+  removeNote(){ const s = D.songs[ST.editId]; const n = {...s.notes}; delete n[ST.selWord]; s.notes=n; ST.selWord=null; ST.noteDraft=''; render(); },
+  detectChords(){ ST.autoChords=true; ST.step='sync'; render(); },
+  practiceDraft(){ ST.screen='practice'; ST.ctx='practice'; ST.t=0; ST.playing=false; ST.songId=ST.editId; ST.back='create'; render(); },
+  startRecord(){ ST.phase='countdown'; ST.cd=3; ST.bars=[]; ST.recT=0; render(); },
+  startUpload(){ document.getElementById('fileInput').click(); },
+  startCloud(){ ST.phase='processing'; ST.procPct=0; render(); },
+  stopRecord(){ ST.phase='processing'; ST.procPct=0; render(); },
+  abortRecord(){ ST.phase='idle'; ST.bars=[]; render(); },
+
+  openPicker(d){ ST.pick = { kind:d.kind, songId: ST.editId }; render(); },
+  closePick(){ ST.pick=null; render(); },
+  togglePickPlaylist(d){ const p = D.playlists.find(x=>x.id===d.id); const sid = ST.pick.songId; const on = p.ids.includes(sid); p.ids = on ? p.ids.filter(i=>i!==sid) : [...p.ids, sid]; render(); },
+  togglePickGig(d){ const g = D.gigs.find(x=>x.id===d.id); const sid = ST.pick.songId; const on = g.setlist.includes(sid); g.setlist = on ? g.setlist.filter(i=>i!==sid) : [...g.setlist, sid]; render(); },
+  closeSongPick(){ ST.songPick=null; ST.spQuery=''; render(); },
+  toggleSongPick(d){ const sp = ST.songPick; const isPl = sp.kind==='playlist'; const target = isPl ? D.playlists.find(p=>p.id===sp.id) : D.gigs.find(g=>g.id===sp.id); const ids = isPl?target.ids:target.setlist; const on = ids.includes(d.id); const next = on ? ids.filter(i=>i!==d.id) : [...ids, d.id]; if(isPl) target.ids=next; else target.setlist=next; render(); },
+  togglePublic(){ ST.isPublic = !ST.isPublic; render(); },
+  viewDone(){ openSongOrIncomplete(ST.editId, 'home'); render(); },
+  continueSong(){ ST.editId = ST.songId; ST.screen='create'; ST.createMode='manual'; ST.step='lyrics'; ST.phase='idle'; render(); },
+
+  openNew(d){ ST.newItem = { kind:d.id, name:'', date:'' }; render(); },
+  closeNew(){ ST.newItem=null; render(); },
+  createNew(){
+    const ni = ST.newItem; if(!ni || !ni.name.trim()) return;
+    const withSong = ST.pick ? [ST.pick.songId] : [];
+    if(ni.kind==='playlist'){
+      const id='p'+Date.now(); D.playlists.splice(1,0,{ id, title:ni.name.trim(), ids:withSong, mine:true, added:Date.now(), plays:0 });
+      ST.newItem=null; if(!ST.pick){ ST.screen='list'; ST.listKind='songs'; ST.listPl=id; } toast('Playlist created');
+    } else {
+      const id='g'+Date.now(); D.gigs.unshift({ id, title:ni.name.trim(), date: ni.date.trim()||'Date to be confirmed', setlist:withSong, mine:true, added:Date.now(), plays:0, settings:{} });
+      ST.newItem=null; if(!ST.pick){ ST.screen='gig'; ST.gigId=id; } toast('Gig created');
+    }
+    render();
+  },
+
+  toggleMenu(){ ST.menu = !ST.menu; ST.instMenu=false; render(); },
+  toggleInstMenu(d,e){ if(e) e.stopPropagation(); ST.instMenu = !ST.instMenu; render(); },
+  setInstrumentMenu(d, e){ if(e) e.stopPropagation(); ST.instrument=d.id; ST.menu=false; ST.instMenu=false; render(); },
+  menuAddGig(){ ST.menu=false; ST.pick = { kind:'gig', songId: ST.songId }; render(); },
+  editSong(){ ST.editId = ST.songId; ST.screen='create'; ST.createMode='manual'; ST.step='chords'; ST.phase='idle'; ST.menu=false; render(); },
+  deleteSong(){ if(ST.songId==='dgbmh'){ ST.menu=false; render(); toast('Demo song is used in a gig — remove it there first'); return; } delete D.songs[ST.songId]; D.order = D.order.filter(x=>x!==ST.songId); ST.screen='home'; ST.menu=false; ST.songId='dgbmh'; render(); toast('Song deleted'); },
+  copySong(){ ST.viewBy=null; render(); toast('Copied to My songs'); },
+  setViewChord(d){ ST.viewChord = d.id; render(); },
+  viewPlay(){
+    const s = song(ST.songId); const tm = timing(s);
+    if(ST.playing){ ST.playing=false; render(); return; }
+    if(ST.vcd>0) return;
+    const t = ST.t < tm.total ? ST.t : 0;
+    if(ST.startMode==='countdown'){ ST.t=t; ST.vcd=3; } else { ST.t=t; ST.playing=true; }
+    render();
+  },
+  playSample(){ ST.sampling = !ST.sampling; ST.sampleLeft = ST.sampling ? 10 : 0; render(); if(ST.sampling) toast('Playing a short preview'); },
+
+  exitPractice(){ ST.playing=false; ST.screen = ST.back==='create' ? 'create' : 'song'; ST.back = ST.back==='create' ? 'home' : ST.back; render(); },
+  togglePlay(){ const tm = timing(song(ST.songId)); const t = ST.t>=tm.total ? 0 : ST.t; ST.playing = !ST.playing; ST.t=t; render(); },
+  restart(){ ST.t=0; render(); },
+  seek(d,e){ const r = e.currentTarget.getBoundingClientRect(); const f = Math.max(0, Math.min(1, (e.clientX-r.left)/r.width)); const tm = timing(song(ST.songId)); ST.t = f*tm.total; render(); },
+  toggleGuide(){ ST.guide = !ST.guide; render(); },
+  setGuideInst(d){ ST.guideInst=d.id; ST.guide=true; render(); },
+
+  gigAddSongs(){ ST.songPick = { kind:'gig', id: gigObj().id }; render(); },
+  gigEditOpen(){ ST.screen='gigedit'; ST.editList = [...gigObj().setlist]; render(); },
+  gigPhotosOpen(){ ST.screen='gigphotos'; render(); },
+  gigAddCollab(){ ST.screen='collab'; ST.back='gig'; ST.collabFor = gigObj().id; render(); },
+  openGigSettings(){ ST.gigSettings=true; render(); },
+  gigShare(){ toast('Link copied · singa.live/g/'+gigObj().id); },
+  openQr(){ ST.qrOpen=true; render(); },
+  closeQr(){ ST.qrOpen=false; render(); },
+  closeGigSettings(){ ST.gigSettings=false; render(); },
+  toggleGigSetting(d){ const g = gigObj(); const gs = gigSettings(g); g.settings = { ...gs, [d.id]: !gs[d.id] }; render(); },
+  openGigSong(d){ openPlayer(d.id); render(); },
+  goLive(){
+    const g = gigObj(); if(!g.setlist.length){ toast('Add songs to this gig first'); return; }
+    openPlayer(null); render();
+  },
+  exitGig(){ ST.screen='gig'; ST.playing=false; render(); },
+  startGig(d){
+    const g = gigObj();
+    if(ST.vcd>0) return;
+    const cur = gigSongId();
+    const gStarted = ST.playing || ST.t>0;
+    if(d.id===cur && gStarted){ ST.playing = !ST.playing; render(); return; }
+    if(d.id===cur && ST.gListening){ ST.gListening=false; render(); return; }
+    const x = song(d.id); const ok = !!(x.lyrics && x.lyrics.trim());
+    const played = (gStarted && cur!==d.id && !ST.played.includes(cur)) ? [...ST.played, cur] : ST.played;
+    ST.gigCur = d.id; ST.played = played.filter(p=>p!==d.id); ST.t=0; ST.playing=false; ST._liveGig=g.id; ST.gListening=false;
+    if(ok){ if(ST.startMode==='countdown') ST.vcd=3; else ST.gListening=true; }
+    render();
+  },
+  gigHeard(){ ST.gListening=false; ST.playing=true; ST.t=0; render(); },
+  editPart(){ toast('Opens Markings for the '+ST.part+' layer'); },
+  addPhoto(){ D.photos.push({ id:Date.now(), by:'Ezra', span: Math.random()>0.7?2:1 }); render(); },
+  saveGigEdit(){ const g = gigObj(); g.setlist = ST.editList; ST.screen='gig'; ST.editList=null; render(); toast('Setlist saved'); },
+  addToSetlist(){ const el = ST.editList; const next = D.order.find(id=>!el.includes(id)); if(next) { ST.editList=[...el,next]; render(); } else toast('Every song is already in this gig'); },
+  editRowUp(d){ const i = +d.id; if(!i) return; const l=[...ST.editList]; [l[i-1],l[i]]=[l[i],l[i-1]]; ST.editList=l; render(); },
+  editRowRemove(d){ const i = +d.id; ST.editList = ST.editList.filter((_,j)=>j!==i); render(); },
+
+  toggleDark(){ ST.perfDark = !ST.perfDark; render(); }
+};
+
+const Binds = {
+  email(v){ ST.email=v; render(); },
+  homeQuery(v){ ST.homeQuery=v; },
+  listQuery(v){ ST.listQuery=v; render(); },
+  searchQuery(v){ ST.searchQuery=v; render(); },
+  draftTitle(v){ D.songs[ST.editId].title=v; },
+  draftSub(v){ D.songs[ST.editId].sub=v; },
+  draftLyrics(v){ D.songs[ST.editId].lyrics=v; render(); },
+  noteDraft(v){ ST.noteDraft=v; },
+  newName(v){ ST.newItem.name=v; render(); },
+  newDate(v){ ST.newItem.date=v; },
+  spQuery(v){ ST.spQuery=v; render(); },
+  ceName(v){ ST.collabEdit.name=v; },
+  ceEmail(v){ ST.collabEdit.email=v; }
+};
+/* ============================================================
+   PLAYBACK TICK (simulated — no real audio capture/analysis)
+   ============================================================ */
+function playId(){ return ST.ctx==='gig' ? gigSongId() : ST.songId; }
+function endGigSong(){ const cur = gigSongId(); if(!ST.played.includes(cur)) ST.played=[...ST.played,cur]; ST.gigCur=null; ST.t=0; ST.playing=false; ST.gListening=false; }
+
+function tick(){
+  let changed = false;
+  if(ST.vcd>0){ const v=ST.vcd-0.1; if(v<=0){ ST.vcd=0; ST.playing=true; } else ST.vcd=v; changed=true; }
+  if((ST.ctx==='view' && ST.screen!=='song') || (ST.ctx==='practice' && ST.screen!=='practice')){
+    if(ST.playing){ ST.playing=false; changed=true; }
+    if(ST.vcd>0){ ST.vcd=0; ST.playing=false; changed=true; }
+  }
+  if(ST.playing){
+    const s = song(playId()); const tm = timing(s);
+    let t = ST.t + 0.1;
+    if(t>=tm.total){
+      if(ST.ctx==='practice') t=0;
+      else if(ST.ctx==='view'){ ST.playing=false; t=0; }
+      else { endGigSong(); render(); return; }
+    }
+    ST.t = t; changed=true;
+  }
+  if(ST.phase==='countdown'){ const cd=ST.cd-0.1; if(cd<=0){ ST.phase='recording'; ST.recT=0; ST.bars=[]; } else ST.cd=cd; changed=true; }
+  else if(ST.phase==='recording'){ ST.recT += 0.1; ST.bars=[...ST.bars, 10+Math.round(Math.random()*80)].slice(-18); changed=true; }
+  else if(ST.phase==='processing'){ const p=ST.procPct+2.4; if(p>=100){ finishSong(); render(); return; } ST.procPct=p; changed=true; }
+  if(ST.sampling){ ST.sampleLeft = Math.max(0, ST.sampleLeft-0.1); if(ST.sampleLeft<=0) ST.sampling=false; changed=true; }
+  if(changed) render();
+}
+setInterval(tick, 100);
+
+/* ============================================================
+   EVENT WIRING (delegation)
+   ============================================================ */
+document.addEventListener('click', function(e){
+  const t = e.target.closest('[data-act]');
+  if(!t) return;
+  const act = t.dataset.act;
+  if(Actions[act]) Actions[act](t.dataset, e);
+});
+
+document.addEventListener('input', function(e){
+  const t = e.target.closest('[data-bind]');
+  if(!t) return;
+  const name = t.dataset.bind;
+  const pos = t.selectionStart, posEnd = t.selectionEnd;
+  if(Binds[name]) Binds[name](t.value, t.dataset);
+  requestAnimationFrame(function(){
+    const el = document.querySelector('[data-bind="'+name+'"]');
+    if(el && el !== document.activeElement){
+      el.focus();
+      try{ el.setSelectionRange(pos, posEnd); }catch(err){}
+    }
+  });
+});
+
+document.addEventListener('keydown', function(e){
+  if(e.key !== 'Enter') return;
+  const t = e.target.closest('[data-key]');
+  if(!t) return;
+  const act = t.dataset.key;
+  if(Actions[act]) Actions[act](t.dataset, e);
+});
+
+document.getElementById('fileInput').addEventListener('change', function(e){
+  const file = e.target.files && e.target.files[0];
+  if(!file) return;
+  ST.phase = 'processing'; ST.procPct = 0; render();
+});
+
+/* ============================================================
+   INIT
+   ============================================================ */
 render();
-})();
-
 </script>
 </body>
 </html>
