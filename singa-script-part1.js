@@ -72,7 +72,7 @@ const EMPTY_SONG = { id:'none', title:'Untitled song', sub:'', lyrics:'', chords
    ============================================================ */
 const D = freshData();
 const ST = {
-  screen:'login', back:'home', email:'', password:'', authBusy:false, userId:null, nickname:null, editNick:null, authProvider:null,
+  screen:'login', back:'home', email:'', password:'', authBusy:false, authMode:'signin', userId:null, nickname:null, editNick:null, authProvider:null,
   homeQuery:'', searchQuery:'', sort:'recent', sortOpen:false,
   listKind:'songs', listPl:null, listQuery:'',
   songId:'dgbmh', viewBy:null, viewChord:null, instrument:'guitar', menu:false, instMenu:false, chordH:230,
