@@ -161,7 +161,6 @@ function renderManualLyrics(d){
     </div>
     <input class="ipt" style="height:64px" placeholder="Sub title — artist, version" value="${esc(d.sub)}" data-bind="draftSub">
     <textarea class="ipt" style="min-height:300px;font-size:18px" placeholder="Type or paste lyrics, one line per row" data-bind="draftLyrics">${esc(d.lyrics)}</textarea>
-    ${!hasLyrics?`<a class="link" style="text-decoration:underline;align-self:flex-start" data-act="fillExample">Paste example lyrics</a>`:''}
     ${confirmFootnote()}
     <div class="row" style="gap:12px;align-self:center">
       <button class="btn btn-outline" style="width:170px;height:48px" data-act="abortCreate">Abort</button>
