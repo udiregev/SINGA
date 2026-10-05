@@ -85,7 +85,7 @@ const ST = {
   plan:'free', upgrade:false, collabFor:null, editList:null, qrOpen:false,
   collabEdit:null, newItem:null, pick:null, songPick:null, spQuery:'',
   notif:{req:true,photos:true,chat:false},
-  perfDark:false, toast:null, sampling:false, sampleLeft:0, part:'Keys'
+  perfDark:false, toast:null, sampling:false, sampleLeft:0, part:'Keys', avatarUrl:null
 };
 let toastTimer = null;
 
@@ -100,6 +100,7 @@ let toastTimer = null;
 async function applySession(session){
   ST.userId = session.user.id;
   ST.email = session.user.email || ST.email;
+  const socialAvatar = (session.user.user_metadata && session.user.user_metadata.avatar_url) || null;
   let row = null;
   try{
     const res = await sb.from('profiles').select('*').eq('id', ST.userId).maybeSingle();
@@ -111,18 +112,20 @@ async function applySession(session){
     ST.plan = row.plan || ST.plan;
     if(row.notif) ST.notif = row.notif;
     ST.startMode = row.start_mode || ST.startMode;
+    ST.avatarUrl = row.avatar_url || socialAvatar;
   } else {
     ST.nickname = ST.nickname || nicknameFromEmail(ST.email);
+    ST.avatarUrl = socialAvatar;
     syncProfile();
   }
-  ST.authProvider = 'email'; ST.screen = 'home';
+  ST.authProvider = (session.user.app_metadata && session.user.app_metadata.provider) || 'email'; ST.screen = 'home';
 }
 function syncProfile(){
   if(!ST.userId) return;
   try{
     sb.from('profiles').upsert({
       id: ST.userId, email: ST.email, nickname: ST.nickname, instrument: ST.instrument,
-      plan: ST.plan, notif: ST.notif, start_mode: ST.startMode, updated_at: new Date().toISOString()
+      plan: ST.plan, notif: ST.notif, start_mode: ST.startMode, avatar_url: ST.avatarUrl, updated_at: new Date().toISOString()
     }).then(function(){}).catch(function(){});
   }catch(e){}
 }
@@ -236,15 +239,3 @@ function diagramHTML(dia, dotColor){
   }
   return `<div class="diagram-row"><div style="display:flex;align-items:center;gap:26px">${inner}<div class="diaName">${esc(dia.name)}</div><div class="diaNext">» ${esc(dia.next)}</div></div></div>`;
 }
-function makeQr(seed){
-  let x = seed; const rnd=()=>{ x=(x*9301+49297)%233280; return x/233280; };
-  const N=25, out=[];
-  const finder=(r,c,R,C)=>{ const a=r-R,b=c-C; if(a<0||b<0||a>6||b>6) return null; if(a===0||a===6||b===0||b===6) return 1; return (a>=2&&a<=4&&b>=2&&b<=4)?1:0; };
-  for(let r=0;r<N;r++) for(let c=0;c<N;c++){
-    let v=finder(r,c,0,0); if(v===null) v=finder(r,c,0,18); if(v===null) v=finder(r,c,18,0);
-    if(v===null){ const zone=(r<8&&c<8)||(r<8&&c>16)||(r>16&&c<8); v = zone?0:(rnd()>0.52?1:0); }
-    out.push(v?'#111':'#fff');
-  }
-  return out;
-}
-const QR = makeQr(42);
