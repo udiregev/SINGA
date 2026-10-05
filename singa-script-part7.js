@@ -1,4 +1,268 @@
 "use strict";
+function renderNickModal(){
+  return `<div class="modal-backdrop" data-act="closeEditNick"><div class="modal" style="max-width:380px" onclick="event.stopPropagation()">
+    <div class="mhead"><span style="font-size:21px;font-weight:600">Nickname</span><span class="icon-btn" data-act="closeEditNick">${icon('close',22)}</span></div>
+    <label style="display:flex;flex-direction:column;gap:4px;border-bottom:1px solid #e2e2e2;padding-bottom:8px"><span style="font-size:12px;color:#8a8a8a">Shown to collaborators and your audience</span><input style="border:0;outline:none;font-size:16px;font-weight:600" value="${esc(ST.editNick)}" data-bind="nickInput" data-key="saveNickname" autofocus></label>
+    <button class="btn" style="background:${ST.editNick.trim()?'#1b1b1b':'#d6d6d6'};color:#fff;margin-top:6px" data-act="saveNickname">Save</button>
+  </div></div>`;
+}
+
+function renderModals(){
+  let html = '';
+  if(ST.gigSettings) html += renderGigSettingsModal();
+  if(ST.upgrade) html += renderUpgradeModal();
+  if(ST.pick || ST.songPick) html += renderPickerModal();
+  if(ST.newItem) html += renderNewModal();
+  if(ST.collabEdit) html += renderCollabEditModal();
+  if(ST.editNick!=null) html += renderNickModal();
+  return html;
+}
+/* ============================================================
+   RENDER DISPATCH
+   ============================================================ */
+function render(){
+  document.body.classList.toggle('dark-invert', ST.perfDark);
+  document.getElementById('darkToggle').style.display = ST.screen==='login' ? 'none' : 'flex';
+  document.getElementById('darkPill').style.background = ST.perfDark ? '#1b1b1b' : '#fff';
+  document.getElementById('darkDot').style.left = (ST.perfDark?20:2)+'px';
+  document.getElementById('darkDot').style.background = ST.perfDark ? '#fff' : '#1b1b1b';
+  let html = '';
+  switch(ST.screen){
+    case 'login': html = renderLogin(); break;
+    case 'home': html = renderHome(); break;
+    case 'list': html = renderList(); break;
+    case 'search': html = renderSearch(); break;
+    case 'account': html = renderAccount(); break;
+    case 'collab': html = renderCollab(); break;
+    case 'create': html = renderCreate(); break;
+    case 'done': html = renderDone(); break;
+    case 'incomplete': html = renderIncomplete(); break;
+    case 'song': html = renderSong(); break;
+    case 'practice': html = renderPractice(); break;
+    case 'gig': html = renderGig(); break;
+    case 'gigphotos': html = renderGigPhotos(); break;
+    case 'gigedit': html = renderGigEdit(); break;
+    case 'gigplayer': html = renderGigPlayer(); break;
+    default: html = renderHome();
+  }
+  document.getElementById('screen').innerHTML = html;
+  document.getElementById('modalLayer').innerHTML = renderModals();
+  document.getElementById('toastBox').innerHTML = ST.toast ? `<div class="toast">${esc(ST.toast)}</div>` : '';
+  // autofocus search on search screen
+  if(ST.screen==='search'){ const el = document.querySelector('#screen input[data-bind="searchQuery"]'); if(el){ el.focus(); const v=el.value; el.value=''; el.value=v; } }
+  // scroll current lyric line into view
+  const sc = document.getElementById('lyricsScroll');
+  if(sc){ const cur = sc.querySelector('[data-cur]'); }
+  // keep the chord-root spinner's scroll position in sync with ST.rootIdx
+  // across any re-render that isn't itself caused by scrolling it
+  const rs = document.getElementById('rootScroller');
+  if(rs){
+    const want = ST.rootIdx*100;
+    if(Math.abs(rs.scrollLeft-want)>1){ ST._lastProgScrollAt = Date.now(); rs.scrollLeft = want; }
+  }
+}
+
+/* ============================================================
+   ACTIONS
+   ============================================================ */
+function autoChordsFor(lyrics){
+  const cyc = ['Am','F','G','C'], out = {};
+  parseLyrics(lyrics).forEach((ws,li)=>{ out[li+'-0']=cyc[li%4]; if(ws.length>3) out[li+'-'+Math.floor(ws.length/2)]=cyc[(li+1)%4]; });
+  return out;
+}
+function openSongOrIncomplete(id, from){
+  stopOnsetListening();
+  const s = song(id);
+  const ok = s.lyrics && s.lyrics.trim();
+  ST.songId = id; ST.viewBy=null; ST.viewChord=null; ST.menu=false; ST.instMenu=false; ST.ctx='view'; ST.t=0; ST.playing=false; ST.vcd=0; ST.listening=false; ST.sortOpen=false;
+  ST.screen = ok ? 'song' : 'incomplete';
+  ST.back = from || ST.screen;
+}
+function newSongDraft(){
+  const id = 'n'+Date.now();
+  D.songs[id] = { id, title:'', sub:'', lyrics:'', chords:{}, notes:{}, synced:false, plays:0, added:Date.now(), mine:true };
+  D.order = [id, ...D.order];
+  ST.editId = id; ST.screen='create'; ST.createMode='manual'; ST.step='lyrics'; ST.phase='idle'; ST.selWord=null; ST.similar=false; ST.menu=false; ST.isPublic=false; ST.sortOpen=false;
+}
+function finishSong(){
+  const id = ST.editId, s = D.songs[id];
+  const patch = { synced:true };
+  if(!s.lyrics.trim()) patch.lyrics = EX_LYRICS;
+  if(!s.title.trim()) patch.title = "Don't Go Breaking My Heart";
+  if(!Object.keys(s.chords).length || ST.autoChords) patch.chords = autoChordsFor(patch.lyrics || s.lyrics);
+  Object.assign(s, patch);
+  ST.phase='idle'; ST.procPct=0; ST.procNote=''; ST.screen='done'; ST.autoChords=false; ST.songId=id;
+}
+
+/* ============================================================
+   REAL AUDIO ENGINE
+   Replaces the old simulated recording (random waveform bars, a fake
+   progress bar, then a canned demo song regardless of what you did) with
+   real microphone / file capture, real speech-to-text, and real
+   force-aligned per-word timestamps — ported from song-builder.html's
+   working engine. Vocal isolation (on-device Demucs) is NOT ported yet;
+   chords are still assigned from the built-in pattern-based guesser
+   (autoChordsFor) rather than detected from the recording's pitch.
+   ============================================================ */
+let liveStream=null, liveRecorder=null, liveChunks=[], liveAudioCtx=null, liveAnalyser=null, liveDataArr=null, liveAborting=false, recordingStartPending=false;
+
+function sampleLiveLevel(){
+  if(!liveAnalyser || !liveDataArr) return null;
+  liveAnalyser.getByteTimeDomainData(liveDataArr);
+  let sum=0;
+  for(let i=0;i<liveDataArr.length;i++){ const v=(liveDataArr[i]-128)/128; sum+=v*v; }
+  const rms = Math.sqrt(sum/liveDataArr.length);
+  return Math.max(4, Math.min(100, Math.round(rms*420)+8));
+}
+
+async function beginRealRecording(){
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    toast('Microphone not available on this device/browser'); ST.phase='idle'; render(); return;
+  }
+  let stream;
+  try{ stream = await navigator.mediaDevices.getUserMedia({ audio:true }); }
+  catch(err){ toast('Mic error: '+(err && err.name || err)); ST.phase='idle'; render(); return; }
+  let recorder;
+  try{ recorder = new MediaRecorder(stream); }
+  catch(err){ toast('Recording is not supported in this browser'); stream.getTracks().forEach(t=>t.stop()); ST.phase='idle'; render(); return; }
+  const actx = new (window.AudioContext||window.webkitAudioContext)();
+  const src = actx.createMediaStreamSource(stream);
+  const analyser = actx.createAnalyser(); analyser.fftSize = 256;
+  src.connect(analyser);
+  liveStream=stream; liveRecorder=recorder; liveAudioCtx=actx; liveAnalyser=analyser;
+  liveDataArr = new Uint8Array(analyser.frequencyBinCount);
+  liveChunks = []; liveAborting = false;
+  recorder.ondataavailable = e=>{ if(e.data && e.data.size>0) liveChunks.push(e.data); };
+  recorder.onstop = async ()=>{
+    const chunks = liveChunks, mimeType = recorder.mimeType || 'audio/webm', wasAborting = liveAborting;
+    stream.getTracks().forEach(t=>t.stop());
+    actx.close().catch(()=>{});
+    liveStream=null; liveRecorder=null; liveAudioCtx=null; liveAnalyser=null; liveDataArr=null; liveChunks=[]; liveAborting=false;
+    if(wasAborting){ ST.phase='idle'; ST.bars=[]; render(); return; }
+    const blob = new Blob(chunks, { type: mimeType });
+    const s = D.songs[ST.editId];
+    await processRecordingBlob(s, blob);
+  };
+  recorder.start();
+  ST.phase='recording'; ST.recT=0; ST.bars=[]; render();
+}
+
+function decodeToFloat32Mono16k(blob){
+  return blob.arrayBuffer().then(arrayBuf=>{
+    const tmpCtx = new (window.AudioContext||window.webkitAudioContext)();
+    return tmpCtx.decodeAudioData(arrayBuf.slice(0)).then(decoded=>{
+      const durationSec = decoded.duration;
+      const targetLen = Math.max(1, Math.ceil(durationSec*16000));
+      const offline = new OfflineAudioContext(1, targetLen, 16000);
+      const bufSrc = offline.createBufferSource();
+      bufSrc.buffer = decoded; bufSrc.connect(offline.destination); bufSrc.start();
+      return offline.startRendering().then(rendered=>{
+        tmpCtx.close().catch(()=>{});
+        return { float32: rendered.getChannelData(0), durationSec };
+      });
+    });
+  });
+}
+
+function normWord(w){ return (w||'').toLowerCase().replace(/[^a-z0-9'’]/g,''); }
+
+// Classic edit-distance alignment of the typed/recognized lyric words (ref)
+// against the speech-recognizer's words (hyp) — for each ref word, finds the
+// best-matching hyp word (or null), so real timestamps can be looked up.
+function alignSequences(ref, hyp){
+  const n=ref.length, m=hyp.length;
+  const dp = Array.from({length:n+1}, ()=>new Array(m+1).fill(0));
+  for(let i=0;i<=n;i++) dp[i][0]=i;
+  for(let j=0;j<=m;j++) dp[0][j]=j;
+  for(let i=1;i<=n;i++) for(let j=1;j<=m;j++){
+    const cost = ref[i-1]===hyp[j-1] ? 0 : 1;
+    dp[i][j] = Math.min(dp[i-1][j-1]+cost, dp[i-1][j]+1, dp[i][j-1]+1);
+  }
+  const mapping = new Array(n).fill(null);
+  let i=n, j=m;
+  while(i>0 && j>0){
+    const cost = ref[i-1]===hyp[j-1] ? 0 : 1;
+    if(dp[i][j]===dp[i-1][j-1]+cost){ mapping[i-1]=j-1; i--; j--; }
+    else if(dp[i][j]===dp[i-1][j]+1){ i--; }
+    else { j--; }
+  }
+  return mapping;
+}
+
+// Fills in a timestamp for every ref word: matched words get the real
+// recognized timestamp, unmatched ones are linearly interpolated between
+// their nearest matched neighbors (or extrapolated at the ends).
+function fillTimestamps(mapping, hypWords, totalDuration){
+  const n = mapping.length;
+  const ts = new Array(n).fill(null);
+  for(let i=0;i<n;i++){ if(mapping[i]!=null && hypWords[mapping[i]]) ts[i] = hypWords[mapping[i]].start; }
+  let lastIdx=-1, lastT=0;
+  for(let i=0;i<n;i++){
+    if(ts[i]==null) continue;
+    if(lastIdx===-1 && i>0){ for(let k=0;k<i;k++) ts[k] = ts[i]*(k+1)/(i+1); }
+    else if(i-lastIdx>1){ const span=ts[i]-lastT; for(let k=lastIdx+1;k<i;k++) ts[k] = lastT+span*(k-lastIdx)/(i-lastIdx); }
+    lastIdx=i; lastT=ts[i];
+  }
+  if(lastIdx===-1){ for(let k=0;k<n;k++) ts[k] = totalDuration*(k+1)/(n+1); }
+  else if(lastIdx<n-1){ const span=Math.max(0,totalDuration-lastT); for(let k=lastIdx+1;k<n;k++) ts[k] = lastT+span*(k-lastIdx)/(n-lastIdx); }
+  return ts;
+}
+
+// The real pipeline: decode the take, transcribe it with an on-device speech
+// model, then either (a) force-align it against lyrics you already typed, or
+// (b) — if you recorded/uploaded with no typed lyrics — use the real
+// transcription AS the lyrics. Runs entirely client-side (Transformers.js +
+// Whisper-tiny.en, loaded from a CDN on first use).
+async function processRecordingBlob(songObj, blob){
+  const hadManualLyrics = !!(songObj.lyrics && songObj.lyrics.trim());
+  ST.phase='processing'; ST.procPct=5; ST.procNote='Listening back to your take…'; render();
+  try{
+    const { float32, durationSec } = await decodeToFloat32Mono16k(blob);
+    ST.procPct=20; render();
+    ST.procNote='Loading the speech model (first time only)…'; render();
+    const { pipeline } = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2');
+    ST.procPct=35; render();
+    const transcriber = await pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny.en');
+    ST.procPct=55; ST.procNote='Transcribing your words…'; render();
+    const output = await transcriber(float32, { return_timestamps:'word', chunk_length_s:30, stride_length_s:5 });
+    ST.procPct=82; ST.procNote='Lining up every word…'; render();
+    const hypWords = (output.chunks||[]).map(c=>({
+      text: (c.text||'').trim(),
+      norm: normWord(c.text),
+      start: (c.timestamp && typeof c.timestamp[0]==='number') ? c.timestamp[0] : 0,
+    })).filter(w=>w.norm);
+
+    if(hadManualLyrics){
+      const refWords = [];
+      parseLyrics(songObj.lyrics).forEach(ws=>ws.forEach(w=>refWords.push(normWord(w))));
+      const mapping = alignSequences(refWords, hypWords.map(w=>w.norm));
+      songObj.wordTimestamps = fillTimestamps(mapping, hypWords, durationSec);
+    } else {
+      const WORDS_PER_LINE = 7;
+      const rawWords = hypWords.map(w=>w.text).filter(Boolean);
+      if(rawWords.length){
+        const lines = [];
+        for(let i=0;i<rawWords.length;i+=WORDS_PER_LINE) lines.push(rawWords.slice(i,i+WORDS_PER_LINE).join(' '));
+        songObj.lyrics = lines.join('\n');
+        songObj.wordTimestamps = hypWords.map(w=>w.start);
+      }
+    }
+    songObj.audioDurationSec = durationSec;
+    songObj.synced = true;
+    ST.procPct=100; ST.procNote='Done'; render();
+  }catch(err){
+    console.error('Singa: speech alignment failed, falling back to estimated timing', err);
+    toast("Couldn't analyze the audio — using estimated timing instead");
+    songObj.wordTimestamps = null; songObj.audioDurationSec = null; songObj.synced = true;
+  }
+  finishSong();
+  render();
+}
+
+// Real "Start detection" playback mode: listens to the mic and auto-starts
+// (sets ST.playing/ST.gListening=true) the instant it hears you begin, via a
+// rolling energy-threshold onset detector (ported from song-builder.html's
+// startListeningForCue). onTrigger is called once, then listening stops.
 let onsetCtx=null, onsetStream=null, onsetRaf=null;
 function stopOnsetListening(){
   if(onsetRaf!=null){ cancelAnimationFrame(onsetRaf); onsetRaf=null; }
@@ -43,189 +307,3 @@ async function startOnsetListening(onTrigger){
   }
   onsetRaf = requestAnimationFrame(frame);
 }
-
-const Actions = {
-  login(){
-    if(!ST.email.trim()) return;
-    if(!ST.nickname) ST.nickname = nicknameFromEmail(ST.email);
-    ST.authProvider = 'email'; ST.screen='home'; saveProfile(); render();
-  },
-  loginSocial(d){
-    const label = d && d.id ? d.id : 'that provider';
-    toast('Sign-in with '+label+' needs a connected account (coming once Singa is linked to real sign-in) — use email for now');
-  },
-  nav(d){ stopOnsetListening(); ST.screen=d.to; ST.menu=false; ST.qrOpen=false; ST.sortOpen=false; render(); },
-  back(d){ stopOnsetListening(); ST.screen = d.to && d.to!==ST.screen ? d.to : 'home'; ST.menu=false; render(); },
-  signOut(){ stopOnsetListening(); clearProfile(); ST.screen='login'; ST.email=''; ST.nickname=null; ST.authProvider=null; render(); },
-  runSearch(){ ST.screen='search'; ST.searchQuery = ST.homeQuery; ST.sortOpen=false; render(); },
-  newItem(d){ ST.newItem = { kind:d.kind, name:'', date:'' }; render(); },
-  newSong(){ newSongDraft(); render(); },
-  openPlaylist(d){ ST.screen='list'; ST.listKind='songs'; ST.listPl=d.id; ST.listQuery=''; ST.sortOpen=false; render(); },
-  openGig(d){ ST.gigId=d.id; ST.screen='gig'; ST.qrOpen=false; render(); },
-  openSongFrom(d){ openSongOrIncomplete(d.id, d.from); render(); },
-  openList(d){ ST.screen='list'; ST.listKind=d.kind; ST.listPl=null; ST.listQuery=''; ST.sortOpen=false; render(); },
-  listAdd(){ if(ST.listKind==='playlists') Actions.newItem({kind:'playlist'}); else if(ST.listKind==='gigs') Actions.newItem({kind:'gig'}); else { const curPl = ST.listPl ? D.playlists.find(p=>p.id===ST.listPl) : null; if(curPl && !curPl.auto) { ST.songPick = { kind:'playlist', id:curPl.id }; render(); } else { newSongDraft(); render(); } } },
-  toggleSort(){ ST.sortOpen = !ST.sortOpen; render(); },
-  setSort(d){ ST.sort = d.id; ST.sortOpen=false; render(); },
-
-  editNickname(){ ST.editNick = ST.nickname || nicknameFromEmail(ST.email); render(); },
-  nickInput(v){ ST.editNick=v; render(); },
-  closeEditNick(){ ST.editNick=null; render(); },
-  saveNickname(){ if(ST.editNick && ST.editNick.trim()) ST.nickname = ST.editNick.trim(); ST.editNick=null; saveProfile(); render(); toast('Nickname updated'); },
-  openUpgrade(){ ST.upgrade=true; render(); },
-  closeUpgrade(){ ST.upgrade=false; render(); },
-  doUpgrade(){ ST.plan='rockstar'; ST.upgrade=false; saveProfile(); render(); toast("You're a RockStar now"); },
-  downgrade(){ ST.plan='free'; saveProfile(); render(); toast('Switched to Free'); },
-  newCollab(){ ST.collabEdit = { i:null, name:'', email:'', gigs: ST.collabFor ? [ST.collabFor] : [] }; render(); },
-  editCollab(d){ const i = +d.id; const c = D.collabs[i]; ST.collabEdit = { i, name:c.name, email:c.email, gigs:[...c.gigs] }; render(); },
-  closeCollabEdit(){ ST.collabEdit=null; render(); },
-  toggleCeGig(d){ const ce = ST.collabEdit; const on = ce.gigs.includes(d.id); ce.gigs = on ? ce.gigs.filter(x=>x!==d.id) : [...ce.gigs, d.id]; render(); },
-  saveCollab(){ const ce = ST.collabEdit; if(!ce.name.trim()) return; const c = { name:ce.name, email:ce.email, gigs:ce.gigs }; if(ce.i==null) D.collabs.push(c); else D.collabs[ce.i]=c; ST.collabEdit=null; render(); toast(ce.i==null?'Invite sent to '+(ce.email||ce.name):'Saved'); },
-  setInstrument(d){ ST.instrument = d.id; saveProfile(); render(); },
-  setStartMode(d){ ST.startMode = d.id; saveProfile(); render(); },
-  toggleNotif(d){ ST.notif[d.id] = !ST.notif[d.id]; saveProfile(); render(); },
-  toggleCollabInGig(d){ const i = +d.id; const cg = D.gigs.find(g=>g.id===ST.collabFor); if(!cg) return; const c = D.collabs[i]; const inGig = c.gigs.includes(cg.id); c.gigs = inGig ? c.gigs.filter(x=>x!==cg.id) : [...c.gigs, cg.id]; render(); toast(inGig ? c.name+' removed from '+cg.title : c.name+' added to '+cg.title); },
-
-  setCreateMode(d){ ST.createMode=d.id; ST.phase='idle'; ST.step='lyrics'; render(); },
-  createBack(){
-    if(ST.phase!=='idle'){ ST.phase='idle'; render(); return; }
-    const order=['lyrics','chords','markings','sync'], i=order.indexOf(ST.step);
-    if(ST.createMode==='manual' && i>0){ ST.step=order[i-1]; ST.selWord=null; } else ST.screen='home';
-    render();
-  },
-  goCreateStep(d){
-    const s = D.songs[ST.editId]; const hasLyrics = !!(s && s.lyrics.trim());
-    if(ST.phase!=='idle') return;
-    if(!hasLyrics && d.id!=='lyrics'){ toast('Add lyrics first'); return; }
-    ST.step=d.id; ST.selWord=null; render();
-  },
-  createNextStep(){ const order=['lyrics','chords','markings','sync']; const i=order.indexOf(ST.step); ST.step=order[Math.min(3,i+1)]; ST.selWord=null; render(); },
-  lyricsNext(){ const s = D.songs[ST.editId]; if(s.lyrics.trim()) Actions.createNextStep(); },
-  openSimilar(){ ST.similar=true; render(); },
-  closeSimilar(){ ST.similar=false; render(); },
-  useSimilar(){ ST.similar=false; ST.screen='song'; ST.songId='dgbmh'; ST.viewBy = 'allhands232'; ST.back='create'; ST.ctx='view'; ST.t=0; ST.playing=false; render(); },
-  fillExample(){ const s = D.songs[ST.editId]; s.lyrics = EX_LYRICS; if(!s.title) s.title = "Don't Go Breaking My Heart"; if(!s.sub) s.sub = EX_SUB; render(); },
-  pickRoot(d){ ST.rootIdx = +d.id; ST.selRoot = LETTERS[+d.id]; render(); },
-  pickVariant(d){ ST.selRoot = d.root; ST.selSuffix = d.q; render(); },
-  placeChord(d){ const s = D.songs[ST.editId]; const sel = ST.selRoot+ST.selSuffix; if(s.chords[d.id]===sel) delete s.chords[d.id]; else s.chords[d.id]=sel; render(); },
-  pickMarkWord(d){ const s = D.songs[ST.editId]; ST.selWord = d.id; ST.noteDraft = (s.notes||{})[d.id] || ''; render(); },
-  saveNote(){ const s = D.songs[ST.editId]; const n = {...s.notes}; if(ST.noteDraft.trim()) n[ST.selWord]=ST.noteDraft.trim(); else delete n[ST.selWord]; s.notes=n; ST.selWord=null; render(); },
-  removeNote(){ const s = D.songs[ST.editId]; const n = {...s.notes}; delete n[ST.selWord]; s.notes=n; ST.selWord=null; ST.noteDraft=''; render(); },
-  detectChords(){ ST.autoChords=true; ST.step='sync'; render(); },
-  practiceDraft(){ ST.screen='practice'; ST.ctx='practice'; ST.t=0; ST.playing=false; ST.songId=ST.editId; ST.back='create'; render(); },
-  startRecord(){ ST.phase='countdown'; ST.cd=3; ST.bars=[]; ST.recT=0; render(); },
-  startUpload(){ document.getElementById('fileInput').click(); },
-  startCloud(){ toast('Importing from cloud storage is coming soon — use Record or Upload for now'); },
-  stopRecord(){
-    if(ST.phase==='countdown'){ ST.phase='idle'; ST.cd=0; render(); return; }
-    if(liveRecorder && liveRecorder.state==='recording'){ liveRecorder.stop(); }
-    else { ST.phase='idle'; render(); }
-  },
-  abortRecord(){
-    if(liveRecorder && liveRecorder.state!=='inactive'){ liveAborting=true; try{ liveRecorder.stop(); }catch(e){} }
-    else if(liveStream){ liveStream.getTracks().forEach(t=>t.stop()); liveStream=null; }
-    ST.phase='idle'; ST.bars=[]; render();
-  },
-
-  openPicker(d){ ST.pick = { kind:d.kind, songId: ST.editId }; render(); },
-  closePick(){ ST.pick=null; render(); },
-  togglePickPlaylist(d){ const p = D.playlists.find(x=>x.id===d.id); const sid = ST.pick.songId; const on = p.ids.includes(sid); p.ids = on ? p.ids.filter(i=>i!==sid) : [...p.ids, sid]; render(); },
-  togglePickGig(d){ const g = D.gigs.find(x=>x.id===d.id); const sid = ST.pick.songId; const on = g.setlist.includes(sid); g.setlist = on ? g.setlist.filter(i=>i!==sid) : [...g.setlist, sid]; render(); },
-  closeSongPick(){ ST.songPick=null; ST.spQuery=''; render(); },
-  toggleSongPick(d){ const sp = ST.songPick; const isPl = sp.kind==='playlist'; const target = isPl ? D.playlists.find(p=>p.id===sp.id) : D.gigs.find(g=>g.id===sp.id); const ids = isPl?target.ids:target.setlist; const on = ids.includes(d.id); const next = on ? ids.filter(i=>i!==d.id) : [...ids, d.id]; if(isPl) target.ids=next; else target.setlist=next; render(); },
-  togglePublic(){ ST.isPublic = !ST.isPublic; render(); },
-  viewDone(){ openSongOrIncomplete(ST.editId, 'home'); render(); },
-  continueSong(){ ST.editId = ST.songId; ST.screen='create'; ST.createMode='manual'; ST.step='lyrics'; ST.phase='idle'; render(); },
-
-  openNew(d){ ST.newItem = { kind:d.id, name:'', date:'' }; render(); },
-  closeNew(){ ST.newItem=null; render(); },
-  createNew(){
-    const ni = ST.newItem; if(!ni || !ni.name.trim()) return;
-    const withSong = ST.pick ? [ST.pick.songId] : [];
-    if(ni.kind==='playlist'){
-      const id='p'+Date.now(); D.playlists.splice(1,0,{ id, title:ni.name.trim(), ids:withSong, mine:true, added:Date.now(), plays:0 });
-      ST.newItem=null; if(!ST.pick){ ST.screen='list'; ST.listKind='songs'; ST.listPl=id; } toast('Playlist created');
-    } else {
-      const id='g'+Date.now(); D.gigs.unshift({ id, title:ni.name.trim(), date: ni.date.trim()||'Date to be confirmed', setlist:withSong, mine:true, added:Date.now(), plays:0, settings:{} });
-      ST.newItem=null; if(!ST.pick){ ST.screen='gig'; ST.gigId=id; } toast('Gig created');
-    }
-    render();
-  },
-
-  toggleMenu(){ ST.menu = !ST.menu; ST.instMenu=false; render(); },
-  toggleInstMenu(d,e){ if(e) e.stopPropagation(); ST.instMenu = !ST.instMenu; render(); },
-  setInstrumentMenu(d, e){ if(e) e.stopPropagation(); ST.instrument=d.id; ST.menu=false; ST.instMenu=false; render(); },
-  menuAddGig(){ ST.menu=false; ST.pick = { kind:'gig', songId: ST.songId }; render(); },
-  editSong(){ stopOnsetListening(); ST.editId = ST.songId; ST.screen='create'; ST.createMode='manual'; ST.step='chords'; ST.phase='idle'; ST.menu=false; render(); },
-  deleteSong(){ if(ST.songId==='dgbmh'){ ST.menu=false; render(); toast('Demo song is used in a gig — remove it there first'); return; } stopOnsetListening(); delete D.songs[ST.songId]; D.order = D.order.filter(x=>x!==ST.songId); ST.screen='home'; ST.menu=false; ST.songId='dgbmh'; render(); toast('Song deleted'); },
-  copySong(){ ST.viewBy=null; render(); toast('Copied to My songs'); },
-  setViewChord(d){ ST.viewChord = d.id; render(); },
-  viewPlay(){
-    const s = song(ST.songId); const tm = timing(s);
-    if(ST.playing){ ST.playing=false; render(); return; }
-    if(ST.vcd>0) return;
-    if(ST.listening){ stopOnsetListening(); ST.listening=false; render(); return; }
-    const t = ST.t < tm.total ? ST.t : 0;
-    ST.t = t;
-    if(ST.startMode==='countdown'){ ST.vcd=3; render(); }
-    else {
-      ST.listening=true; render();
-      startOnsetListening(()=>{ ST.listening=false; ST.playing=true; render(); });
-    }
-  },
-  playSample(){ ST.sampling = !ST.sampling; ST.sampleLeft = ST.sampling ? 10 : 0; render(); if(ST.sampling) toast('Playing a short preview'); },
-
-  exitPractice(){ ST.playing=false; ST.screen = ST.back==='create' ? 'create' : 'song'; ST.back = ST.back==='create' ? 'home' : ST.back; render(); },
-  togglePlay(){ const tm = timing(song(ST.songId)); const t = ST.t>=tm.total ? 0 : ST.t; ST.playing = !ST.playing; ST.t=t; render(); },
-  restart(){ ST.t=0; render(); },
-  seek(d,e){ const r = e.currentTarget.getBoundingClientRect(); const f = Math.max(0, Math.min(1, (e.clientX-r.left)/r.width)); const tm = timing(song(ST.songId)); ST.t = f*tm.total; render(); },
-  toggleGuide(){ ST.guide = !ST.guide; render(); },
-  setGuideInst(d){ ST.guideInst=d.id; ST.guide=true; render(); },
-
-  gigAddSongs(){ ST.songPick = { kind:'gig', id: gigObj().id }; render(); },
-  gigEditOpen(){ ST.screen='gigedit'; ST.editList = [...gigObj().setlist]; render(); },
-  gigPhotosOpen(){ ST.screen='gigphotos'; render(); },
-  gigAddCollab(){ ST.screen='collab'; ST.back='gig'; ST.collabFor = gigObj().id; render(); },
-  openGigSettings(){ ST.gigSettings=true; render(); },
-  gigShare(){ toast('Link copied · singa.live/g/'+gigObj().id); },
-  openQr(){ ST.qrOpen=true; render(); },
-  closeQr(){ ST.qrOpen=false; render(); },
-  closeGigSettings(){ ST.gigSettings=false; render(); },
-  toggleGigSetting(d){ const g = gigObj(); const gs = gigSettings(g); g.settings = { ...gs, [d.id]: !gs[d.id] }; render(); },
-  openGigSong(d){ openPlayer(d.id); render(); },
-  goLive(){
-    const g = gigObj(); if(!g.setlist.length){ toast('Add songs to this gig first'); return; }
-    openPlayer(null); render();
-  },
-  exitGig(){ stopOnsetListening(); ST.screen='gig'; ST.playing=false; ST.listening=false; ST.gListening=false; render(); },
-  startGig(d){
-    const g = gigObj();
-    if(ST.vcd>0) return;
-    const cur = gigSongId();
-    const gStarted = ST.playing || ST.t>0;
-    if(d.id===cur && gStarted){ ST.playing = !ST.playing; render(); return; }
-    if(d.id===cur && ST.gListening){ stopOnsetListening(); ST.gListening=false; render(); return; }
-    const x = song(d.id); const ok = !!(x.lyrics && x.lyrics.trim());
-    const played = (gStarted && cur!==d.id && !ST.played.includes(cur)) ? [...ST.played, cur] : ST.played;
-    stopOnsetListening();
-    ST.gigCur = d.id; ST.played = played.filter(p=>p!==d.id); ST.t=0; ST.playing=false; ST._liveGig=g.id; ST.gListening=false;
-    if(ok){
-      if(ST.startMode==='countdown'){ ST.vcd=3; }
-      else {
-        ST.gListening=true;
-        startOnsetListening(()=>{ ST.gListening=false; ST.playing=true; ST.t=0; render(); });
-      }
-    }
-    render();
-  },
-  gigHeard(){ stopOnsetListening(); ST.gListening=false; ST.playing=true; ST.t=0; render(); },
-  editPart(){ toast('Opens Markings for the '+ST.part+' layer'); },
-  addPhoto(){ D.photos.push({ id:Date.now(), by: ST.nickname || nicknameFromEmail(ST.email), span: Math.random()>0.7?2:1 }); render(); },
-  saveGigEdit(){ const g = gigObj(); g.setlist = ST.editList; ST.screen='gig'; ST.editList=null; render(); toast('Setlist saved'); },
-  addToSetlist(){ const el = ST.editList; const next = D.order.find(id=>!el.includes(id)); if(next) { ST.editList=[...el,next]; render(); } else toast('Every song is already in this gig'); },
-  editRowUp(d){ const i = +d.id; if(!i) return; const l=[...ST.editList]; [l[i-1],l[i]]=[l[i],l[i-1]]; ST.editList=l; render(); },
-  editRowRemove(d){ const i = +d.id; ST.editList = ST.editList.filter((_,j)=>j!==i); render(); },
-
-  toggleDark(){ ST.perfDark = !ST.perfDark; render(); }
-};
-
