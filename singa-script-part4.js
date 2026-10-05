@@ -1,4 +1,30 @@
 "use strict";
+function renderChordWheel(){
+  const roots = LETTERS.map((r,i)=>`<div style="flex:none;width:100px;height:72px;display:flex;align-items:center;justify-content:center;font-size:${i===ST.rootIdx?44:26}px;font-weight:700;color:${i===ST.rootIdx?'#1b1b1b':'#a8a8a8'};cursor:pointer;scroll-snap-align:center" data-act="pickRoot" data-id="${i}">${r}</div>`).join('');
+  const letter = LETTERS[ST.rootIdx];
+  const variants = [letter, ACC[letter]].flatMap(rt => SUFFIXES.map(q=>chordTileHTML(rt, q))).join('');
+  const recentTiles = ST.recentChords.map(ch=>{ const p = splitChordStr(ch); return chordTileHTML(p.root, p.q, ch); }).join('');
+  return `<div style="display:flex;flex-direction:column;align-items:center;gap:10px;margin-top:26px">
+    <div style="font-size:13px;color:#6f6f6f">Spin to a letter, then tap a word to place it. Tap again to remove.</div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:12px">
+      <div style="position:relative;width:300px;height:72px">
+        <div style="position:absolute;left:100px;top:0;width:100px;height:72px;border-radius:14px;background:#f2f2f2"></div>
+        <div id="rootScroller" class="rootScroller" style="position:relative;width:300px;height:72px;overflow-x:auto;overflow-y:hidden;display:flex;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;mask-image:linear-gradient(90deg,transparent 0,#000 24%,#000 76%,transparent 100%)">
+          <div style="flex:none;width:100px"></div>${roots}<div style="flex:none;width:100px"></div>
+        </div>
+      </div>
+      <div id="chordVariants" style="opacity:1;transition:opacity .4s ease;display:flex;flex-direction:column;gap:12px;max-width:320px">
+        <div style="display:grid;grid-auto-flow:column;grid-template-rows:repeat(2,48px);grid-auto-columns:max-content;gap:6px;overflow-x:auto;padding-bottom:4px">${variants}</div>
+        ${ST.recentChords.length ? `<div style="display:flex;align-items:center;gap:10px;margin-top:6px">
+          <span style="font-size:12px;color:#8a8a8a;font-weight:700;letter-spacing:.04em;text-transform:uppercase;flex:none">recent</span>
+          <div style="display:flex;gap:6px;overflow-x:auto">${recentTiles}</div>
+        </div>` : ''}
+      </div>
+    </div>
+    <a class="link" style="text-decoration:underline" data-act="detectChords">Detect chords from a recording instead</a>
+  </div>`;
+}
+
 function renderNoteEditor(d){
   if(ST.selWord==null) return '';
   const [li, wi] = ST.selWord.split('-').map(Number);
@@ -34,7 +60,10 @@ function renderSongBody(d){
     ${ST.phase==='processing' ? `<div style="position:absolute;top:60px;left:0;right:0">${processingBlock()}</div>` : ''}
     ${(ST.step==='chords'||ST.step==='markings') ? `<div style="display:flex;flex-direction:column;align-items:center;gap:12px;padding-top:12px;border-top:1px solid #f0f0f0;width:100%;margin-top:20px">
         <div style="font-size:12px;color:#8a8a8a">You hereby confirm that you have permission to reproduce these lyrics</div>
-        <button class="btn btn-dark" style="width:170px" data-act="createNextStep">Next</button>
+        <div class="row" style="gap:12px">
+          <button class="btn btn-outline" style="width:170px" data-act="abortCreate">Abort</button>
+          <button class="btn btn-dark" style="width:170px" data-act="createNextStep">Next</button>
+        </div>
         <a class="link" style="color:#9a9a9a" data-act="createNextStep">Skip</a>
       </div>` : ''}
     ${ST.step==='sync' && ST.phase==='idle' ? `<div style="display:flex;flex-direction:column;align-items:center;gap:12px;width:100%;max-width:340px;margin:0 auto">
@@ -54,7 +83,7 @@ function renderSimilarModal(){
     {title:"Don't Go Breaking My Heart", sub:'Dolly Parton & Rick Stein', by:'allhands232'}
   ];
   return `<div class="modal-backdrop" data-act="closeSimilar" style="align-items:flex-start;padding-top:140px">
-    <div class="modal" style="max-width:420px" onclick="event.stopPropagation()">
+    <div class="modal" style="max-width:420px" onclick="modalClick(event)">
       <div class="mhead"><span style="font-size:15px;font-weight:700">Similar titles</span><span class="icon-btn" data-act="closeSimilar">${icon('close',22)}</span></div>
       <div class="msub">Already on Singa. Copy one instead of starting from scratch.</div>
       ${rows.map((r,i)=>`<div class="list-row" style="padding:12px 14px;border:1px solid #ececec;border-radius:10px" data-act="useSimilar" data-id="${i}"><div><div style="font-size:15px;font-weight:600">${esc(r.title)}</div><div style="font-size:12px;color:#8a8a8a;margin-top:2px">${esc(r.sub)} · added by ${esc(r.by)}</div></div>${icon('chevron_right',22)}</div>`).join('')}
@@ -159,21 +188,3 @@ function renderIncomplete(){
     <button class="btn btn-dark btn-sm" style="margin-top:18px" data-act="continueSong">Continue</button>
   </div>`;
 }
-
-function renderSongMenu(){
-  const s = song(ST.songId);
-  const instOpts = INSTS.map(([v,l])=>`<a class="link" style="display:flex;align-items:center;gap:8px;font-weight:${v===ST.instrument?700:500};color:${v===ST.instrument?'#1b1b1b':'#6f6f6f'}" data-act="setInstrumentMenu" data-id="${v}">${icon('check',18)}${l}</a>`).join('');
-  return `<div class="modal-backdrop" style="background:rgba(255,255,255,.9);align-items:flex-start;justify-content:flex-end;padding:20px 64px 0" data-act="toggleMenu">
-    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:12px;text-align:right" onclick="event.stopPropagation()">
-      <span class="icon-btn" data-act="toggleMenu">${icon('close',28)}</span>
-      <a class="link" style="font-size:17px;font-weight:700" data-act="editSong">Edit</a>
-      <a class="link" style="font-size:17px;font-weight:700;display:flex;align-items:center;gap:4px" data-act="toggleInstMenu">Change instrument${icon(ST.instMenu?'expand_less':'expand_more',20)}</a>
-      ${ST.instMenu?`<div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;margin:-4px 0 4px">${instOpts}</div>`:''}
-      <a class="link" style="font-size:17px;font-weight:700" data-act="menuAddGig">Add to a gig</a>
-      <a class="link" style="font-size:17px;font-weight:700" data-act="nav" data-to="account">Full settings</a>
-      <a class="link" style="font-size:17px;font-weight:700;margin-top:16px;display:flex;align-items:center;gap:6px" data-act="newSong">Add a new song${icon('add_circle',22)}</a>
-      <a class="link link-accent" style="font-size:17px;font-weight:700;margin-top:16px" data-act="deleteSong">Delete song</a>
-    </div>
-  </div>`;
-}
-
