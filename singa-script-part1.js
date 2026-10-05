@@ -66,11 +66,26 @@ function freshData(){
   };
 }
 
+/* A new / real account should start with nothing of its own — no demo
+   songs, gigs, playlists or collaborators. freshData() above is kept
+   around (unused for now) in case a future "load demo content" button
+   wants it; the app itself now boots from this empty shape instead. */
+function emptyData(){
+  return {
+    songs: {},
+    order: [],
+    playlists: [ { id:'my', title:'My songs', auto:true, ids:[], mine:true, added:Date.now(), plays:0 } ],
+    gigs: [],
+    collabs: [],
+    photos: []
+  };
+}
+
 const EMPTY_SONG = { id:'none', title:'Untitled song', sub:'', lyrics:'', chords:{}, notes:{}, synced:false };
 /* ============================================================
    STATE
    ============================================================ */
-const D = freshData();
+const D = emptyData();
 const ST = {
   screen:'login', back:'home', email:'', password:'', authBusy:false, authMode:'signin', userId:null, nickname:null, editNick:null, authProvider:null,
   homeQuery:'', searchQuery:'', sort:'recent', sortOpen:false,
@@ -78,7 +93,7 @@ const ST = {
   songId:'dgbmh', viewBy:null, viewChord:null, instrument:'guitar', menu:false, instMenu:false, chordH:230,
   recentChords:[], _lastProgScrollAt:0,
   startMode:'countdown', vcd:0, listening:false,
-  editId:null, createMode:'manual', step:'lyrics', similar:false, rootIdx:0, selRoot:'A', selSuffix:'m', selWord:null, noteDraft:'', autoChords:false,
+  editId:null, createMode:'manual', step:'lyrics', similar:false, rootIdx:0, selRoot:'A', selSuffix:'m', selWord:null, noteDraft:'', autoChords:false, editorLine:0,
   phase:'idle', cd:0, recT:0, bars:[], procPct:0, procNote:'', isPublic:false,
   t:0, playing:false, ctx:'view', guide:false, guideInst:'Piano',
   gigId:'nye', gigCur:null, played:[], orderVotes:{}, gListening:false, gigSettings:false,
