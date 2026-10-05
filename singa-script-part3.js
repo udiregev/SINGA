@@ -1,4 +1,96 @@
 "use strict";
+function renderSearch(){
+  const q = ST.searchQuery.trim().toLowerCase();
+  const match = r => !q || ((r.title||'')+' '+(r.sub||'')).toLowerCase().includes(q);
+  const songsRows = sortRows(D.order.map(id=>({id,...song(id)})).filter(match));
+  const plRows = sortRows(D.playlists.filter(match));
+  const gigRows = sortRows(D.gigs.filter(match));
+  const sections = [];
+  if(songsRows.length) sections.push(`<div><div style="font-size:24px;font-weight:700;padding-bottom:8px;border-bottom:1px solid var(--b2)">Songs</div>${songsRows.map(r=>songRowList(r.id, r.synced?'SYNCED':'NO TAKE', r.synced?'#1b1b1b':'#b0b0b0','search')).join('')}</div>`);
+  if(plRows.length) sections.push(`<div><div style="font-size:24px;font-weight:700;padding-bottom:8px;border-bottom:1px solid var(--b2)">Playlists</div>${plRows.map(playlistRow).join('')}</div>`);
+  if(gigRows.length) sections.push(`<div><div style="font-size:24px;font-weight:700;padding-bottom:8px;border-bottom:1px solid var(--b2)">Gigs</div>${gigRows.map(gigRowList).join('')}</div>`);
+  return `<div class="scr">
+    <div class="search-field" style="max-width:340px;margin-bottom:28px">
+      <input placeholder="Search songs, playlists or gigs" value="${esc(ST.searchQuery)}" data-bind="searchQuery" autofocus>${icon('search',22)}
+    </div>
+    <div class="row" style="gap:14px;position:relative;z-index:2;margin-bottom:24px">
+      <span class="icon-btn" data-act="nav" data-to="home">${icon('chevron_left',26)}</span>
+      <span style="font-size:28px;font-weight:700">Search Results</span>
+      <div style="flex:1"></div>
+      ${sortDropdown()}
+    </div>
+    <div style="display:flex;flex-direction:column;gap:40px;overflow:auto">
+      ${sections.join('') || `<div style="color:#8a8a8a;font-size:15px">No songs, playlists or gigs match "${esc(ST.searchQuery)}".</div>`}
+    </div>
+  </div>`;
+}
+/* ============================================================
+   SCREENS: Account / Collaborators
+   ============================================================ */
+function renderAccount(){
+  const planName = ST.plan==='rockstar' ? 'RockStar' : 'Free';
+  const planSub = ST.plan==='rockstar' ? '$4.99 / month · renews Nov 2, 2026' : 'Basic features for performing with Singa';
+  const planBadgeBg = ST.plan==='rockstar' ? '#f24822' : '#ececec';
+  const planBadgeCol = ST.plan==='rockstar' ? '#fff' : '#6f6f6f';
+  const collabRows = D.collabs.map((c,i)=>`<div class="list-row" data-act="editCollab" data-id="${i}"><div><div class="t">${esc(c.name)}</div><div class="s">${c.gigs.length} ${c.gigs.length===1?'gig':'gigs'}</div></div>${icon('chevron_right',22)}</div>`).join('');
+  const instRadio = INSTS.map(([v,label])=>`<div class="row" style="gap:8px;cursor:pointer;padding:6px 0" data-act="setInstrument" data-id="${v}">
+    <span style="width:20px;height:20px;border-radius:50%;border:1.5px solid var(--fg);display:flex;align-items:center;justify-content:center"><span style="width:10px;height:10px;border-radius:50%;background:var(--fg);opacity:${ST.instrument===v?1:0}"></span></span>
+    <span style="font-size:15px;font-weight:600">${label}</span></div>`).join('');
+  const startHint = ST.startMode==='countdown' ? 'Press play and Singa counts down from 3.' : 'Singa listens and starts playback when you start singing.';
+  const notifRows = [['req','Song requests'],['photos','Guest photos'],['chat','Chat messages']].map(([k,label])=>{
+    const on = ST.notif[k];
+    return `<div class="row" style="gap:14px;padding:10px 0;cursor:pointer" data-act="toggleNotif" data-id="${k}">
+      <div class="toggle" style="background:${on?'#1b1b1b':'#fff'}"><div class="dot" style="left:${on?20:2}px;background:${on?'#fff':'#1b1b1b'}"></div></div>
+      <span style="font-size:15px;font-weight:600">${label}</span></div>`;
+  }).join('');
+  return `<div class="scr" style="overflow:auto;gap:30px;padding-bottom:60px">
+    <div class="row" style="gap:14px"><span class="icon-btn" data-act="nav" data-to="home">${icon('chevron_left',26)}</span><span style="font-size:28px;font-weight:700">My Account</span></div>
+    <div>
+      <div style="font-size:21px;font-weight:700;margin-bottom:6px">Account Details</div>
+      <div style="padding:14px 0;border-bottom:1px solid var(--b2);display:flex;justify-content:space-between;align-items:center;cursor:pointer" data-act="editNickname"><div><div style="font-size:12px;color:#8a8a8a">Nickname</div><div style="font-size:16px;font-weight:600;margin-top:3px">${esc(ST.nickname || nicknameFromEmail(ST.email))}</div></div>${icon('chevron_right',22)}</div>
+      <div style="padding:14px 0;border-bottom:1px solid var(--b2)"><div style="font-size:12px;color:#8a8a8a">Email</div><div style="font-size:16px;font-weight:600;margin-top:3px">${esc(ST.email || 'Not signed in')}</div></div>
+    </div>
+    <div>
+      <div style="font-size:21px;font-weight:700;margin-bottom:6px">Subscription</div>
+      <div class="row" style="justify-content:space-between;gap:16px;padding:14px 0;border-bottom:1px solid var(--b2)">
+        <div><div class="row" style="gap:8px"><span style="font-size:16px;font-weight:700">${planName}</span><span style="font-size:11px;font-weight:800;letter-spacing:.06em;padding:3px 7px;border-radius:5px;background:${planBadgeBg};color:${planBadgeCol}">CURRENT</span></div><div style="font-size:13px;color:#8a8a8a;margin-top:3px">${planSub}</div></div>
+        ${ST.plan!=='rockstar'
+          ? `<button class="btn btn-accent btn-sm" data-act="openUpgrade">${icon('bolt',20)}Upgrade to RockStar</button>`
+          : `<a class="link link-muted" style="text-decoration:underline" data-act="downgrade">Switch to Free</a>`}
+      </div>
+    </div>
+    <div>
+      <div style="font-size:21px;font-weight:700;margin-bottom:6px">Collaborators</div>
+      ${collabRows}
+      <a class="link" style="display:inline-flex;align-items:center;gap:6px;margin-top:12px" data-act="newCollab">${icon('person_add',20)}Add collaborator</a>
+    </div>
+    <div>
+      <div style="font-size:21px;font-weight:700;margin-bottom:10px">Default instrument</div>
+      <div style="display:flex;gap:24px;flex-wrap:wrap">${instRadio}</div>
+    </div>
+    <div>
+      <div style="font-size:21px;font-weight:700;margin-bottom:6px">Start playback with</div>
+      <div style="font-size:13px;color:#8a8a8a;margin-bottom:14px">${startHint}</div>
+      <div class="seg">
+        <button class="${ST.startMode==='countdown'?'on':''}" data-act="setStartMode" data-id="countdown">Countdown</button>
+        <button class="${ST.startMode==='detect'?'on':''}" data-act="setStartMode" data-id="detect">Start detection</button>
+      </div>
+    </div>
+    <div>
+      <div style="font-size:21px;font-weight:700;margin-bottom:10px">Notify me during gigs</div>
+      ${notifRows}
+    </div>
+    <div>
+      <div style="font-size:21px;font-weight:700;margin-bottom:6px">App</div>
+      <div class="row" style="justify-content:space-between;gap:16px;padding:14px 0">
+        <div><div style="font-size:15px;font-weight:600">Reinstall latest version</div><div style="font-size:13px;color:#8a8a8a;margin-top:3px">Use this if the app looks out of date after an update</div></div>
+        <button class="btn btn-outline btn-sm" data-act="rebootApp">${icon('refresh',20)}Reinstall</button>
+      </div>
+    </div>
+    <a class="link link-accent" data-act="signOut">Sign out</a>
+  </div>`;
+}
+
 function renderCollab(){
   const cg = ST.collabFor ? D.gigs.find(g=>g.id===ST.collabFor) : null;
   const rows = D.collabs.map((c,i)=>{
@@ -67,156 +159,41 @@ function renderManualLyrics(d){
   </div>`;
 }
 
+function splitChordStr(ch){
+  const m = /^([A-G][#b]?)(.*)$/.exec(ch||'');
+  return m ? { root: m[1], q: m[2] } : { root: ch||'', q: '' };
+}
+function recordRecentChord(ch){
+  if(!ch) return;
+  ST.recentChords = [ch, ...ST.recentChords.filter(c=>c!==ch)].slice(0,8);
+}
+function chordTileHTML(rt, q, label){
+  const on = rt===ST.selRoot && q===ST.selSuffix;
+  return `<button style="height:48px;border-radius:12px;border:1.5px solid var(--fg);background:${on?'#1b1b1b':'#fff'};color:${on?'#fff':'#1b1b1b'};font-size:17px;font-weight:700;padding:0 16px;white-space:nowrap" data-act="pickVariant" data-root="${esc(rt)}" data-q="${esc(q)}">${esc(label!=null?label:rt+q)}</button>`;
+}
 function renderChordWheel(){
-  const roots = LETTERS.map((r,i)=>`<div style="flex:none;width:100px;height:72px;display:flex;align-items:center;justify-content:center;font-size:${i===ST.rootIdx?44:26}px;font-weight:700;color:${i===ST.rootIdx?'#1b1b1b':'#a8a8a8'};cursor:pointer" data-act="pickRoot" data-id="${i}">${r}</div>`).join('');
+  const roots = LETTERS.map((r,i)=>`<div style="flex:none;width:100px;height:72px;display:flex;align-items:center;justify-content:center;font-size:${i===ST.rootIdx?44:26}px;font-weight:700;color:${i===ST.rootIdx?'#1b1b1b':'#a8a8a8'};cursor:pointer;scroll-snap-align:center" data-act="pickRoot" data-id="${i}">${r}</div>`).join('');
   const letter = LETTERS[ST.rootIdx];
-  const variants = [letter, ACC[letter]].flatMap(rt => SUFFIXES.map(q=>{
-    const on = rt===ST.selRoot && q===ST.selSuffix;
-    return `<button style="height:48px;border-radius:12px;border:1.5px solid var(--fg);background:${on?'#1b1b1b':'#fff'};color:${on?'#fff':'#1b1b1b'};font-size:17px;font-weight:700" data-act="pickVariant" data-root="${rt}" data-q="${q}">${rt}${q}</button>`;
-  })).join('');
+  const variants = [letter, ACC[letter]].flatMap(rt => SUFFIXES.map(q=>chordTileHTML(rt, q))).join('');
+  const recentTiles = ST.recentChords.map(ch=>{ const p = splitChordStr(ch); return chordTileHTML(p.root, p.q, ch); }).join('');
   return `<div style="display:flex;flex-direction:column;align-items:center;gap:10px;margin-top:26px">
-    <div style="font-size:13px;color:#6f6f6f">Pick a chord, then tap a word to place it. Tap again to remove.</div>
+    <div style="font-size:13px;color:#6f6f6f">Spin to a letter, then tap a word to place it. Tap again to remove.</div>
     <div style="display:flex;flex-direction:column;align-items:center;gap:12px">
       <div style="position:relative;width:300px;height:72px">
         <div style="position:absolute;left:100px;top:0;width:100px;height:72px;border-radius:14px;background:#f2f2f2"></div>
-        <div style="position:relative;width:300px;height:72px;overflow-x:auto;overflow-y:hidden;display:flex;mask-image:linear-gradient(90deg,transparent 0,#000 24%,#000 76%,transparent 100%)">
+        <div id="rootScroller" class="rootScroller" style="position:relative;width:300px;height:72px;overflow-x:auto;overflow-y:hidden;display:flex;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;mask-image:linear-gradient(90deg,transparent 0,#000 24%,#000 76%,transparent 100%)">
           <div style="flex:none;width:100px"></div>${roots}<div style="flex:none;width:100px"></div>
         </div>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(2,76px);gap:6px;max-width:580px;grid-template-columns:repeat(auto-fit,76px);justify-content:center">${variants}</div>
+      <div id="chordVariants" style="opacity:1;transition:opacity .4s ease;display:flex;flex-direction:column;gap:12px;max-width:320px">
+        <div style="display:grid;grid-auto-flow:column;grid-template-rows:repeat(2,48px);grid-auto-columns:max-content;gap:6px;overflow-x:auto;padding-bottom:4px">${variants}</div>
+        ${ST.recentChords.length ? `<div style="display:flex;align-items:center;gap:10px;margin-top:6px">
+          <span style="font-size:12px;color:#8a8a8a;font-weight:700;letter-spacing:.04em;text-transform:uppercase;flex:none">recent</span>
+          <div style="display:flex;gap:6px;overflow-x:auto">${recentTiles}</div>
+        </div>` : ''}
+      </div>
     </div>
     <a class="link" style="text-decoration:underline" data-act="detectChords">Detect chords from a recording instead</a>
   </div>`;
 }
 
-function renderNoteEditor(d){
-  if(ST.selWord==null) return '';
-  const [li, wi] = ST.selWord.split('-').map(Number);
-  const ws = parseLyrics(d.lyrics)[li] || [];
-  const w = ws[wi] || '';
-  const placement = wi===0 ? 'Shown before the line' : (wi===ws.length-1 ? 'Shown after the line' : 'Shown above the word, with an arrow');
-  return `<div style="margin-top:28px;width:100%;max-width:440px;border:1.5px solid #2f8fe0;border-radius:12px;background:#f3f8ff;padding:16px;display:flex;flex-direction:column;gap:12px">
-    <div style="font-size:13px;font-weight:600;color:#2f8fe0">Mark on "${esc(w)}"</div>
-    <input class="ipt" style="height:44px;border:1px solid #cfe0f5;font-family:Caveat,cursive;font-size:24px;color:#2f8fe0;background:#fff" placeholder="e.g. Hi note, breathe, key change" value="${esc(ST.noteDraft)}" data-bind="noteDraft">
-    <div class="row" style="gap:8px">
-      <span style="font-size:12px;color:#6f6f6f">${placement}</span>
-      <div style="flex:1"></div>
-      <a class="link link-accent" data-act="removeNote">Remove</a>
-      <button class="btn btn-dark btn-sm" data-act="saveNote">Save</button>
-    </div>
-  </div>`;
-}
-
-function renderSongBody(d){
-  const editMode = ST.step==='chords' ? 'chords' : ST.step==='markings' ? 'markings' : 'static';
-  const lines = buildLines(d, editMode, ST.phase==='recording' ? {t:ST.recT} : null);
-  const opacity = (ST.phase==='countdown'||ST.phase==='processing') ? 0.12 : 1;
-  return `<div style="width:100%;flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;margin-top:24px;position:relative">
-    <div style="opacity:${opacity};display:flex;flex-direction:column;align-items:center;width:100%;overflow:auto;padding-bottom:16px">
-      <div style="font-size:40px;font-weight:800;letter-spacing:-0.02em;text-align:center">${esc(d.title||'Untitled song')}</div>
-      <div style="font-size:15px;color:#6f6f6f;margin-top:6px">${esc(d.sub)}</div>
-      ${ST.step==='chords' ? renderChordWheel() : ''}
-      ${ST.step==='markings' ? `<div style="font-size:13px;color:#6f6f6f;margin-top:26px">Tap a word to add a mark. Marks on the first or last word sit beside the line; others point at the word.</div>` : ''}
-      <div style="margin-top:34px">${linesHTML(lines)}</div>
-    </div>
-    ${ST.step==='markings' ? renderNoteEditor(d) : ''}
-    ${ST.phase==='countdown' ? `<div style="position:absolute;top:60px;left:0;right:0">${countdownBlock()}</div>` : ''}
-    ${ST.phase==='processing' ? `<div style="position:absolute;top:60px;left:0;right:0">${processingBlock()}</div>` : ''}
-    ${(ST.step==='chords'||ST.step==='markings') ? `<div style="display:flex;flex-direction:column;align-items:center;gap:12px;padding-top:12px;border-top:1px solid #f0f0f0;width:100%;margin-top:20px">
-        <div style="font-size:12px;color:#8a8a8a">You hereby confirm that you have permission to reproduce these lyrics</div>
-        <button class="btn btn-dark" style="width:170px" data-act="createNextStep">Next</button>
-        <a class="link" style="color:#9a9a9a" data-act="createNextStep">Skip</a>
-      </div>` : ''}
-    ${ST.step==='sync' && ST.phase==='idle' ? `<div style="display:flex;flex-direction:column;align-items:center;gap:12px;width:100%;max-width:340px;margin:0 auto">
-        ${ST.autoChords?`<div style="font-size:13px;color:#2f8fe0;text-align:center;margin-bottom:6px">Chords will be detected from the instruments in your recording.</div>`:''}
-        <button class="btn btn-grey" style="width:100%" data-act="practiceDraft">Practice</button>
-        <button class="btn btn-accent" style="width:100%" data-act="startRecord">Record</button>
-        <a class="link" style="text-decoration:underline;margin-top:4px" data-act="startUpload">Upload</a>
-        <div style="font-size:12px;color:#8a8a8a;text-align:center">Sing and play it once. Singa isolates your vocal, aligns every word and detects the chords.</div>
-      </div>` : ''}
-    ${ST.step==='sync' && (ST.phase==='countdown'||ST.phase==='recording') ? waveformBlock() : ''}
-  </div>`;
-}
-
-function renderSimilarModal(){
-  const rows = [
-    {title:"Don't Go Breaking My Heart", sub:'Dolly Parton', by:'joesnow'},
-    {title:"Don't Go Breaking My Heart", sub:'Dolly Parton & Rick Stein', by:'allhands232'}
-  ];
-  return `<div class="modal-backdrop" data-act="closeSimilar" style="align-items:flex-start;padding-top:140px">
-    <div class="modal" style="max-width:420px" onclick="event.stopPropagation()">
-      <div class="mhead"><span style="font-size:15px;font-weight:700">Similar titles</span><span class="icon-btn" data-act="closeSimilar">${icon('close',22)}</span></div>
-      <div class="msub">Already on Singa. Copy one instead of starting from scratch.</div>
-      ${rows.map((r,i)=>`<div class="list-row" style="padding:12px 14px;border:1px solid #ececec;border-radius:10px" data-act="useSimilar" data-id="${i}"><div><div style="font-size:15px;font-weight:600">${esc(r.title)}</div><div style="font-size:12px;color:#8a8a8a;margin-top:2px">${esc(r.sub)} · added by ${esc(r.by)}</div></div>${icon('chevron_right',22)}</div>`).join('')}
-      <button class="btn btn-dark" style="margin-top:8px" data-act="closeSimilar">Keep creating my own</button>
-    </div>
-  </div>`;
-}
-
-function renderCreate(){
-  const d = D.songs[ST.editId] || { id:'x', title:'', sub:'', lyrics:'', chords:{}, notes:{} };
-  const phaseIdle = ST.phase==='idle';
-  const modeLocked = !phaseIdle || (ST.createMode==='manual' && ST.step!=='lyrics');
-  const modes = [['manual','Manual'],['recording','From Recording'],['file','From File']];
-  const modeSeg = `<div class="seg" style="opacity:${modeLocked?0.4:1};border-color:${modeLocked?'#bdbdbd':'#1b1b1b'}">
-    ${modes.map(([v,l])=>`<button class="${v===ST.createMode?'on':''}" ${modeLocked?'':`data-act="setCreateMode" data-id="${v}"`}>${l}</button>`).join('')}
-  </div>`;
-  const hasLyrics = !!d.lyrics.trim();
-  const stepTabs = ['lyrics','chords','markings','sync'];
-  const isManual = ST.createMode==='manual';
-  const stepTabsHTML = isManual ? `<div style="display:flex;border-bottom:1.5px solid #e2e2e2">
-    ${stepTabs.map(k=>`<button style="border:0;background:transparent;width:104px;height:42px;font-size:15px;font-weight:${k===ST.step?700:500};color:${k===ST.step?'#1b1b1b':(hasLyrics||k==='lyrics'?'#8a8a8a':'#c8c8c8')};border-bottom:2.5px solid ${k===ST.step?'#1b1b1b':'transparent'};margin-bottom:-1.5px" data-act="goCreateStep" data-id="${k}">${k[0].toUpperCase()+k.slice(1)}</button>`).join('')}
-  </div>` : '';
-
-  let body = '';
-  if(isManual && ST.step==='lyrics'){
-    body = renderManualLyrics(d);
-  } else if(isManual){
-    body = renderSongBody(d);
-  } else if(ST.createMode==='recording'){
-    if(phaseIdle){
-      body = `<div style="width:100%;display:flex;flex-direction:column;align-items:center;gap:28px;margin-top:40px;max-width:420px;margin-left:auto;margin-right:auto">
-        <input class="ipt" placeholder="Song title" value="${esc(d.title)}" data-bind="draftTitle">
-        <div class="row" style="gap:22px;margin-top:40px">
-          <button class="btn btn-accent" style="width:150px" data-act="startRecord">Record</button>
-          <a class="link" style="text-decoration:underline" data-act="startUpload">Upload</a>
-        </div>
-        <div style="font-size:13px;color:#6f6f6f;text-align:center;max-width:420px;line-height:1.5">No lyrics needed. Singa transcribes your words and detects the chords from the recording. You can correct them afterwards.</div>
-        <div style="font-size:12px;color:#8a8a8a">You hereby confirm that you have permission to reproduce these lyrics</div>
-      </div>`;
-    } else {
-      body = `<div style="width:100%;flex:1;display:flex;flex-direction:column;align-items:center;gap:40px;margin-top:80px">
-        <div style="font-size:40px;font-weight:800;letter-spacing:-0.02em;color:${ST.phase==='countdown'?'#d0d0d0':'#1b1b1b'}">${esc(d.title||'Untitled song')}</div>
-        ${ST.phase==='countdown'?countdownBlock():''}
-        ${ST.phase==='recording'?waveformBlock():''}
-        ${ST.phase==='processing'?processingBlock():''}
-      </div>`;
-    }
-  } else if(ST.createMode==='file'){
-    if(phaseIdle){
-      body = `<div style="display:flex;flex-direction:column;align-items:center;gap:28px;margin-top:80px">
-        <div class="row" style="gap:28px">
-          <button class="btn-outline" style="width:170px;height:150px;border-radius:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px" data-act="startUpload">${icon('upload',36)}<span style="font-size:15px;font-weight:600">Upload</span></button>
-          <button class="btn-outline" style="width:170px;height:150px;border-radius:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px" data-act="startCloud">${icon('cloud',36)}<span style="font-size:15px;font-weight:600">Link Cloud</span></button>
-        </div>
-        <div style="font-size:13px;color:#6f6f6f">Audio or video of you performing the song.</div>
-        <div style="font-size:12px;color:#8a8a8a">You hereby confirm that you have permission to reproduce these lyrics</div>
-      </div>`;
-    } else {
-      body = `<div style="margin-top:120px">${processingBlock()}</div>`;
-    }
-  }
-
-  return `<div class="scr center" style="padding-top:16px">
-    ${modeSeg}
-    <div style="width:100%;display:flex;align-items:center;margin-top:20px;min-height:44px;max-width:760px">
-      <span class="icon-btn" data-act="createBack">${icon('chevron_left',26)}</span>
-      <div style="flex:1;display:flex;justify-content:center">${stepTabsHTML}</div>
-      <span style="width:26px"></span>
-    </div>
-    ${body}
-  </div>${ST.similar?renderSimilarModal():''}`;
-}
-/* ============================================================
-   SCREENS: Completion / Incomplete / Song Viewer (+menu)
-   ============================================================ */
