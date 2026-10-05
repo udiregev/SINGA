@@ -1,5 +1,24 @@
 "use strict";
 /* ============================================================
+   SUPABASE CLIENT
+   Project URL + publishable (anon-safe) key only — never the secret
+   key or DB password, which must stay out of this client-side file.
+   ============================================================ */
+const sb = supabase.createClient(
+  'https://xnzytiaixthfbmejltww.supabase.co',
+  'sb_publishable_JTLPNLQNOHL3TmbS1MiGWg_rsX_QqmH'
+);
+
+/* ============================================================
+   SERVICE WORKER (PWA installability + offline app shell)
+   ============================================================ */
+if('serviceWorker' in navigator){
+  window.addEventListener('load', function(){
+    navigator.serviceWorker.register('sw.js').catch(function(){});
+  });
+}
+
+/* ============================================================
    DATA — ported verbatim from the authoritative design source
    ============================================================ */
 const EX_LYRICS = "Don't go breaking my heart\nI couldn't if I tried\nHoney, if I get restless\nBaby, you're not that kind";
@@ -53,10 +72,11 @@ const EMPTY_SONG = { id:'none', title:'Untitled song', sub:'', lyrics:'', chords
    ============================================================ */
 const D = freshData();
 const ST = {
-  screen:'login', back:'home', email:'', nickname:null, editNick:null, authProvider:null,
+  screen:'login', back:'home', email:'', password:'', authBusy:false, userId:null, nickname:null, editNick:null, authProvider:null,
   homeQuery:'', searchQuery:'', sort:'recent', sortOpen:false,
   listKind:'songs', listPl:null, listQuery:'',
   songId:'dgbmh', viewBy:null, viewChord:null, instrument:'guitar', menu:false, instMenu:false, chordH:230,
+  recentChords:[], _lastProgScrollAt:0,
   startMode:'countdown', vcd:0, listening:false,
   editId:null, createMode:'manual', step:'lyrics', similar:false, rootIdx:0, selRoot:'A', selSuffix:'m', selWord:null, noteDraft:'', autoChords:false,
   phase:'idle', cd:0, recT:0, bars:[], procPct:0, procNote:'', isPublic:false,
@@ -70,25 +90,49 @@ const ST = {
 let toastTimer = null;
 
 /* ============================================================
-   LOCAL PROFILE PERSISTENCE
-   A lightweight, real (if device-local) stand-in for a signed-in account
-   until a real backend (Supabase) is connected: what you type on Login /
-   Account actually survives a reload instead of resetting to demo data.
+   REAL ACCOUNT (Supabase Auth + profiles table)
+   Replaces the old localStorage-only stand-in: Login now creates/signs
+   into a real Supabase account (email+password — signs you up
+   automatically on first use), and profile fields are stored in a
+   `profiles` row keyed by your Supabase user id, with Row Level
+   Security restricting it to you.
    ============================================================ */
-const PROFILE_KEY = 'singa_profile_v1';
-function loadProfile(){
-  try{ const raw = localStorage.getItem(PROFILE_KEY); return raw ? JSON.parse(raw) : null; }
-  catch(e){ return null; }
-}
-function saveProfile(){
+async function applySession(session){
+  ST.userId = session.user.id;
+  ST.email = session.user.email || ST.email;
+  let row = null;
   try{
-    localStorage.setItem(PROFILE_KEY, JSON.stringify({
-      email: ST.email, nickname: ST.nickname, authProvider: ST.authProvider,
-      instrument: ST.instrument, plan: ST.plan, notif: ST.notif, startMode: ST.startMode
-    }));
+    const res = await sb.from('profiles').select('*').eq('id', ST.userId).maybeSingle();
+    row = res.data;
+  }catch(e){}
+  if(row){
+    ST.nickname = row.nickname || nicknameFromEmail(ST.email);
+    ST.instrument = row.instrument || ST.instrument;
+    ST.plan = row.plan || ST.plan;
+    if(row.notif) ST.notif = row.notif;
+    ST.startMode = row.start_mode || ST.startMode;
+  } else {
+    ST.nickname = ST.nickname || nicknameFromEmail(ST.email);
+    syncProfile();
+  }
+  ST.authProvider = 'email'; ST.screen = 'home';
+}
+function syncProfile(){
+  if(!ST.userId) return;
+  try{
+    sb.from('profiles').upsert({
+      id: ST.userId, email: ST.email, nickname: ST.nickname, instrument: ST.instrument,
+      plan: ST.plan, notif: ST.notif, start_mode: ST.startMode, updated_at: new Date().toISOString()
+    }).then(function(){}).catch(function(){});
   }catch(e){}
 }
-function clearProfile(){ try{ localStorage.removeItem(PROFILE_KEY); }catch(e){} }
+async function restoreSession(){
+  try{
+    const { data } = await sb.auth.getSession();
+    if(data && data.session && data.session.user) await applySession(data.session);
+  }catch(e){}
+  render();
+}
 function nicknameFromEmail(email){
   const local = (email||'').split('@')[0].replace(/[._-]+/g,' ').trim();
   return local ? local.replace(/\b\w/g, c=>c.toUpperCase()) : 'You';
@@ -204,42 +248,3 @@ function makeQr(seed){
   return out;
 }
 const QR = makeQr(42);
-function qrHTML(){ return `<div class="qrgrid">${QR.map(c=>`<div style="background:${c}"></div>`).join('')}</div>`; }
-
-function buildLines(s, mode, opt){
-  opt = opt || {};
-  const tm = timing(s);
-  const ci = opt.t!=null ? curWord(tm, opt.t) : -1;
-  const cw = ci>=0 ? tm.words[ci] : null;
-  let curChordK = -1; if(ci>=0) for(let k=0;k<=ci;k++){ const w=tm.words[k]; if(s.chords[w.li+'-'+w.wi]) curChordK=k; }
-  const notes = { ...(s.notes||{}), ...(opt.extraNotes||{}) };
-  const sel = ST.selRoot + ST.selSuffix;
-  let g = 0;
-  return tm.lines.map((ws,li)=>{
-    const curLine = cw && cw.li===li, last = ws.length-1;
-    let hasUp = false;
-    const w2 = ws.map((w,wi)=>{
-      const id = li+'-'+wi, ch = opt.hideChords ? '' : (s.chords[id]||''), gi = g++;
-      const mark = notes[id] || '';
-      const o = { id, w, chord:ch, col:'#333', chordCol:'#9a9a9a', weight:400, cursor:'default', mark,
-        markBefore: !!mark && wi===0, markAfter: !!mark && wi===last && wi!==0, markUp: !!mark && wi>0 && wi<last };
-      if(o.markUp) hasUp = true;
-      if(mode==='chords'){
-        o.col='#a3a3a3'; o.chordCol='#1b1b1b'; o.cursor='pointer'; o.clickAct='placeChord'; o.clickId=id;
-      } else if(mode==='markings'){
-        o.cursor='pointer'; o.clickAct='pickMarkWord'; o.clickId=id; o.selected = ST.selWord===id;
-      } else if(mode==='view'){
-        o.chordCol = ch && ch===opt.selChord ? '#f24822' : '#9a9a9a';
-        if(ch){ o.cursor='pointer'; o.clickAct='setViewChord'; o.clickId=ch; }
-      } else if(mode==='play'){
-        const past = cw && li<cw.li;
-        o.weight=700;
-        o.col = curLine ? (gi<=ci?'#1b1b1b':'#b8b8b8') : (past?'#d2d2d2':'#a8a8a8');
-        o.chordCol = gi===curChordK ? '#f24822' : (curLine?'#8a8a8a':'#cfcfcf');
-      }
-      return o;
-    });
-    const isPlay = mode==='play', on = isPlay && curLine;
-    return { li, words:w2, padTop:(hasUp?30:0)+(on?10:0), mb: on?10:0, scale: on?1.12:1, op: isPlay && cw && li<cw.li ? 0.75:1, cur: on };
-  });
-}
