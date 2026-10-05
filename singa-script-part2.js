@@ -75,10 +75,14 @@ function renderLogin(){
     <svg class="mascot" style="height:300px;margin-top:10px" viewBox="0 0 160 160" fill="none" aria-hidden="true"><circle cx="80" cy="80" r="74" fill="var(--accent)"/><path d="M50 83l19 19 41-46" stroke="#fff" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/><circle cx="18" cy="34" r="6" fill="var(--accent)"/><circle cx="142" cy="46" r="5" fill="#2a9d6b"/><circle cx="136" cy="124" r="7" fill="#4169c7"/><circle cx="16" cy="118" r="5" fill="#8e4fd6"/></svg>
     <div style="font-size:46px;font-weight:800;letter-spacing:-0.02em;margin-top:18px">make some noise!</div>
     <div style="width:100%;max-width:380px;display:flex;flex-direction:column;gap:12px;margin-top:36px">
+      <div class="seg" style="align-self:center;margin-bottom:4px">
+        <button class="${ST.authMode==='signin'?'on':''}" data-act="setAuthMode" data-id="signin">Sign In</button>
+        <button class="${ST.authMode==='signup'?'on':''}" data-act="setAuthMode" data-id="signup">Sign Up</button>
+      </div>
       <input class="ipt" placeholder="Email" value="${esc(ST.email)}" data-bind="email" autocomplete="email" inputmode="email">
-      <input class="ipt" type="password" placeholder="Password" value="${esc(ST.password)}" data-bind="password" data-key="login" autocomplete="current-password">
-      <button class="btn ${ST.authBusy?'btn-disabled':'btn-dark'}" data-act="login">${ST.authBusy?'Please wait…':'Continue'}</button>
-      <div style="font-size:12px;color:#9a9a9a;text-align:center">New here? Enter an email and password — we'll create your account.</div>
+      <input class="ipt" type="password" placeholder="Password" value="${esc(ST.password)}" data-bind="password" data-key="login" autocomplete="${ST.authMode==='signup'?'new-password':'current-password'}">
+      <button class="btn ${ST.authBusy?'btn-disabled':'btn-dark'}" data-act="login">${ST.authBusy?'Please wait…':(ST.authMode==='signup'?'Create Account':'Sign In')}</button>
+      <div style="font-size:12px;color:#9a9a9a;text-align:center">${ST.authMode==='signup'?"We'll create your account and sign you in.":"Don't have an account? Tap Sign Up above."}</div>
       <div style="display:flex;align-items:center;gap:12px;color:#9a9a9a;font-size:13px;margin:6px 0"><div style="flex:1;height:1px;background:#e2e2e2"></div>or<div style="flex:1;height:1px;background:#e2e2e2"></div></div>
       <button class="btn btn-outline" data-act="loginSocial" data-id="Apple">Continue with Apple</button>
       <button class="btn btn-outline" data-act="loginSocial" data-id="Google">Continue with Google</button>
