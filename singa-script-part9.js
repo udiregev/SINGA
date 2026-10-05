@@ -85,7 +85,7 @@ const Actions = {
   toggleNotif(d){ ST.notif[d.id] = !ST.notif[d.id]; syncProfile(); render(); },
   toggleCollabInGig(d){ const i = +d.id; const cg = D.gigs.find(g=>g.id===ST.collabFor); if(!cg) return; const c = D.collabs[i]; const inGig = c.gigs.includes(cg.id); c.gigs = inGig ? c.gigs.filter(x=>x!==cg.id) : [...c.gigs, cg.id]; render(); toast(inGig ? c.name+' removed from '+cg.title : c.name+' added to '+cg.title); },
 
-  setCreateMode(d){ ST.createMode=d.id; ST.phase='idle'; ST.step='lyrics'; render(); },
+  setCreateMode(d){ ST.createMode=d.id; ST.phase='idle'; ST.step='lyrics'; ST.editorLine=0; render(); },
   abortCreate(){
     const s = D.songs[ST.editId];
     if(s && !s.synced){ delete D.songs[ST.editId]; D.order = D.order.filter(x=>x!==ST.editId); }
@@ -94,38 +94,61 @@ const Actions = {
   createBack(){
     if(ST.phase!=='idle'){ ST.phase='idle'; render(); return; }
     const order=['lyrics','chords','markings','sync'], i=order.indexOf(ST.step);
-    if(ST.createMode==='manual' && i>0){ ST.step=order[i-1]; ST.selWord=null; } else ST.screen='home';
+    if(ST.createMode==='manual' && i>0){ ST.step=order[i-1]; ST.selWord=null; ST.editorLine=0; } else ST.screen='home';
     render();
   },
   goCreateStep(d){
     const s = D.songs[ST.editId]; const hasLyrics = !!(s && s.lyrics.trim());
     if(ST.phase!=='idle') return;
     if(!hasLyrics && d.id!=='lyrics'){ toast('Add lyrics first'); return; }
-    ST.step=d.id; ST.selWord=null; render();
+    ST.step=d.id; ST.selWord=null; ST.editorLine=0; render();
   },
-  createNextStep(){ const order=['lyrics','chords','markings','sync']; const i=order.indexOf(ST.step); ST.step=order[Math.min(3,i+1)]; ST.selWord=null; render(); },
+  createNextStep(){ const order=['lyrics','chords','markings','sync']; const i=order.indexOf(ST.step); ST.step=order[Math.min(3,i+1)]; ST.selWord=null; ST.editorLine=0; render(); },
   lyricsNext(){ const s = D.songs[ST.editId]; if(s.lyrics.trim()) Actions.createNextStep(); },
   openSimilar(){ ST.similar=true; render(); },
   closeSimilar(){ ST.similar=false; render(); },
   useSimilar(){ ST.similar=false; ST.screen='song'; ST.songId='dgbmh'; ST.viewBy = 'allhands232'; ST.back='create'; ST.ctx='view'; ST.t=0; ST.playing=false; render(); },
-  fillExample(){ const s = D.songs[ST.editId]; s.lyrics = EX_LYRICS; if(!s.title) s.title = "Don't Go Breaking My Heart"; if(!s.sub) s.sub = EX_SUB; render(); },
   pickRoot(d){ ST.rootIdx = +d.id; ST.selRoot = LETTERS[+d.id]; render(); },
   pickVariant(d){ ST.selRoot = d.root; ST.selSuffix = d.q; render(); },
-  placeChord(d){ const s = D.songs[ST.editId]; const sel = ST.selRoot+ST.selSuffix; if(s.chords[d.id]===sel) delete s.chords[d.id]; else { s.chords[d.id]=sel; recordRecentChord(sel); } render(); },
-  pickMarkWord(d){ const s = D.songs[ST.editId]; ST.selWord = d.id; ST.noteDraft = (s.notes||{})[d.id] || ''; render(); },
+  placeChord(d){
+    const s = D.songs[ST.editId]; const sel = ST.selRoot+ST.selSuffix;
+    const li = +String(d.id).split('-')[0]; if(!isNaN(li)) ST.editorLine = li;
+    if(s.chords[d.id]===sel) delete s.chords[d.id]; else { s.chords[d.id]=sel; recordRecentChord(sel); } render();
+  },
+  pickMarkWord(d){
+    const s = D.songs[ST.editId];
+    const li = +String(d.id).split('-')[0]; if(!isNaN(li)) ST.editorLine = li;
+    ST.selWord = d.id; ST.noteDraft = (s.notes||{})[d.id] || ''; render();
+  },
   saveNote(){ const s = D.songs[ST.editId]; const n = {...s.notes}; if(ST.noteDraft.trim()) n[ST.selWord]=ST.noteDraft.trim(); else delete n[ST.selWord]; s.notes=n; ST.selWord=null; render(); },
   removeNote(){ const s = D.songs[ST.editId]; const n = {...s.notes}; delete n[ST.selWord]; s.notes=n; ST.selWord=null; ST.noteDraft=''; render(); },
+  closeNoteEditor(){ ST.selWord=null; ST.noteDraft=''; render(); },
   detectChords(){ ST.autoChords=true; ST.step='sync'; render(); },
   practiceDraft(){ ST.screen='practice'; ST.ctx='practice'; ST.t=0; ST.playing=false; ST.songId=ST.editId; ST.back='create'; render(); },
-  startRecord(){ ST.phase='countdown'; ST.cd=3; ST.bars=[]; ST.recT=0; render(); },
+  async startRecord(){
+    // Ask for the mic right now, before showing the 3-2-1 countdown, so the
+    // browser's permission prompt appears immediately on tapping Record
+    // instead of after the countdown finishes.
+    if(ST.phase!=='idle') return;
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ toast('Microphone not available on this device/browser'); return; }
+    let stream;
+    try{ stream = await navigator.mediaDevices.getUserMedia({ audio:true }); }
+    catch(err){ toast('Mic error: '+(err && err.name || err)); return; }
+    pendingMicStream = stream;
+    ST.phase='countdown'; ST.cd=3; ST.bars=[]; ST.recT=0; render();
+  },
   startUpload(){ document.getElementById('fileInput').click(); },
   startCloud(){ toast('Importing from cloud storage is coming soon — use Record or Upload for now'); },
   stopRecord(){
-    if(ST.phase==='countdown'){ ST.phase='idle'; ST.cd=0; render(); return; }
+    if(ST.phase==='countdown'){
+      if(pendingMicStream){ pendingMicStream.getTracks().forEach(t=>t.stop()); pendingMicStream=null; }
+      ST.phase='idle'; ST.cd=0; render(); return;
+    }
     if(liveRecorder && liveRecorder.state==='recording'){ liveRecorder.stop(); }
     else { ST.phase='idle'; render(); }
   },
   abortRecord(){
+    if(pendingMicStream){ pendingMicStream.getTracks().forEach(t=>t.stop()); pendingMicStream=null; }
     if(liveRecorder && liveRecorder.state!=='inactive'){ liveAborting=true; try{ liveRecorder.stop(); }catch(e){} }
     else if(liveStream){ liveStream.getTracks().forEach(t=>t.stop()); liveStream=null; }
     ST.phase='idle'; ST.bars=[]; render();
@@ -139,7 +162,7 @@ const Actions = {
   toggleSongPick(d){ const sp = ST.songPick; const isPl = sp.kind==='playlist'; const target = isPl ? D.playlists.find(p=>p.id===sp.id) : D.gigs.find(g=>g.id===sp.id); const ids = isPl?target.ids:target.setlist; const on = ids.includes(d.id); const next = on ? ids.filter(i=>i!==d.id) : [...ids, d.id]; if(isPl) target.ids=next; else target.setlist=next; render(); },
   togglePublic(){ ST.isPublic = !ST.isPublic; render(); },
   viewDone(){ openSongOrIncomplete(ST.editId, 'home'); render(); },
-  continueSong(){ ST.editId = ST.songId; ST.screen='create'; ST.createMode='manual'; ST.step='lyrics'; ST.phase='idle'; render(); },
+  continueSong(){ ST.editId = ST.songId; ST.screen='create'; ST.createMode='manual'; ST.step='lyrics'; ST.phase='idle'; ST.editorLine=0; render(); },
 
   openNew(d){ ST.newItem = { kind:d.id, name:'', date:'' }; render(); },
   closeNew(){ ST.newItem=null; render(); },
@@ -160,7 +183,7 @@ const Actions = {
   toggleInstMenu(d,e){ if(e) e.stopPropagation(); ST.instMenu = !ST.instMenu; render(); },
   setInstrumentMenu(d, e){ if(e) e.stopPropagation(); ST.instrument=d.id; ST.menu=false; ST.instMenu=false; render(); },
   menuAddGig(){ ST.menu=false; ST.pick = { kind:'gig', songId: ST.songId }; render(); },
-  editSong(){ stopOnsetListening(); ST.editId = ST.songId; ST.screen='create'; ST.createMode='manual'; ST.step='chords'; ST.phase='idle'; ST.menu=false; render(); },
+  editSong(){ stopOnsetListening(); ST.editId = ST.songId; ST.screen='create'; ST.createMode='manual'; ST.step='chords'; ST.phase='idle'; ST.menu=false; ST.editorLine=0; render(); },
   deleteSong(){ if(ST.songId==='dgbmh'){ ST.menu=false; render(); toast('Demo song is used in a gig — remove it there first'); return; } stopOnsetListening(); delete D.songs[ST.songId]; D.order = D.order.filter(x=>x!==ST.songId); ST.screen='home'; ST.menu=false; ST.songId='dgbmh'; render(); toast('Song deleted'); },
   copySong(){ ST.viewBy=null; render(); toast('Copied to My songs'); },
   setViewChord(d){ ST.viewChord = d.id; render(); },
