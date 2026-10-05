@@ -1,4 +1,142 @@
 "use strict";
+function renderGigPlayer(){
+  const g = gigObj();
+  const gq = queueFor(g), gs = gigSettings(g);
+  const isCollab = !g.mine;
+  const gStarted = ST.playing || ST.t>0;
+  const curId = gigSongId();
+  const s = song(curId);
+  const tm = timing(s);
+  const ci = curWord(tm, ST.t);
+  const seq = chordSeq(s);
+  const chord = chordAt(s,tm,Math.max(ci,0)) || (seq[0]||{}).ch;
+  const next = (seq.find(x=>x.k>ci && x.ch!==chord)||{}).ch;
+  const hasInst = ST.instrument!=='none';
+  const gigShowChords = hasInst || isCollab;
+  const dia = diagram(chord, next || (seq[0]||{}).ch, isCollab ? (ST.part==='Keys'?'piano':'guitar') : ST.instrument);
+  const gigHasLyrics = !!(s.lyrics && s.lyrics.trim());
+  const lines = gigHasLyrics ? buildLines(s, gStarted?'play':'view', { t: gStarted?ST.t:null, selChord: chord, hideChords: !isCollab && !hasInst }) : [];
+
+  const qRow = (id, kind) => {
+    const x = song(id), isCur = kind==='cur';
+    const tag = isCur ? (ST.playing?'NOW PLAYING':(gStarted?'PAUSED':(ST.gListening?'LISTENING':'UP NEXT'))) : '';
+    const tagCol = isCur && (ST.playing||ST.gListening) ? '#f24822' : '#8a8a8a';
+    const col = kind==='played' ? '#b0b0b0' : '#1b1b1b';
+    const subCol = kind==='played' ? '#c4c4c4' : (isCur?'#1b1b1b':'#8a8a8a');
+    const iconName = kind==='played' ? 'check' : (isCur ? (ST.playing?'pause':'play_arrow') : '');
+    const hasVotes = kind==='up' && gs.order && (ST.orderVotes[id]||0)>0;
+    return `<div class="row" style="gap:8px;padding:12px 0;border-bottom:1px solid var(--b2);cursor:pointer;justify-content:space-between" data-act="startGig" data-id="${id}">
+      <div style="min-width:0;flex:1">
+        ${isCur?`<div style="font-size:10px;font-weight:800;letter-spacing:.08em;color:${tagCol};margin-bottom:3px">${tag}</div>`:''}
+        <div style="font-size:14px;font-weight:${isCur?700:400};color:${col};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(x.title||'Untitled song')}</div>
+        <div style="font-size:11px;color:${subCol};font-weight:${isCur?600:400};margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(x.sub)}</div>
+      </div>
+      ${hasVotes?`<span style="font-size:11px;font-weight:700;color:#6f6f6f;display:flex;align-items:center">${icon('arrow_drop_up',16)}${ST.orderVotes[id]||0}</span>`:''}
+      <span style="color:${kind==='played'?'#c4c4c4':'#1b1b1b'}">${iconName?icon(iconName,18):''}</span>
+    </div>`;
+  };
+  let queueHTML = '';
+  if(gq.cued) queueHTML += qRow(gq.cued,'cur');
+  gq.up.forEach(id=> queueHTML += qRow(id,'up'));
+  if(gq.played.length){ queueHTML += `<div style="font-size:11px;font-weight:800;letter-spacing:.08em;color:#9a9a9a;padding:22px 0 6px">PLAYED</div>`; gq.played.forEach(id=> queueHTML += qRow(id,'played')); }
+
+  const guestCount = 23 + ' guests';
+  const chordScale = Math.max(0.55, Math.min(1.9, ST.chordH/230));
+  const hint = !gigHasLyrics ? 'Tap another song to continue' : (ST.playing ? 'Tap the song in the list to pause' : (gStarted ? 'Paused · tap the song to resume' : (ST.startMode==='countdown' ? 'Tap a song in the list to start · 3-2-1 countdown' : 'Tap a song in the list to start listening')));
+
+  return `<div class="gigplayer-grid">
+    <div class="gigplayer-side">
+      <div class="row" style="gap:8px">
+        <span class="icon-btn" data-act="exitGig">${icon('chevron_left',24)}</span>
+        <span style="background:#f24822;color:#fff;font-size:10px;font-weight:800;letter-spacing:.08em;padding:3px 6px;border-radius:4px">LIVE</span>
+        <span style="font-size:12px;color:#6f6f6f;display:flex;align-items:center;gap:3px">${icon('group',16)}${guestCount}</span>
+      </div>
+      <div style="font-size:18px;font-weight:700;line-height:1.25;margin:22px 16px 18px 0">${esc(g.title)}</div>
+      <div style="flex:1;min-height:0;overflow:auto">${queueHTML}</div>
+    </div>
+    <div style="padding:20px clamp(16px,4vw,48px) 20px;display:flex;flex-direction:column;min-height:0;position:relative;flex:1">
+      <div>
+        <div style="font-size:26px;font-weight:700;letter-spacing:-0.01em">${esc(s.title||'Untitled song')}</div>
+        <div style="font-size:14px;color:#6f6f6f;margin-top:4px">${esc(s.sub)}</div>
+        ${s.by?`<div class="row" style="gap:6px;font-size:13px;margin-top:8px">${icon('account_circle',18)}added by ${esc(s.by)}</div>`:''}
+      </div>
+      ${gigHasLyrics ? `
+        ${gigShowChords ? `<div style="height:${Math.round(ST.chordH)}px;display:flex;align-items:center;justify-content:center;overflow:hidden">
+          <div style="display:flex;flex-direction:column;align-items:center;gap:14px;transform:scale(${chordScale})">${diagramHTML(dia)}
+            <button class="link" style="display:flex;align-items:center;gap:6px" data-act="playSample">${icon(ST.sampling?'stop_circle':'play_circle',22)}${ST.sampling?'Stop sample':'Play Sample'}</button>
+          </div></div>
+        <div class="row" style="justify-content:center;cursor:ns-resize;height:30px">${icon('drag_handle',26)}</div>` : ''}
+        <div style="flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;align-items:center;padding:16px 0 30%">${linesHTML(lines)}</div>
+      ` : `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:#6f6f6f">
+          ${icon('lyrics',40)}
+          <div style="font-size:16px;font-weight:600;color:#1b1b1b">No synced take for this song yet</div>
+          <div style="font-size:13px;text-align:center">Guests see "Up next" until you move on. Tap the next song to continue.</div>
+        </div>`}
+      ${isCollab ? `<div style="border:1px solid #e6e6e6;border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:12px;margin-top:10px">
+          ${icon('edit_note',24)}<div style="flex:1;font-size:12px;color:#6f6f6f;line-height:1.4"><span style="font-weight:700;color:#1b1b1b">You're a collaborator on this gig.</span> Your own chords and notes are layered on the owner's track. Only you see them.</div>
+          <button class="btn btn-outline btn-sm" data-act="editPart">Edit my part</button>
+        </div>` : ''}
+      <div style="min-height:64px;display:flex;align-items:center;justify-content:center;padding-top:8px">
+        ${ST.gListening ? `<div class="row" style="gap:12px;cursor:pointer" data-act="gigHeard">${icon('mic',30)}<div><div style="font-size:16px;font-weight:600">Listening… playback starts the moment you sing</div><div style="font-size:12px;color:#8a8a8a;margin-top:3px">Tap here to start it manually instead</div></div></div>`
+        : `<div style="font-size:13px;color:#8a8a8a;display:flex;align-items:center;gap:6px">${icon('touch_app',18)}${hint}</div>`}
+      </div>
+    </div>
+  </div>
+  ${ST.vcd>0?`<div class="modal-backdrop" style="background:rgba(255,255,255,.75);font-size:180px;font-weight:800">${Math.max(1,Math.ceil(ST.vcd))}</div>`:''}`;
+}
+/* ============================================================
+   MODALS: Upgrade / Picker / New / Collaborator editor
+   ============================================================ */
+function renderUpgradeModal(){
+  return `<div class="modal-backdrop" data-act="closeUpgrade"><div class="modal" style="max-width:520px" onclick="event.stopPropagation()">
+    <div class="mhead"><span style="font-size:21px;font-weight:600">Choose your plan</span><span class="icon-btn" data-act="closeUpgrade">${icon('close',22)}</span></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div style="border:1.5px solid #e2e2e2;border-radius:12px;padding:18px;display:flex;flex-direction:column;gap:6px">
+        <div style="font-size:17px;font-weight:700">Free</div><div style="font-size:26px;font-weight:800">$0</div><div style="font-size:12px;color:#8a8a8a">Your current plan</div>
+      </div>
+      <div style="border:2px solid #f24822;border-radius:12px;padding:18px;display:flex;flex-direction:column;gap:6px">
+        <div style="font-size:17px;font-weight:700;display:flex;align-items:center;gap:4px">${icon('bolt',20)}RockStar</div>
+        <div style="font-size:26px;font-weight:800">$4.99<span style="font-size:13px;font-weight:600;color:#6f6f6f"> / month</span></div>
+        <div style="font-size:12px;color:#8a8a8a">Billed monthly. Cancel anytime.</div>
+      </div>
+    </div>
+    <div style="font-size:13px;color:#8a8a8a;border:1px dashed #d4d4d4;border-radius:10px;padding:14px;text-align:center">RockStar features will be listed here.</div>
+    <button class="btn btn-accent" data-act="doUpgrade">Upgrade to RockStar</button>
+  </div></div>`;
+}
+
+function renderPickerModal(){
+  const pick = ST.pick, sp = ST.songPick;
+  let heading, sub, rows, hasSearch=false, hasNew=false, newLabel='', closeAct, query='';
+  if(sp){
+    const isPl = sp.kind==='playlist';
+    const target = isPl ? D.playlists.find(p=>p.id===sp.id) : D.gigs.find(g=>g.id===sp.id);
+    const ids = target ? (isPl?target.ids:target.setlist) : [];
+    const q = (ST.spQuery||'').trim().toLowerCase();
+    heading = 'Add songs'; sub = target?target.title:''; hasSearch=true; query = ST.spQuery||'';
+    rows = D.order.filter(id=>{ const x=song(id); return !q || ((x.title||'')+' '+(x.sub||'')).toLowerCase().includes(q); })
+      .map(id=>{ const x=song(id), on=ids.includes(id); return `<div class="row" style="gap:14px;padding:12px 0;border-bottom:1px solid #f0f0f0;cursor:pointer" data-act="toggleSongPick" data-id="${id}"><span style="width:22px;height:22px;flex:none;border-radius:6px;border:1.5px solid var(--fg);background:${on?'#1b1b1b':'#fff'};color:#fff;display:flex;align-items:center;justify-content:center">${on?icon('check',16):''}</span><div style="min-width:0"><div style="font-size:15px;font-weight:600">${esc(x.title||'Untitled song')}</div><div style="font-size:12px;color:#8a8a8a;margin-top:2px">${esc(x.sub||(x.synced?'':'Draft'))}</div></div></div>`; }).join('');
+    closeAct = 'closeSongPick';
+  } else if(pick){
+    const isPl = pick.kind==='playlist', sid = pick.songId;
+    heading = isPl ? 'Add to playlist' : 'Add to a gig'; sub = song(sid).title || 'Untitled song'; hasNew = true; newLabel = isPl?'New playlist':'New gig';
+    if(isPl){
+      rows = D.playlists.filter(p=>!p.auto).map(p=>{ const on=p.ids.includes(sid); return `<div class="row" style="gap:14px;padding:12px 0;border-bottom:1px solid #f0f0f0;cursor:pointer" data-act="togglePickPlaylist" data-id="${p.id}"><span style="width:22px;height:22px;flex:none;border-radius:6px;border:1.5px solid var(--fg);background:${on?'#1b1b1b':'#fff'};color:#fff;display:flex;align-items:center;justify-content:center">${on?icon('check',16):''}</span><div><div style="font-size:15px;font-weight:600">${esc(p.title)}</div><div style="font-size:12px;color:#8a8a8a;margin-top:2px">${p.ids.length} songs</div></div></div>`; }).join('');
+    } else {
+      rows = D.gigs.map(g=>{ const on=g.setlist.includes(sid); return `<div class="row" style="gap:14px;padding:12px 0;border-bottom:1px solid #f0f0f0;cursor:pointer" data-act="togglePickGig" data-id="${g.id}"><span style="width:22px;height:22px;flex:none;border-radius:6px;border:1.5px solid var(--fg);background:${on?'#1b1b1b':'#fff'};color:#fff;display:flex;align-items:center;justify-content:center">${on?icon('check',16):''}</span><div><div style="font-size:15px;font-weight:600">${esc(g.title)}</div><div style="font-size:12px;color:#8a8a8a;margin-top:2px">${esc(g.date)} · ${g.setlist.length} songs</div></div></div>`; }).join('');
+    }
+    closeAct = 'closePick';
+  }
+  return `<div class="modal-backdrop" data-act="${closeAct}"><div class="modal" style="max-width:440px" onclick="event.stopPropagation()">
+    <div class="mhead"><span style="font-size:21px;font-weight:600">${esc(heading)}</span><span class="icon-btn" data-act="${closeAct}">${icon('close',22)}</span></div>
+    <div class="msub">${esc(sub)}</div>
+    ${hasSearch?`<div class="search-field" style="margin-bottom:6px"><input placeholder="Search your songs" value="${esc(query)}" data-bind="spQuery">${icon('search',20)}</div>`:''}
+    <div style="max-height:380px;overflow:auto">${rows}</div>
+    ${hasNew?`<a class="link" style="display:flex;align-items:center;gap:6px;margin-top:8px" data-act="openNew" data-id="${heading==='Add to playlist'?'playlist':'gig'}">${icon('add',20)}${newLabel}</a>`:''}
+    <button class="btn btn-dark" style="margin-top:14px" data-act="${closeAct}">Done</button>
+  </div></div>`;
+}
+
 function renderNewModal(){
   const ni = ST.newItem;
   const heading = ni.kind==='playlist' ? 'New playlist' : 'New gig';
@@ -27,260 +165,3 @@ function renderCollabEditModal(){
   </div></div>`;
 }
 
-function renderNickModal(){
-  return `<div class="modal-backdrop" data-act="closeEditNick"><div class="modal" style="max-width:380px" onclick="event.stopPropagation()">
-    <div class="mhead"><span style="font-size:21px;font-weight:600">Nickname</span><span class="icon-btn" data-act="closeEditNick">${icon('close',22)}</span></div>
-    <label style="display:flex;flex-direction:column;gap:4px;border-bottom:1px solid #e2e2e2;padding-bottom:8px"><span style="font-size:12px;color:#8a8a8a">Shown to collaborators and your audience</span><input style="border:0;outline:none;font-size:16px;font-weight:600" value="${esc(ST.editNick)}" data-bind="nickInput" data-key="saveNickname" autofocus></label>
-    <button class="btn" style="background:${ST.editNick.trim()?'#1b1b1b':'#d6d6d6'};color:#fff;margin-top:6px" data-act="saveNickname">Save</button>
-  </div></div>`;
-}
-
-function renderModals(){
-  let html = '';
-  if(ST.gigSettings) html += renderGigSettingsModal();
-  if(ST.upgrade) html += renderUpgradeModal();
-  if(ST.pick || ST.songPick) html += renderPickerModal();
-  if(ST.newItem) html += renderNewModal();
-  if(ST.collabEdit) html += renderCollabEditModal();
-  if(ST.editNick!=null) html += renderNickModal();
-  return html;
-}
-/* ============================================================
-   RENDER DISPATCH
-   ============================================================ */
-function render(){
-  document.body.classList.toggle('dark-invert', ST.perfDark);
-  document.getElementById('darkToggle').style.display = ST.screen==='login' ? 'none' : 'flex';
-  document.getElementById('darkPill').style.background = ST.perfDark ? '#1b1b1b' : '#fff';
-  document.getElementById('darkDot').style.left = (ST.perfDark?20:2)+'px';
-  document.getElementById('darkDot').style.background = ST.perfDark ? '#fff' : '#1b1b1b';
-  let html = '';
-  switch(ST.screen){
-    case 'login': html = renderLogin(); break;
-    case 'home': html = renderHome(); break;
-    case 'list': html = renderList(); break;
-    case 'search': html = renderSearch(); break;
-    case 'account': html = renderAccount(); break;
-    case 'collab': html = renderCollab(); break;
-    case 'create': html = renderCreate(); break;
-    case 'done': html = renderDone(); break;
-    case 'incomplete': html = renderIncomplete(); break;
-    case 'song': html = renderSong(); break;
-    case 'practice': html = renderPractice(); break;
-    case 'gig': html = renderGig(); break;
-    case 'gigphotos': html = renderGigPhotos(); break;
-    case 'gigedit': html = renderGigEdit(); break;
-    case 'gigplayer': html = renderGigPlayer(); break;
-    default: html = renderHome();
-  }
-  document.getElementById('screen').innerHTML = html;
-  document.getElementById('modalLayer').innerHTML = renderModals();
-  document.getElementById('toastBox').innerHTML = ST.toast ? `<div class="toast">${esc(ST.toast)}</div>` : '';
-  // autofocus search on search screen
-  if(ST.screen==='search'){ const el = document.querySelector('#screen input[data-bind="searchQuery"]'); if(el){ el.focus(); const v=el.value; el.value=''; el.value=v; } }
-  // scroll current lyric line into view
-  const sc = document.getElementById('lyricsScroll');
-  if(sc){ const cur = sc.querySelector('[data-cur]'); }
-}
-
-/* ============================================================
-   ACTIONS
-   ============================================================ */
-function autoChordsFor(lyrics){
-  const cyc = ['Am','F','G','C'], out = {};
-  parseLyrics(lyrics).forEach((ws,li)=>{ out[li+'-0']=cyc[li%4]; if(ws.length>3) out[li+'-'+Math.floor(ws.length/2)]=cyc[(li+1)%4]; });
-  return out;
-}
-function openSongOrIncomplete(id, from){
-  stopOnsetListening();
-  const s = song(id);
-  const ok = s.lyrics && s.lyrics.trim();
-  ST.songId = id; ST.viewBy=null; ST.viewChord=null; ST.menu=false; ST.instMenu=false; ST.ctx='view'; ST.t=0; ST.playing=false; ST.vcd=0; ST.listening=false; ST.sortOpen=false;
-  ST.screen = ok ? 'song' : 'incomplete';
-  ST.back = from || ST.screen;
-}
-function newSongDraft(){
-  const id = 'n'+Date.now();
-  D.songs[id] = { id, title:'', sub:'', lyrics:'', chords:{}, notes:{}, synced:false, plays:0, added:Date.now(), mine:true };
-  D.order = [id, ...D.order];
-  ST.editId = id; ST.screen='create'; ST.createMode='manual'; ST.step='lyrics'; ST.phase='idle'; ST.selWord=null; ST.similar=false; ST.menu=false; ST.isPublic=false; ST.sortOpen=false;
-}
-function finishSong(){
-  const id = ST.editId, s = D.songs[id];
-  const patch = { synced:true };
-  if(!s.lyrics.trim()) patch.lyrics = EX_LYRICS;
-  if(!s.title.trim()) patch.title = "Don't Go Breaking My Heart";
-  if(!Object.keys(s.chords).length || ST.autoChords) patch.chords = autoChordsFor(patch.lyrics || s.lyrics);
-  Object.assign(s, patch);
-  ST.phase='idle'; ST.procPct=0; ST.procNote=''; ST.screen='done'; ST.autoChords=false; ST.songId=id;
-}
-
-/* ============================================================
-   REAL AUDIO ENGINE
-   Replaces the old simulated recording (random waveform bars, a fake
-   progress bar, then a canned demo song regardless of what you did) with
-   real microphone / file capture, real speech-to-text, and real
-   force-aligned per-word timestamps — ported from song-builder.html's
-   working engine. Vocal isolation (on-device Demucs) is NOT ported yet;
-   chords are still assigned from the built-in pattern-based guesser
-   (autoChordsFor) rather than detected from the recording's pitch.
-   ============================================================ */
-let liveStream=null, liveRecorder=null, liveChunks=[], liveAudioCtx=null, liveAnalyser=null, liveDataArr=null, liveAborting=false, recordingStartPending=false;
-
-function sampleLiveLevel(){
-  if(!liveAnalyser || !liveDataArr) return null;
-  liveAnalyser.getByteTimeDomainData(liveDataArr);
-  let sum=0;
-  for(let i=0;i<liveDataArr.length;i++){ const v=(liveDataArr[i]-128)/128; sum+=v*v; }
-  const rms = Math.sqrt(sum/liveDataArr.length);
-  return Math.max(4, Math.min(100, Math.round(rms*420)+8));
-}
-
-async function beginRealRecording(){
-  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
-    toast('Microphone not available on this device/browser'); ST.phase='idle'; render(); return;
-  }
-  let stream;
-  try{ stream = await navigator.mediaDevices.getUserMedia({ audio:true }); }
-  catch(err){ toast('Mic error: '+(err && err.name || err)); ST.phase='idle'; render(); return; }
-  let recorder;
-  try{ recorder = new MediaRecorder(stream); }
-  catch(err){ toast('Recording is not supported in this browser'); stream.getTracks().forEach(t=>t.stop()); ST.phase='idle'; render(); return; }
-  const actx = new (window.AudioContext||window.webkitAudioContext)();
-  const src = actx.createMediaStreamSource(stream);
-  const analyser = actx.createAnalyser(); analyser.fftSize = 256;
-  src.connect(analyser);
-  liveStream=stream; liveRecorder=recorder; liveAudioCtx=actx; liveAnalyser=analyser;
-  liveDataArr = new Uint8Array(analyser.frequencyBinCount);
-  liveChunks = []; liveAborting = false;
-  recorder.ondataavailable = e=>{ if(e.data && e.data.size>0) liveChunks.push(e.data); };
-  recorder.onstop = async ()=>{
-    const chunks = liveChunks, mimeType = recorder.mimeType || 'audio/webm', wasAborting = liveAborting;
-    stream.getTracks().forEach(t=>t.stop());
-    actx.close().catch(()=>{});
-    liveStream=null; liveRecorder=null; liveAudioCtx=null; liveAnalyser=null; liveDataArr=null; liveChunks=[]; liveAborting=false;
-    if(wasAborting){ ST.phase='idle'; ST.bars=[]; render(); return; }
-    const blob = new Blob(chunks, { type: mimeType });
-    const s = D.songs[ST.editId];
-    await processRecordingBlob(s, blob);
-  };
-  recorder.start();
-  ST.phase='recording'; ST.recT=0; ST.bars=[]; render();
-}
-
-function decodeToFloat32Mono16k(blob){
-  return blob.arrayBuffer().then(arrayBuf=>{
-    const tmpCtx = new (window.AudioContext||window.webkitAudioContext)();
-    return tmpCtx.decodeAudioData(arrayBuf.slice(0)).then(decoded=>{
-      const durationSec = decoded.duration;
-      const targetLen = Math.max(1, Math.ceil(durationSec*16000));
-      const offline = new OfflineAudioContext(1, targetLen, 16000);
-      const bufSrc = offline.createBufferSource();
-      bufSrc.buffer = decoded; bufSrc.connect(offline.destination); bufSrc.start();
-      return offline.startRendering().then(rendered=>{
-        tmpCtx.close().catch(()=>{});
-        return { float32: rendered.getChannelData(0), durationSec };
-      });
-    });
-  });
-}
-
-function normWord(w){ return (w||'').toLowerCase().replace(/[^a-z0-9'’]/g,''); }
-
-// Classic edit-distance alignment of the typed/recognized lyric words (ref)
-// against the speech-recognizer's words (hyp) — for each ref word, finds the
-// best-matching hyp word (or null), so real timestamps can be looked up.
-function alignSequences(ref, hyp){
-  const n=ref.length, m=hyp.length;
-  const dp = Array.from({length:n+1}, ()=>new Array(m+1).fill(0));
-  for(let i=0;i<=n;i++) dp[i][0]=i;
-  for(let j=0;j<=m;j++) dp[0][j]=j;
-  for(let i=1;i<=n;i++) for(let j=1;j<=m;j++){
-    const cost = ref[i-1]===hyp[j-1] ? 0 : 1;
-    dp[i][j] = Math.min(dp[i-1][j-1]+cost, dp[i-1][j]+1, dp[i][j-1]+1);
-  }
-  const mapping = new Array(n).fill(null);
-  let i=n, j=m;
-  while(i>0 && j>0){
-    const cost = ref[i-1]===hyp[j-1] ? 0 : 1;
-    if(dp[i][j]===dp[i-1][j-1]+cost){ mapping[i-1]=j-1; i--; j--; }
-    else if(dp[i][j]===dp[i-1][j]+1){ i--; }
-    else { j--; }
-  }
-  return mapping;
-}
-
-// Fills in a timestamp for every ref word: matched words get the real
-// recognized timestamp, unmatched ones are linearly interpolated between
-// their nearest matched neighbors (or extrapolated at the ends).
-function fillTimestamps(mapping, hypWords, totalDuration){
-  const n = mapping.length;
-  const ts = new Array(n).fill(null);
-  for(let i=0;i<n;i++){ if(mapping[i]!=null && hypWords[mapping[i]]) ts[i] = hypWords[mapping[i]].start; }
-  let lastIdx=-1, lastT=0;
-  for(let i=0;i<n;i++){
-    if(ts[i]==null) continue;
-    if(lastIdx===-1 && i>0){ for(let k=0;k<i;k++) ts[k] = ts[i]*(k+1)/(i+1); }
-    else if(i-lastIdx>1){ const span=ts[i]-lastT; for(let k=lastIdx+1;k<i;k++) ts[k] = lastT+span*(k-lastIdx)/(i-lastIdx); }
-    lastIdx=i; lastT=ts[i];
-  }
-  if(lastIdx===-1){ for(let k=0;k<n;k++) ts[k] = totalDuration*(k+1)/(n+1); }
-  else if(lastIdx<n-1){ const span=Math.max(0,totalDuration-lastT); for(let k=lastIdx+1;k<n;k++) ts[k] = lastT+span*(k-lastIdx)/(n-lastIdx); }
-  return ts;
-}
-
-// The real pipeline: decode the take, transcribe it with an on-device speech
-// model, then either (a) force-align it against lyrics you already typed, or
-// (b) — if you recorded/uploaded with no typed lyrics — use the real
-// transcription AS the lyrics. Runs entirely client-side (Transformers.js +
-// Whisper-tiny.en, loaded from a CDN on first use).
-async function processRecordingBlob(songObj, blob){
-  const hadManualLyrics = !!(songObj.lyrics && songObj.lyrics.trim());
-  ST.phase='processing'; ST.procPct=5; ST.procNote='Listening back to your take…'; render();
-  try{
-    const { float32, durationSec } = await decodeToFloat32Mono16k(blob);
-    ST.procPct=20; render();
-    ST.procNote='Loading the speech model (first time only)…'; render();
-    const { pipeline } = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2');
-    ST.procPct=35; render();
-    const transcriber = await pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny.en');
-    ST.procPct=55; ST.procNote='Transcribing your words…'; render();
-    const output = await transcriber(float32, { return_timestamps:'word', chunk_length_s:30, stride_length_s:5 });
-    ST.procPct=82; ST.procNote='Lining up every word…'; render();
-    const hypWords = (output.chunks||[]).map(c=>({
-      text: (c.text||'').trim(),
-      norm: normWord(c.text),
-      start: (c.timestamp && typeof c.timestamp[0]==='number') ? c.timestamp[0] : 0,
-    })).filter(w=>w.norm);
-
-    if(hadManualLyrics){
-      const refWords = [];
-      parseLyrics(songObj.lyrics).forEach(ws=>ws.forEach(w=>refWords.push(normWord(w))));
-      const mapping = alignSequences(refWords, hypWords.map(w=>w.norm));
-      songObj.wordTimestamps = fillTimestamps(mapping, hypWords, durationSec);
-    } else {
-      const WORDS_PER_LINE = 7;
-      const rawWords = hypWords.map(w=>w.text).filter(Boolean);
-      if(rawWords.length){
-        const lines = [];
-        for(let i=0;i<rawWords.length;i+=WORDS_PER_LINE) lines.push(rawWords.slice(i,i+WORDS_PER_LINE).join(' '));
-        songObj.lyrics = lines.join('\n');
-        songObj.wordTimestamps = hypWords.map(w=>w.start);
-      }
-    }
-    songObj.audioDurationSec = durationSec;
-    songObj.synced = true;
-    ST.procPct=100; ST.procNote='Done'; render();
-  }catch(err){
-    console.error('Singa: speech alignment failed, falling back to estimated timing', err);
-    toast("Couldn't analyze the audio — using estimated timing instead");
-    songObj.wordTimestamps = null; songObj.audioDurationSec = null; songObj.synced = true;
-  }
-  finishSong();
-  render();
-}
-
-// Real "Start detection" playback mode: listens to the mic and auto-starts
-// (sets ST.playing/ST.gListening=true) the instant it hears you begin, via a
-// rolling energy-threshold onset detector (ported from song-builder.html's
-// startListeningForCue). onTrigger is called once, then listening stops.
