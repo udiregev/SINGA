@@ -163,6 +163,36 @@ document.addEventListener('scroll', function(e){
   }, 140);
 }, true);
 
+/* Song-viewer chord/about section resize: dragging the handle between it
+   and the lyrics changes how much vertical space each gets. Mutates the
+   diagram box's height/scale directly while dragging (not via render(), to
+   stay smooth) and only commits ST.chordH + re-renders once, on release. */
+(function(){
+  let dragging = false, startY = 0, startH = 230;
+  document.addEventListener('pointerdown', function(e){
+    const handle = e.target.closest('#chordResizeHandle');
+    if(!handle) return;
+    dragging = true; startY = e.clientY; startH = ST.chordH;
+    e.preventDefault();
+  });
+  document.addEventListener('pointermove', function(e){
+    if(!dragging) return;
+    const h = Math.max(90, Math.min(420, startH + (e.clientY - startY)));
+    ST.chordH = h;
+    const box = document.getElementById('chordDiagramBox');
+    if(box){
+      box.style.height = Math.round(h)+'px';
+      const inner = box.querySelector('.chordInnerScale');
+      if(inner) inner.style.transform = 'scale('+Math.max(0.55, Math.min(1.9, h/230))+')';
+    }
+  });
+  document.addEventListener('pointerup', function(){
+    if(!dragging) return;
+    dragging = false;
+    render();
+  });
+})();
+
 /* ============================================================
    INIT
    ============================================================ */
