@@ -131,6 +131,9 @@ textarea.ipt{height:auto;padding:16px 18px;line-height:1.5;resize:none}
 .phototile{border-radius:8px;background:repeating-linear-gradient(135deg,#e9e9e9 0 8px,#e1e1e1 8px 16px);display:flex;align-items:flex-end;padding:10px}
 .phototile span{font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--m3)}
 
+.account-avatar-col{display:none}
+@media(min-width:760px){.account-avatar-col{display:flex}}
+
 ::placeholder{color:#a0a0a0}
 </style>
 </head>
@@ -147,7 +150,8 @@ textarea.ipt{height:auto;padding:16px 18px;line-height:1.5;resize:none}
 </div>
 <div id="modalLayer"></div>
 <div class="toast-box" id="toastBox"></div>
-<input type="file" id="fileInput" accept="audio/*,video/*" style="display:none">
+<input type="file" id="fileInput" accept="audio/*,video/*,.txt,.md,text/plain,.pdf,.doc,.docx" style="display:none">
+<input type="file" id="avatarInput" accept="image/*" style="display:none">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="singa-script-part1.js"></script>
 <script src="singa-script-part2.js"></script>
@@ -158,5 +162,6 @@ textarea.ipt{height:auto;padding:16px 18px;line-height:1.5;resize:none}
 <script src="singa-script-part7.js"></script>
 <script src="singa-script-part8.js"></script>
 <script src="singa-script-part9.js"></script>
+<script src="singa-script-part10.js"></script>
 </body>
 </html>
