@@ -1,4 +1,44 @@
 "use strict";
+function renderGigSettingsModal(){
+  const g = gigObj(), gs = gigSettings(g);
+  const rows = [['photos','Enable audience photos','Guests can share photos to the gig album'],
+    ['chat','Enable audience chat','A group chat for everyone at the gig'],
+    ['dm','Allow direct messages','Guests can message the band privately'],
+    ['browse','Allow audience to browse songs','Guests can see the setlist'],
+    ['order','Allow audience to choose songs order','Guest votes reorder the upcoming songs'],
+    ['requests','Allow audience to choose songs',"Guests can request songs that aren't on the setlist"]];
+  return `<div class="modal-backdrop" data-act="closeGigSettings"><div class="modal" onclick="modalClick(event)">
+    <div class="mhead"><span style="font-size:21px;font-weight:600">Gig settings</span><span class="icon-btn" data-act="closeGigSettings">${icon('close',22)}</span></div>
+    <div class="msub" style="margin-bottom:6px">${esc(g.title)}</div>
+    ${rows.map(([k,label,sub])=>{ const on=gs[k]; return `<div class="row" style="gap:14px;padding:11px 0;cursor:pointer" data-act="toggleGigSetting" data-id="${k}">
+      <div class="toggle" style="flex:none;background:${on?'#1b1b1b':'#fff'}"><div class="dot" style="left:${on?20:2}px;background:${on?'#fff':'#1b1b1b'}"></div></div>
+      <div><div style="font-size:15px;font-weight:600">${label}</div><div style="font-size:12px;color:#8a8a8a;margin-top:2px">${sub}</div></div></div>`; }).join('')}
+    <button class="btn btn-dark" style="margin-top:14px" data-act="closeGigSettings">Done</button>
+  </div></div>`;
+}
+
+/* ---- Gig Player ---- */
+function queueFor(g){
+  const gs = gigSettings(g);
+  const played = ST.played.filter(id=>g.setlist.includes(id));
+  const rest = g.setlist.filter(id=>!played.includes(id));
+  const cur = ST.gigCur && rest.includes(ST.gigCur) ? ST.gigCur : null;
+  let up = rest.filter(id=>id!==cur);
+  if(gs.order) up = up.map((id,i)=>({id,i,v:ST.orderVotes[id]||0})).sort((a,b)=>b.v-a.v||a.i-b.i).map(x=>x.id);
+  const cued = cur || up[0] || null;
+  if(!cur && cued) up = up.slice(1);
+  return { played, cued, up };
+}
+function gigSongId(){ const q = queueFor(gigObj()); return q.cued || gigObj().setlist[0]; }
+function openPlayer(id){
+  stopOnsetListening();
+  const g = gigObj(); const fresh = ST._liveGig !== g.id;
+  ST.screen='gigplayer'; ST.ctx='gig'; ST._liveGig=g.id;
+  ST.gigCur = id || (fresh ? null : ST.gigCur);
+  ST.played = fresh ? [] : (id ? ST.played.filter(x=>x!==id) : ST.played);
+  ST.t=0; ST.playing=false; ST.vcd=0; ST.gListening=false;
+}
+
 function renderGigPlayer(){
   const g = gigObj();
   const gq = queueFor(g), gs = gigSettings(g);
@@ -88,7 +128,7 @@ function renderGigPlayer(){
    MODALS: Upgrade / Picker / New / Collaborator editor
    ============================================================ */
 function renderUpgradeModal(){
-  return `<div class="modal-backdrop" data-act="closeUpgrade"><div class="modal" style="max-width:520px" onclick="event.stopPropagation()">
+  return `<div class="modal-backdrop" data-act="closeUpgrade"><div class="modal" style="max-width:520px" onclick="modalClick(event)">
     <div class="mhead"><span style="font-size:21px;font-weight:600">Choose your plan</span><span class="icon-btn" data-act="closeUpgrade">${icon('close',22)}</span></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
       <div style="border:1.5px solid #e2e2e2;border-radius:12px;padding:18px;display:flex;flex-direction:column;gap:6px">
@@ -127,7 +167,7 @@ function renderPickerModal(){
     }
     closeAct = 'closePick';
   }
-  return `<div class="modal-backdrop" data-act="${closeAct}"><div class="modal" style="max-width:440px" onclick="event.stopPropagation()">
+  return `<div class="modal-backdrop" data-act="${closeAct}"><div class="modal" style="max-width:440px" onclick="modalClick(event)">
     <div class="mhead"><span style="font-size:21px;font-weight:600">${esc(heading)}</span><span class="icon-btn" data-act="${closeAct}">${icon('close',22)}</span></div>
     <div class="msub">${esc(sub)}</div>
     ${hasSearch?`<div class="search-field" style="margin-bottom:6px"><input placeholder="Search your songs" value="${esc(query)}" data-bind="spQuery">${icon('search',20)}</div>`:''}
@@ -136,32 +176,3 @@ function renderPickerModal(){
     <button class="btn btn-dark" style="margin-top:14px" data-act="${closeAct}">Done</button>
   </div></div>`;
 }
-
-function renderNewModal(){
-  const ni = ST.newItem;
-  const heading = ni.kind==='playlist' ? 'New playlist' : 'New gig';
-  const placeholder = ni.kind==='playlist' ? 'e.g. Campfire songs' : "e.g. Maya's birthday";
-  return `<div class="modal-backdrop" data-act="closeNew"><div class="modal" style="max-width:420px" onclick="event.stopPropagation()">
-    <div class="mhead"><span style="font-size:21px;font-weight:600">${heading}</span><span class="icon-btn" data-act="closeNew">${icon('close',22)}</span></div>
-    <label style="display:flex;flex-direction:column;gap:4px;border-bottom:1px solid #e2e2e2;padding-bottom:8px"><span style="font-size:12px;color:#8a8a8a">Name</span><input style="border:0;outline:none;font-size:16px;font-weight:600" placeholder="${placeholder}" value="${esc(ni.name)}" data-bind="newName" data-key="createNew" autofocus></label>
-    ${ni.kind==='gig'?`<label style="display:flex;flex-direction:column;gap:4px;border-bottom:1px solid #e2e2e2;padding-bottom:8px"><span style="font-size:12px;color:#8a8a8a">Date</span><input style="border:0;outline:none;font-size:16px;font-weight:600" placeholder="e.g. Oct 12, 2026" value="${esc(ni.date)}" data-bind="newDate" data-key="createNew"></label>`:''}
-    <button class="btn" style="background:${ni.name.trim()?'#1b1b1b':'#d6d6d6'};color:#fff;margin-top:6px" data-act="createNew">Create</button>
-  </div></div>`;
-}
-
-function renderCollabEditModal(){
-  const ce = ST.collabEdit;
-  const heading = ce.i==null ? 'Add Collaborator' : 'Edit Collaborator';
-  const gigRows = D.gigs.map(g=>{ const on = ce.gigs.includes(g.id); return `<div class="row" style="gap:14px;padding:9px 0;cursor:pointer" data-act="toggleCeGig" data-id="${g.id}">
-    <div class="toggle" style="background:${on?'#1b1b1b':'#fff'}"><div class="dot" style="left:${on?20:2}px;background:${on?'#fff':'#1b1b1b'}"></div></div>
-    <span style="font-size:14px;font-weight:600">${esc(g.title)}</span></div>`; }).join('');
-  return `<div class="modal-backdrop" data-act="closeCollabEdit"><div class="modal" style="max-width:440px" onclick="event.stopPropagation()">
-    <div class="mhead"><span style="font-size:21px;font-weight:600">${heading}</span><span class="icon-btn" data-act="closeCollabEdit">${icon('close',22)}</span></div>
-    <label style="display:flex;flex-direction:column;gap:4px;border-bottom:1px solid #e2e2e2;padding-bottom:8px"><span style="font-size:12px;color:#8a8a8a">Name</span><input style="border:0;outline:none;font-size:16px;font-weight:600" value="${esc(ce.name)}" data-bind="ceName"></label>
-    <label style="display:flex;flex-direction:column;gap:4px;border-bottom:1px solid #e2e2e2;padding-bottom:8px"><span style="font-size:12px;color:#8a8a8a">Email</span><input style="border:0;outline:none;font-size:16px;font-weight:600" value="${esc(ce.email)}" data-bind="ceEmail"></label>
-    <div style="font-size:12px;color:#8a8a8a;margin-top:6px">Gigs</div>
-    <div>${gigRows}</div>
-    <button class="btn btn-dark" style="margin-top:8px" data-act="saveCollab">Save</button>
-  </div></div>`;
-}
-
