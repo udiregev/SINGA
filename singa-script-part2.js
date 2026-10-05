@@ -1,4 +1,43 @@
 "use strict";
+function qrHTML(){ return `<div class="qrgrid">${QR.map(c=>`<div style="background:${c}"></div>`).join('')}</div>`; }
+
+function buildLines(s, mode, opt){
+  opt = opt || {};
+  const tm = timing(s);
+  const ci = opt.t!=null ? curWord(tm, opt.t) : -1;
+  const cw = ci>=0 ? tm.words[ci] : null;
+  let curChordK = -1; if(ci>=0) for(let k=0;k<=ci;k++){ const w=tm.words[k]; if(s.chords[w.li+'-'+w.wi]) curChordK=k; }
+  const notes = { ...(s.notes||{}), ...(opt.extraNotes||{}) };
+  const sel = ST.selRoot + ST.selSuffix;
+  let g = 0;
+  return tm.lines.map((ws,li)=>{
+    const curLine = cw && cw.li===li, last = ws.length-1;
+    let hasUp = false;
+    const w2 = ws.map((w,wi)=>{
+      const id = li+'-'+wi, ch = opt.hideChords ? '' : (s.chords[id]||''), gi = g++;
+      const mark = notes[id] || '';
+      const o = { id, w, chord:ch, col:'#333', chordCol:'#9a9a9a', weight:400, cursor:'default', mark,
+        markBefore: !!mark && wi===0, markAfter: !!mark && wi===last && wi!==0, markUp: !!mark && wi>0 && wi<last };
+      if(o.markUp) hasUp = true;
+      if(mode==='chords'){
+        o.col='#a3a3a3'; o.chordCol='#1b1b1b'; o.cursor='pointer'; o.clickAct='placeChord'; o.clickId=id;
+      } else if(mode==='markings'){
+        o.cursor='pointer'; o.clickAct='pickMarkWord'; o.clickId=id; o.selected = ST.selWord===id;
+      } else if(mode==='view'){
+        o.chordCol = ch && ch===opt.selChord ? '#f24822' : '#9a9a9a';
+        if(ch){ o.cursor='pointer'; o.clickAct='setViewChord'; o.clickId=ch; }
+      } else if(mode==='play'){
+        const past = cw && li<cw.li;
+        o.weight=700;
+        o.col = curLine ? (gi<=ci?'#1b1b1b':'#b8b8b8') : (past?'#d2d2d2':'#a8a8a8');
+        o.chordCol = gi===curChordK ? '#f24822' : (curLine?'#8a8a8a':'#cfcfcf');
+      }
+      return o;
+    });
+    const isPlay = mode==='play', on = isPlay && curLine;
+    return { li, words:w2, padTop:(hasUp?30:0)+(on?10:0), mb: on?10:0, scale: on?1.12:1, op: isPlay && cw && li<cw.li ? 0.75:1, cur: on };
+  });
+}
 function linesHTML(lines, big){
   return `<div class="lyrics-wrap">` + lines.map(l=>{
     const style = `margin-top:${l.padTop}px;margin-bottom:${l.mb}px;transform:scale(${l.scale});transform-origin:left center;opacity:${l.op}`;
@@ -25,7 +64,9 @@ function renderLogin(){
     <div style="font-size:46px;font-weight:800;letter-spacing:-0.02em;margin-top:18px">make some noise!</div>
     <div style="width:100%;max-width:380px;display:flex;flex-direction:column;gap:12px;margin-top:36px">
       <input class="ipt" placeholder="Email" value="${esc(ST.email)}" data-bind="email">
-      <button class="btn ${ST.email.trim()?'btn-dark':'btn-disabled'}" data-act="login">Continue</button>
+      <input class="ipt" type="password" placeholder="Password" value="${esc(ST.password)}" data-bind="password" data-key="login">
+      <button class="btn ${(ST.email.trim()&&ST.password.trim()&&!ST.authBusy)?'btn-dark':'btn-disabled'}" data-act="login">${ST.authBusy?'Please wait…':'Continue'}</button>
+      <div style="font-size:12px;color:#9a9a9a;text-align:center">New here? Enter an email and password — we'll create your account.</div>
       <div style="display:flex;align-items:center;gap:12px;color:#9a9a9a;font-size:13px;margin:6px 0"><div style="flex:1;height:1px;background:#e2e2e2"></div>or<div style="flex:1;height:1px;background:#e2e2e2"></div></div>
       <button class="btn btn-outline" data-act="loginSocial" data-id="Apple">Continue with Apple</button>
       <button class="btn btn-outline" data-act="loginSocial" data-id="Google">Continue with Google</button>
@@ -149,91 +190,6 @@ function renderList(){
       ${sortDropdown()}
     </div>
     <div style="overflow:auto">${rowsHtml}${empty?'<div style="padding:24px 0;color:#8a8a8a">Nothing here yet.</div>':''}</div>
-  </div>`;
-}
-
-function renderSearch(){
-  const q = ST.searchQuery.trim().toLowerCase();
-  const match = r => !q || ((r.title||'')+' '+(r.sub||'')).toLowerCase().includes(q);
-  const songsRows = sortRows(D.order.map(id=>({id,...song(id)})).filter(match));
-  const plRows = sortRows(D.playlists.filter(match));
-  const gigRows = sortRows(D.gigs.filter(match));
-  const sections = [];
-  if(songsRows.length) sections.push(`<div><div style="font-size:24px;font-weight:700;padding-bottom:8px;border-bottom:1px solid var(--b2)">Songs</div>${songsRows.map(r=>songRowList(r.id, r.synced?'SYNCED':'NO TAKE', r.synced?'#1b1b1b':'#b0b0b0','search')).join('')}</div>`);
-  if(plRows.length) sections.push(`<div><div style="font-size:24px;font-weight:700;padding-bottom:8px;border-bottom:1px solid var(--b2)">Playlists</div>${plRows.map(playlistRow).join('')}</div>`);
-  if(gigRows.length) sections.push(`<div><div style="font-size:24px;font-weight:700;padding-bottom:8px;border-bottom:1px solid var(--b2)">Gigs</div>${gigRows.map(gigRowList).join('')}</div>`);
-  return `<div class="scr">
-    <div class="search-field" style="max-width:340px;margin-bottom:28px">
-      <input placeholder="Search songs, playlists or gigs" value="${esc(ST.searchQuery)}" data-bind="searchQuery" autofocus>${icon('search',22)}
-    </div>
-    <div class="row" style="gap:14px;position:relative;z-index:2;margin-bottom:24px">
-      <span class="icon-btn" data-act="nav" data-to="home">${icon('chevron_left',26)}</span>
-      <span style="font-size:28px;font-weight:700">Search Results</span>
-      <div style="flex:1"></div>
-      ${sortDropdown()}
-    </div>
-    <div style="display:flex;flex-direction:column;gap:40px;overflow:auto">
-      ${sections.join('') || `<div style="color:#8a8a8a;font-size:15px">No songs, playlists or gigs match "${esc(ST.searchQuery)}".</div>`}
-    </div>
-  </div>`;
-}
-/* ============================================================
-   SCREENS: Account / Collaborators
-   ============================================================ */
-function renderAccount(){
-  const planName = ST.plan==='rockstar' ? 'RockStar' : 'Free';
-  const planSub = ST.plan==='rockstar' ? '$4.99 / month · renews Nov 2, 2026' : 'Basic features for performing with Singa';
-  const planBadgeBg = ST.plan==='rockstar' ? '#f24822' : '#ececec';
-  const planBadgeCol = ST.plan==='rockstar' ? '#fff' : '#6f6f6f';
-  const collabRows = D.collabs.map((c,i)=>`<div class="list-row" data-act="editCollab" data-id="${i}"><div><div class="t">${esc(c.name)}</div><div class="s">${c.gigs.length} ${c.gigs.length===1?'gig':'gigs'}</div></div>${icon('chevron_right',22)}</div>`).join('');
-  const instRadio = INSTS.map(([v,label])=>`<div class="row" style="gap:8px;cursor:pointer;padding:6px 0" data-act="setInstrument" data-id="${v}">
-    <span style="width:20px;height:20px;border-radius:50%;border:1.5px solid var(--fg);display:flex;align-items:center;justify-content:center"><span style="width:10px;height:10px;border-radius:50%;background:var(--fg);opacity:${ST.instrument===v?1:0}"></span></span>
-    <span style="font-size:15px;font-weight:600">${label}</span></div>`).join('');
-  const startHint = ST.startMode==='countdown' ? 'Press play and Singa counts down from 3.' : 'Singa listens and starts playback when you start singing.';
-  const notifRows = [['req','Song requests'],['photos','Guest photos'],['chat','Chat messages']].map(([k,label])=>{
-    const on = ST.notif[k];
-    return `<div class="row" style="gap:14px;padding:10px 0;cursor:pointer" data-act="toggleNotif" data-id="${k}">
-      <div class="toggle" style="background:${on?'#1b1b1b':'#fff'}"><div class="dot" style="left:${on?20:2}px;background:${on?'#fff':'#1b1b1b'}"></div></div>
-      <span style="font-size:15px;font-weight:600">${label}</span></div>`;
-  }).join('');
-  return `<div class="scr" style="overflow:auto;gap:30px;padding-bottom:60px">
-    <div class="row" style="gap:14px"><span class="icon-btn" data-act="nav" data-to="home">${icon('chevron_left',26)}</span><span style="font-size:28px;font-weight:700">My Account</span></div>
-    <div>
-      <div style="font-size:21px;font-weight:700;margin-bottom:6px">Account Details</div>
-      <div style="padding:14px 0;border-bottom:1px solid var(--b2);display:flex;justify-content:space-between;align-items:center;cursor:pointer" data-act="editNickname"><div><div style="font-size:12px;color:#8a8a8a">Nickname</div><div style="font-size:16px;font-weight:600;margin-top:3px">${esc(ST.nickname || nicknameFromEmail(ST.email))}</div></div>${icon('chevron_right',22)}</div>
-      <div style="padding:14px 0;border-bottom:1px solid var(--b2)"><div style="font-size:12px;color:#8a8a8a">Email</div><div style="font-size:16px;font-weight:600;margin-top:3px">${esc(ST.email || 'Not signed in')}</div></div>
-    </div>
-    <div>
-      <div style="font-size:21px;font-weight:700;margin-bottom:6px">Subscription</div>
-      <div class="row" style="justify-content:space-between;gap:16px;padding:14px 0;border-bottom:1px solid var(--b2)">
-        <div><div class="row" style="gap:8px"><span style="font-size:16px;font-weight:700">${planName}</span><span style="font-size:11px;font-weight:800;letter-spacing:.06em;padding:3px 7px;border-radius:5px;background:${planBadgeBg};color:${planBadgeCol}">CURRENT</span></div><div style="font-size:13px;color:#8a8a8a;margin-top:3px">${planSub}</div></div>
-        ${ST.plan!=='rockstar'
-          ? `<button class="btn btn-accent btn-sm" data-act="openUpgrade">${icon('bolt',20)}Upgrade to RockStar</button>`
-          : `<a class="link link-muted" style="text-decoration:underline" data-act="downgrade">Switch to Free</a>`}
-      </div>
-    </div>
-    <div>
-      <div style="font-size:21px;font-weight:700;margin-bottom:6px">Collaborators</div>
-      ${collabRows}
-      <a class="link" style="display:inline-flex;align-items:center;gap:6px;margin-top:12px" data-act="newCollab">${icon('person_add',20)}Add collaborator</a>
-    </div>
-    <div>
-      <div style="font-size:21px;font-weight:700;margin-bottom:10px">Default instrument</div>
-      <div style="display:flex;gap:24px;flex-wrap:wrap">${instRadio}</div>
-    </div>
-    <div>
-      <div style="font-size:21px;font-weight:700;margin-bottom:6px">Start playback with</div>
-      <div style="font-size:13px;color:#8a8a8a;margin-bottom:14px">${startHint}</div>
-      <div class="seg">
-        <button class="${ST.startMode==='countdown'?'on':''}" data-act="setStartMode" data-id="countdown">Countdown</button>
-        <button class="${ST.startMode==='detect'?'on':''}" data-act="setStartMode" data-id="detect">Start detection</button>
-      </div>
-    </div>
-    <div>
-      <div style="font-size:21px;font-weight:700;margin-bottom:10px">Notify me during gigs</div>
-      ${notifRows}
-    </div>
-    <a class="link link-accent" data-act="signOut">Sign out</a>
   </div>`;
 }
 
