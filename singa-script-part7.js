@@ -52,13 +52,26 @@ function renderModals(){
   if(ST.newItem) html += renderNewModal();
   if(ST.collabEdit) html += renderCollabEditModal();
   if(ST.editNick!=null) html += renderNickModal();
+  // The chord/markings-step note editor now floats as a modal popup (over
+  // the lyrics, not squeezed in below them) instead of being part of the
+  // normal in-flow layout.
+  if(ST.step==='markings' && ST.selWord!=null && ST.editId && D.songs[ST.editId]) html += renderNoteEditor(D.songs[ST.editId]);
   return html;
 }
 /* ============================================================
    RENDER DISPATCH
    ============================================================ */
 const DARK_MODE_SCREENS = ['gig','song','practice','gigplayer'];
+let _prevRenderScreen = null;
 function render(){
+  // A render triggered by the 100ms playback/recording/sampling tick
+  // redraws the current screen's markup from scratch every time. Without
+  // this check that replays the .scr mount-in animation (translateY+fade)
+  // on every single tick, which is what was showing up as a flicker on the
+  // countdown/recording and "Play Sample" screens. Only play the entrance
+  // animation when we're actually navigating to a different screen.
+  const sameScreen = _prevRenderScreen === ST.screen;
+  _prevRenderScreen = ST.screen;
   const darkAllowed = DARK_MODE_SCREENS.includes(ST.screen);
   document.body.classList.toggle('dark-invert', ST.perfDark && darkAllowed);
   document.getElementById('darkToggle').style.display = darkAllowed ? 'flex' : 'none';
@@ -87,6 +100,10 @@ function render(){
   document.getElementById('screen').innerHTML = html;
   document.getElementById('modalLayer').innerHTML = renderModals();
   document.getElementById('toastBox').innerHTML = ST.toast ? `<div class="toast">${esc(ST.toast)}</div>` : '';
+  if(sameScreen){
+    const scrEl = document.querySelector('#screen .scr');
+    if(scrEl) scrEl.style.animation = 'none';
+  }
   // autofocus search on search screen
   if(ST.screen==='search'){ const el = document.querySelector('#screen input[data-bind="searchQuery"]'); if(el){ el.focus(); const v=el.value; el.value=''; el.value=v; } }
   // scroll current lyric line into view
@@ -98,6 +115,20 @@ function render(){
   if(rs){
     const want = ST.rootIdx*100;
     if(Math.abs(rs.scrollLeft-want)>1){ ST._lastProgScrollAt = Date.now(); rs.scrollLeft = want; }
+  }
+  // Keep the chords/markings editor's fixed ~4-line lyrics viewport scrolled
+  // so the line you're currently working on sits as the 2nd of the visible
+  // rows — like a typewriter margin — clamping at the very top of the first
+  // line and the very bottom of the last one.
+  const els = document.getElementById('editorLyricsScroll');
+  if(els){
+    const lineEls = els.querySelectorAll('.lline');
+    if(lineEls.length){
+      const rowH = els.scrollHeight / lineEls.length;
+      const maxScroll = Math.max(0, els.scrollHeight - els.clientHeight);
+      const want = Math.max(0, Math.min(maxScroll, (ST.editorLine-1)*rowH));
+      if(Math.abs(els.scrollTop-want)>1) els.scrollTop = want;
+    }
   }
   // make the native/browser Back button act as in-app Back instead of
   // leaving the app: push a history entry whenever the screen changes,
@@ -177,7 +208,7 @@ function newSongDraft(){
   const id = 'n'+Date.now();
   D.songs[id] = { id, title:'', sub:'', lyrics:'', chords:{}, notes:{}, synced:false, plays:0, added:Date.now(), mine:true };
   D.order = [id, ...D.order];
-  ST.editId = id; ST.screen='create'; ST.createMode='manual'; ST.step='lyrics'; ST.phase='idle'; ST.selWord=null; ST.similar=false; ST.menu=false; ST.isPublic=false; ST.sortOpen=false;
+  ST.editId = id; ST.screen='create'; ST.createMode='manual'; ST.step='lyrics'; ST.phase='idle'; ST.selWord=null; ST.similar=false; ST.menu=false; ST.isPublic=false; ST.sortOpen=false; ST.editorLine=0;
 }
 function finishSong(){
   const id = ST.editId, s = D.songs[id];
@@ -200,6 +231,11 @@ function finishSong(){
    (autoChordsFor) rather than detected from the recording's pitch.
    ============================================================ */
 let liveStream=null, liveRecorder=null, liveChunks=[], liveAudioCtx=null, liveAnalyser=null, liveDataArr=null, liveAborting=false, recordingStartPending=false;
+// Microphone access requested up front by Actions.startRecord(), BEFORE the
+// 3-2-1 countdown starts — so the browser's "allow microphone" prompt shows
+// immediately on tapping Record, not after the countdown finishes. Consumed
+// (and cleared) by beginRealRecording() once the countdown ends.
+let pendingMicStream=null;
 
 function sampleLiveLevel(){
   if(!liveAnalyser || !liveDataArr) return null;
@@ -211,12 +247,18 @@ function sampleLiveLevel(){
 }
 
 async function beginRealRecording(){
-  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
-    toast('Microphone not available on this device/browser'); ST.phase='idle'; render(); return;
+  let stream = pendingMicStream;
+  pendingMicStream = null;
+  if(!stream){
+    // Fallback path — only hit if something reaches this without having
+    // gone through Actions.startRecord() first (which normally already
+    // acquired the mic before the countdown began).
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      toast('Microphone not available on this device/browser'); ST.phase='idle'; render(); return;
+    }
+    try{ stream = await navigator.mediaDevices.getUserMedia({ audio:true }); }
+    catch(err){ toast('Mic error: '+(err && err.name || err)); ST.phase='idle'; render(); return; }
   }
-  let stream;
-  try{ stream = await navigator.mediaDevices.getUserMedia({ audio:true }); }
-  catch(err){ toast('Mic error: '+(err && err.name || err)); ST.phase='idle'; render(); return; }
   let recorder;
   try{ recorder = new MediaRecorder(stream); }
   catch(err){ toast('Recording is not supported in this browser'); stream.getTracks().forEach(t=>t.stop()); ST.phase='idle'; render(); return; }
