@@ -4,8 +4,7 @@ function renderChordWheel(){
   const letter = LETTERS[ST.rootIdx];
   const variants = [letter, ACC[letter]].flatMap(rt => SUFFIXES.map(q=>chordTileHTML(rt, q))).join('');
   const recentTiles = ST.recentChords.map(ch=>{ const p = splitChordStr(ch); return chordTileHTML(p.root, p.q, ch); }).join('');
-  return `<div style="display:flex;flex-direction:column;align-items:center;gap:10px;margin-top:26px">
-    <div style="font-size:13px;color:#6f6f6f">Spin to a letter, then tap a word to place it. Tap again to remove.</div>
+  return `<div style="display:flex;flex-direction:column;align-items:center;gap:10px;margin-top:10px">
     <div style="display:flex;flex-direction:column;align-items:center;gap:12px">
       <div style="position:relative;width:300px;height:72px">
         <div style="position:absolute;left:100px;top:0;width:100px;height:72px;border-radius:14px;background:#f2f2f2"></div>
@@ -21,7 +20,6 @@ function renderChordWheel(){
         </div>` : ''}
       </div>
     </div>
-    <a class="link" style="text-decoration:underline" data-act="detectChords">Detect chords from a recording instead</a>
   </div>`;
 }
 
@@ -30,15 +28,18 @@ function renderNoteEditor(d){
   const [li, wi] = ST.selWord.split('-').map(Number);
   const ws = parseLyrics(d.lyrics)[li] || [];
   const w = ws[wi] || '';
-  const placement = wi===0 ? 'Shown before the line' : (wi===ws.length-1 ? 'Shown after the line' : 'Shown above the word, with an arrow');
-  return `<div style="margin-top:28px;width:100%;max-width:440px;border:1.5px solid #2f8fe0;border-radius:12px;background:#f3f8ff;padding:16px;display:flex;flex-direction:column;gap:12px">
-    <div style="font-size:13px;font-weight:600;color:#2f8fe0">Mark on "${esc(w)}"</div>
-    <input class="ipt" style="height:44px;border:1px solid #cfe0f5;font-family:Caveat,cursive;font-size:24px;color:#2f8fe0;background:#fff" placeholder="e.g. Hi note, breathe, key change" value="${esc(ST.noteDraft)}" data-bind="noteDraft">
-    <div class="row" style="gap:8px">
-      <span style="font-size:12px;color:#6f6f6f">${placement}</span>
-      <div style="flex:1"></div>
-      <a class="link link-accent" data-act="removeNote">Remove</a>
-      <button class="btn btn-dark btn-sm" data-act="saveNote">Save</button>
+  const side = wi <= (ws.length-1)/2 ? 'left' : 'right';
+  const placement = side==='left' ? 'Shown to the left of this line' : 'Shown to the right of this line';
+  return `<div class="modal-backdrop" data-act="closeNoteEditor" style="align-items:flex-start;padding-top:120px">
+    <div class="modal" style="max-width:380px" onclick="modalClick(event)">
+      <div class="mhead"><span style="font-size:15px;font-weight:700;color:#2f8fe0">Mark on "${esc(w)}"</span><span class="icon-btn" data-act="closeNoteEditor">${icon('close',22)}</span></div>
+      <input class="ipt" style="height:44px;border:1px solid #cfe0f5;font-family:Caveat,cursive;font-size:24px;color:#2f8fe0;background:#f3f8ff" placeholder="e.g. Hi note, breathe, key change" value="${esc(ST.noteDraft)}" data-bind="noteDraft" autofocus>
+      <div class="row" style="gap:8px">
+        <span style="font-size:12px;color:#6f6f6f">${placement}</span>
+        <div style="flex:1"></div>
+        <a class="link link-accent" data-act="removeNote">Remove</a>
+        <button class="btn btn-dark btn-sm" data-act="saveNote">Save</button>
+      </div>
     </div>
   </div>`;
 }
@@ -47,26 +48,28 @@ function renderSongBody(d){
   const editMode = ST.step==='chords' ? 'chords' : ST.step==='markings' ? 'markings' : 'static';
   const lines = buildLines(d, editMode, ST.phase==='recording' ? {t:ST.recT} : null);
   const opacity = (ST.phase==='countdown'||ST.phase==='processing') ? 0.12 : 1;
-  return `<div style="width:100%;flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;margin-top:24px;position:relative">
-    <div style="opacity:${opacity};display:flex;flex-direction:column;align-items:center;width:100%;overflow:auto;padding-bottom:16px">
-      <div style="font-size:40px;font-weight:800;letter-spacing:-0.02em;text-align:center">${esc(d.title||'Untitled song')}</div>
-      <div style="font-size:15px;color:#6f6f6f;margin-top:6px">${esc(d.sub)}</div>
+  const skipLabel = ST.step==='chords' ? 'Skip (detect chords from a recording instead)' : 'Skip';
+  const skipAct = ST.step==='chords' ? 'detectChords' : 'createNextStep';
+  return `<div style="width:100%;flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;margin-top:10px;position:relative">
+    <div style="opacity:${opacity};flex:none;display:flex;flex-direction:column;align-items:center;width:100%">
+      <div style="font-size:32px;font-weight:800;letter-spacing:-0.02em;text-align:center">${esc(d.title||'Untitled song')}</div>
       ${ST.step==='chords' ? renderChordWheel() : ''}
-      ${ST.step==='markings' ? `<div style="font-size:13px;color:#6f6f6f;margin-top:26px">Tap a word to add a mark. Marks on the first or last word sit beside the line; others point at the word.</div>` : ''}
-      <div style="margin-top:34px">${linesHTML(lines)}</div>
+      ${ST.step==='markings' ? `<div style="font-size:13px;color:#6f6f6f;margin-top:14px">Tap a word to add a mark.</div>` : ''}
     </div>
-    ${ST.step==='markings' ? renderNoteEditor(d) : ''}
+    <div id="editorLyricsScroll" style="opacity:${opacity};flex:none;width:100%;max-height:260px;overflow-y:auto;margin-top:18px;display:flex;flex-direction:column;align-items:center">
+      ${linesHTML(lines)}
+    </div>
+    <div style="flex:1"></div>
     ${ST.phase==='countdown' ? `<div style="position:absolute;top:60px;left:0;right:0">${countdownBlock()}</div>` : ''}
     ${ST.phase==='processing' ? `<div style="position:absolute;top:60px;left:0;right:0">${processingBlock()}</div>` : ''}
-    ${(ST.step==='chords'||ST.step==='markings') ? `<div style="display:flex;flex-direction:column;align-items:center;gap:12px;padding-top:12px;border-top:1px solid #f0f0f0;width:100%;margin-top:20px">
-        <div style="font-size:12px;color:#8a8a8a">You hereby confirm that you have permission to reproduce these lyrics</div>
+    ${(ST.step==='chords'||ST.step==='markings') ? `<div style="flex:none;display:flex;flex-direction:column;align-items:center;gap:10px;padding-top:12px;border-top:1px solid #f0f0f0;width:100%;margin-top:14px">
         <div class="row" style="gap:12px">
           <button class="btn btn-outline" style="width:170px" data-act="abortCreate">Abort</button>
           <button class="btn btn-dark" style="width:170px" data-act="createNextStep">Next</button>
         </div>
-        <a class="link" style="color:#9a9a9a" data-act="createNextStep">Skip</a>
+        <a class="link" style="color:#9a9a9a;text-align:center" data-act="${skipAct}">${skipLabel}</a>
       </div>` : ''}
-    ${ST.step==='sync' && ST.phase==='idle' ? `<div style="display:flex;flex-direction:column;align-items:center;gap:12px;width:100%;max-width:340px;margin:0 auto">
+    ${ST.step==='sync' && ST.phase==='idle' ? `<div style="flex:none;display:flex;flex-direction:column;align-items:center;gap:12px;width:100%;max-width:340px;margin:0 auto">
         ${ST.autoChords?`<div style="font-size:13px;color:#2f8fe0;text-align:center;margin-bottom:6px">Chords will be detected from the instruments in your recording.</div>`:''}
         <button class="btn btn-grey" style="width:100%" data-act="practiceDraft">Practice</button>
         <button class="btn btn-accent" style="width:100%" data-act="startRecord">Record</button>
