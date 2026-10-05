@@ -41,13 +41,13 @@ function renderSong(){
       <span class="icon-btn" data-act="toggleMenu">${icon('menu',28)}</span>
     </div>
     ${ST.viewBy?`<button class="btn btn-dark btn-sm" style="align-self:flex-start;margin:18px 0 0 40px" data-act="copySong">Copy to your playlist</button>`:''}
-    ${hasInst?`<div style="height:${Math.round(ST.chordH)}px;display:flex;align-items:center;justify-content:center;overflow:hidden;margin-top:8px">
-        <div style="display:flex;flex-direction:column;align-items:center;gap:14px;transform:scale(${chordScale})">
+    ${hasInst?`<div id="chordDiagramBox" style="height:${Math.round(ST.chordH)}px;display:flex;align-items:center;justify-content:center;overflow:hidden;margin-top:8px">
+        <div class="chordInnerScale" style="display:flex;flex-direction:column;align-items:center;gap:14px;transform:scale(${chordScale})">
           ${diagramHTML(dia)}
           <button class="link" style="display:flex;align-items:center;gap:6px" data-act="playSample">${icon(ST.sampling?'stop_circle':'play_circle',22)}${ST.sampling?'Stop sample · '+Math.ceil(ST.sampleLeft)+'s':'Play Sample'}</button>
         </div>
       </div>
-      <div class="row" style="justify-content:center;cursor:ns-resize;height:30px" title="Drag to resize">${icon('drag_handle',26)}</div>`:''}
+      <div id="chordResizeHandle" class="row" style="justify-content:center;cursor:ns-resize;height:30px;touch-action:none" title="Drag to resize">${icon('drag_handle',26)}</div>`:''}
     <div style="flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;align-items:center;padding:20px 0 40%" id="lyricsScroll">
       ${linesHTML(lines)}
     </div>
