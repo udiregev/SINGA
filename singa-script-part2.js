@@ -24,17 +24,18 @@ function buildLines(s, mode, opt){
   let g = 0;
   return tm.lines.map((ws,li)=>{
     const curLine = cw && cw.li===li, last = ws.length-1;
-    let hasUp = false;
     const w2 = ws.map((w,wi)=>{
       const id = li+'-'+wi, ch = opt.hideChords ? '' : (s.chords[id]||''), gi = g++;
       const mark = notes[id] || '';
-      const o = { id, w, chord:ch, col:'#333', chordCol:'#9a9a9a', weight:400, cursor:'default', mark,
-        markBefore: !!mark && wi===0, markAfter: !!mark && wi===last && wi!==0, markUp: !!mark && wi>0 && wi<last };
-      if(o.markUp) hasUp = true;
+      // Marks always sit to the left or right of the line, whichever edge the
+      // marked word is closer to — never above/below it any more.
+      const markSide = mark ? (wi <= last/2 ? 'left' : 'right') : null;
+      const o = { id, w, chord:ch, col:'#333', chordCol:'#9a9a9a', weight:400, cursor:'default', mark, markSide,
+        selected: ST.selWord===id };
       if(mode==='chords'){
         o.col='#a3a3a3'; o.chordCol='#1b1b1b'; o.cursor='pointer'; o.clickAct='placeChord'; o.clickId=id;
       } else if(mode==='markings'){
-        o.cursor='pointer'; o.clickAct='pickMarkWord'; o.clickId=id; o.selected = ST.selWord===id;
+        o.cursor='pointer'; o.clickAct='pickMarkWord'; o.clickId=id;
       } else if(mode==='view'){
         o.chordCol = ch && ch===opt.selChord ? '#f24822' : '#9a9a9a';
         if(ch){ o.cursor='pointer'; o.clickAct='setViewChord'; o.clickId=ch; }
@@ -46,25 +47,32 @@ function buildLines(s, mode, opt){
       }
       return o;
     });
+    const leftMarks = w2.filter(o=>o.markSide==='left');
+    const rightMarks = w2.filter(o=>o.markSide==='right');
     const isPlay = mode==='play', on = isPlay && curLine;
-    return { li, words:w2, padTop:(hasUp?30:0)+(on?10:0), mb: on?10:0, scale: on?1.12:1, op: isPlay && cw && li<cw.li ? 0.75:1, cur: on };
+    return { li, words:w2, leftMarks, rightMarks, padTop: on?10:0, mb: on?10:0, scale: on?1.12:1, op: isPlay && cw && li<cw.li ? 0.75:1, cur: on };
   });
+}
+function markBubbleHTML(w, side){
+  const arrow = side==='left'
+    ? `<svg width="34" height="14" viewBox="0 0 34 14" fill="none" stroke="#2f8fe0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 7h27"></path><path d="M22 2l6.5 5-6.5 5"></path></svg>`
+    : `<svg width="34" height="14" viewBox="0 0 34 14" fill="none" stroke="#2f8fe0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M32.5 7h-27"></path><path d="M12 2l-6.5 5 6.5 5"></path></svg>`;
+  return side==='left'
+    ? `<span class="markbubble"><span class="mtext">${esc(w.mark)}</span>${arrow}</span>`
+    : `<span class="markbubble">${arrow}<span class="mtext">${esc(w.mark)}</span></span>`;
 }
 function linesHTML(lines, big){
   return `<div class="lyrics-wrap">` + lines.map(l=>{
     const style = `margin-top:${l.padTop}px;margin-bottom:${l.mb}px;transform:scale(${l.scale});transform-origin:left center;opacity:${l.op}`;
     const words = l.words.map(w=>{
-      let marks = '';
-      if(w.markUp) marks += `<span class="markup"><span class="mtext">${esc(w.mark)}</span><svg width="16" height="18" viewBox="0 0 16 18" fill="none" stroke="#2f8fe0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 1.5c2.5 4 3.4 8.5 2.4 14"></path><path d="M4.3 11.8l4.1 4.2 3.6-4.6"></path></svg></span>`;
-      if(w.markBefore) marks += `<span class="markbefore"><span class="mtext">${esc(w.mark)}</span><svg width="24" height="14" viewBox="0 0 24 14" fill="none" stroke="#2f8fe0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 8c5-3 11-3.2 19-.8"></path><path d="M16 3l4.6 4.3-5.4 3.2"></path></svg></span>`;
-      if(w.markAfter) marks += `<span class="markafter"><svg width="24" height="14" viewBox="0 0 24 14" fill="none" stroke="#2f8fe0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22.5 8c-5-3-11-3.2-19-.8"></path><path d="M8 3L3.4 7.3l5.4 3.2"></path></svg><span class="mtext">${esc(w.mark)}</span></span>`;
       const act = w.clickAct ? `data-act="${w.clickAct}" data-id="${esc(w.clickId)}"` : '';
       const bg = w.selected ? 'background:#e5f0fc' : '';
       const fsz = big ? 'font-size:32px;padding:0 2px' : 'font-size:24px';
       const fszc = big ? 'font-size:15px;font-weight:700' : 'font-size:14px;font-weight:600';
-      return `<span class="lword" style="cursor:${w.cursor};border-radius:5px;${bg}" ${act}>${marks}<span class="lchord" style="${fszc};color:${w.chordCol}">${esc(w.chord)}</span><span class="ltext" style="${fsz};font-weight:${w.weight};color:${w.col}">${esc(w.w)}</span></span>`;
+      return `<span class="lword" style="cursor:${w.cursor};border-radius:5px;${bg}" ${act}><span class="lchord" style="${fszc};color:${w.chordCol}">${esc(w.chord)}</span><span class="ltext" style="${fsz};font-weight:${w.weight};color:${w.col}">${esc(w.w)}</span></span>`;
     }).join('');
-    return `<div class="lline" style="${style}">${words}</div>`;
+    const markStack = (marks, side) => !marks.length ? '' : `<div class="markside markside-${side}">${marks.map(m=>markBubbleHTML(m,side)).join('')}</div>`;
+    return `<div class="lline" style="${style}">${markStack(l.leftMarks,'left')}${words}${markStack(l.rightMarks,'right')}</div>`;
   }).join('') + `</div>`;
 }
 /* ============================================================
