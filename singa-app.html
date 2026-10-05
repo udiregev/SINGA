@@ -398,3 +398,253 @@ function linesHTML(lines, big){
   return `<div class="lyrics-wrap">` + lines.map(l=>{
     const style = `margin-top:${l.padTop}px;margin-bottom:${l.mb}px;transform:scale(${l.scale});transform-origin:left center;opacity:${l.op}`;
     const words = l.words.map(w=>{
+      let marks = '';
+      if(w.markUp) marks += `<span class="markup"><span class="mtext">${esc(w.mark)}</span><svg width="16" height="18" viewBox="0 0 16 18" fill="none" stroke="#2f8fe0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 1.5c2.5 4 3.4 8.5 2.4 14"></path><path d="M4.3 11.8l4.1 4.2 3.6-4.6"></path></svg></span>`;
+      if(w.markBefore) marks += `<span class="markbefore"><span class="mtext">${esc(w.mark)}</span><svg width="24" height="14" viewBox="0 0 24 14" fill="none" stroke="#2f8fe0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 8c5-3 11-3.2 19-.8"></path><path d="M16 3l4.6 4.3-5.4 3.2"></path></svg></span>`;
+      if(w.markAfter) marks += `<span class="markafter"><svg width="24" height="14" viewBox="0 0 24 14" fill="none" stroke="#2f8fe0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22.5 8c-5-3-11-3.2-19-.8"></path><path d="M8 3L3.4 7.3l5.4 3.2"></path></svg><span class="mtext">${esc(w.mark)}</span></span>`;
+      const act = w.clickAct ? `data-act="${w.clickAct}" data-id="${esc(w.clickId)}"` : '';
+      const bg = w.selected ? 'background:#e5f0fc' : '';
+      const fsz = big ? 'font-size:32px;padding:0 2px' : 'font-size:24px';
+      const fszc = big ? 'font-size:15px;font-weight:700' : 'font-size:14px;font-weight:600';
+      return `<span class="lword" style="cursor:${w.cursor};border-radius:5px;${bg}" ${act}>${marks}<span class="lchord" style="${fszc};color:${w.chordCol}">${esc(w.chord)}</span><span class="ltext" style="${fsz};font-weight:${w.weight};color:${w.col}">${esc(w.w)}</span></span>`;
+    }).join('');
+    return `<div class="lline" style="${style}">${words}</div>`;
+  }).join('') + `</div>`;
+}
+/* ============================================================
+   SCREENS: Login / Home / List / Search
+   ============================================================ */
+function renderLogin(){
+  return `<div class="scr center" style="padding-top:24px">
+    <svg class="mascot" style="height:300px;margin-top:10px" viewBox="0 0 160 160" fill="none" aria-hidden="true"><circle cx="80" cy="80" r="74" fill="var(--accent)"/><path d="M50 83l19 19 41-46" stroke="#fff" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/><circle cx="18" cy="34" r="6" fill="var(--accent)"/><circle cx="142" cy="46" r="5" fill="#2a9d6b"/><circle cx="136" cy="124" r="7" fill="#4169c7"/><circle cx="16" cy="118" r="5" fill="#8e4fd6"/></svg>
+    <div style="font-size:46px;font-weight:800;letter-spacing:-0.02em;margin-top:18px">make some noise!</div>
+    <div style="width:100%;max-width:380px;display:flex;flex-direction:column;gap:12px;margin-top:36px">
+      <input class="ipt" placeholder="Email" value="${esc(ST.email)}" data-bind="email">
+      <button class="btn ${ST.email.trim()?'btn-dark':'btn-disabled'}" data-act="login">Continue</button>
+      <div style="display:flex;align-items:center;gap:12px;color:#9a9a9a;font-size:13px;margin:6px 0"><div style="flex:1;height:1px;background:#e2e2e2"></div>or<div style="flex:1;height:1px;background:#e2e2e2"></div></div>
+      <button class="btn btn-outline" data-act="loginSocial" data-id="Apple">Continue with Apple</button>
+      <button class="btn btn-outline" data-act="loginSocial" data-id="Google">Continue with Google</button>
+      <button class="btn btn-outline" data-act="loginSocial" data-id="Facebook">Continue with Facebook</button>
+    </div>
+  </div>`;
+}
+
+function playlistRow(p){
+  const ids = p.auto ? D.order : p.ids;
+  const sub = p.auto ? (ids.length+' songs') : (p.src ? 'Imported playlist' : (ids.length+' songs'+(p.mine?'':' · by '+p.by)));
+  const badge = p.src==='spotify'
+    ? `<svg width="18" height="18" viewBox="0 0 24 24"><circle cx="12" cy="12" r="12" fill="#1ed760"></circle><path d="M6.5 9.2c3.8-1.1 7.6-.8 11 1M7.2 12.4c3-.8 6.1-.6 8.8.9M7.9 15.4c2.3-.6 4.6-.4 6.6.7" stroke="#000" stroke-width="1.6" fill="none" stroke-linecap="round"></path></svg>`
+    : p.src==='youtube'
+    ? `<svg width="24" height="17" viewBox="0 0 24 17"><rect width="24" height="17" rx="4.5" fill="#ff0000"></rect><path d="M9.6 4.8v7.4l6.2-3.7z" fill="#fff"></path></svg>` : '';
+  return `<div class="list-row" data-act="openPlaylist" data-id="${p.id}"><div><div class="t">${esc(p.title)}${badge}</div><div class="s">${esc(sub)}</div></div></div>`;
+}
+function gigRowHome(g){
+  return `<div class="list-row" data-act="openGig" data-id="${g.id}"><div style="min-width:0"><div class="t" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(g.title)}</div><div class="s">${esc(g.date)}</div></div>${g.id==='nye'?'<span style="font-size:11px;font-weight:700;letter-spacing:.06em;color:#f24822">LIVE</span>':''}</div>`;
+}
+function songRowHome(s){
+  return `<div class="list-row" data-act="openSongFrom" data-id="${s.id}" data-from="home" style="border-bottom:1px solid var(--b2)"><div><div class="t">${esc(s.title||'Untitled song')}</div><div class="s">${esc(s.sub || (s.synced?'':'Draft'))}</div></div></div>`;
+}
+
+function renderHome(){
+  const playlists = D.playlists.slice(0,3).map(playlistRow).join('');
+  const gigs = D.gigs.slice(0,3).map(gigRowHome).join('');
+  const recent = D.order.slice(0,4).map(id=>songRowHome(song(id))).join('');
+  return `<div class="scr">
+    <div class="row" style="gap:16px;margin-bottom:36px">
+      <div class="search-field" style="flex:1;max-width:340px">
+        <input placeholder="Search songs, playlists or gigs" value="${esc(ST.homeQuery)}" data-bind="homeQuery" data-key="runSearch">
+        <button class="icon-btn" style="width:36px;height:36px" data-act="runSearch">${icon('search',22)}</button>
+      </div>
+      <div style="flex:1"></div>
+      <button class="icon-btn" title="Account" data-act="nav" data-to="account" style="width:48px;height:48px;border-radius:50%;border:1.5px solid var(--fg);background:#fff">${icon('person',24)}</button>
+    </div>
+    <div class="home-grid">
+      <div style="display:flex;flex-direction:column;gap:48px">
+        <div>
+          <div class="row" style="justify-content:space-between;margin-bottom:8px"><span style="font-size:26px;font-weight:700">Playlists</span><span class="icon-btn" title="New playlist" data-act="newItem" data-kind="playlist">${icon('add',24)}</span></div>
+          ${playlists}
+          <a class="link" style="display:inline-block;margin-top:14px;text-decoration:underline" data-act="openList" data-kind="playlists">All Playlists</a>
+        </div>
+        <div>
+          <div class="row" style="justify-content:space-between;margin-bottom:8px"><span style="font-size:26px;font-weight:700">Gigs</span><span class="icon-btn" title="New gig" data-act="newItem" data-kind="gig">${icon('add',24)}</span></div>
+          ${gigs}
+          <a class="link" style="display:inline-block;margin-top:14px;text-decoration:underline" data-act="openList" data-kind="gigs">All Gigs</a>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:48px">
+        <div class="row" style="flex-direction:column;gap:12px;padding:16px 0;cursor:pointer" data-act="newSong">
+          <div style="width:84px;height:84px;border-radius:50%;background:var(--fg);color:#fff;display:flex;align-items:center;justify-content:center">${icon('add',40)}</div>
+          <div style="font-size:17px;font-weight:600">Add a Song</div>
+        </div>
+        <div>
+          <div style="font-size:26px;font-weight:700;margin-bottom:8px">Recent Songs</div>
+          ${recent}
+          <a class="link" style="display:inline-block;margin-top:14px;text-decoration:underline" data-act="openList" data-kind="songs">All Songs</a>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function sortRows(rows){
+  const r = ST.sort==='mine' ? rows.filter(x=>x.mine) : rows;
+  const by = { az:(a,b)=>a.title.localeCompare(b.title), za:(a,b)=>b.title.localeCompare(a.title), played:(a,b)=>b.plays-a.plays, recent:(a,b)=>b.added-a.added, mine:(a,b)=>b.added-a.added }[ST.sort];
+  return [...r].sort(by);
+}
+function sortDropdown(){
+  const label = SORTS.find(x=>x[0]===ST.sort)[1];
+  const opts = ST.sortOpen ? `<div style="position:absolute;right:0;top:calc(100% + 6px);width:210px;background:#fff;border:1.5px solid var(--fg);border-radius:12px;padding:6px;box-shadow:0 12px 30px rgba(0,0,0,.1);display:flex;flex-direction:column;z-index:4">
+    ${SORTS.map(([v,l])=>`<button style="border:0;border-radius:8px;background:${v===ST.sort?'#f2f2f2':'transparent'};text-align:left;padding:10px 12px;font-size:14px;font-weight:${v===ST.sort?700:500};display:flex;justify-content:space-between;align-items:center" data-act="setSort" data-id="${v}">${l}<span class="msi" style="font-size:18px;opacity:${v===ST.sort?1:0}">check</span></button>`).join('')}
+  </div>` : '';
+  return `<div style="position:relative"><button class="row" style="border:0;background:transparent;gap:4px;font-size:13px;color:#6f6f6f" data-act="toggleSort">Sort by: <span style="font-weight:600;color:var(--fg)">${label}</span>${icon(ST.sortOpen?'expand_less':'expand_more',18)}</button>${opts}</div>`;
+}
+function songRowList(id, badgeText, badgeCol, from){
+  const s = song(id);
+  return `<div class="list-row" data-act="openSongFrom" data-id="${id}" data-from="${from}"><div><div class="t">${esc(s.title||'Untitled song')}</div><div class="s">${esc(s.sub || (s.synced?'':'Draft'))}</div></div><div class="row" style="gap:12px"><span style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:${badgeCol}">${esc(badgeText)}</span>${icon('chevron_right',22)}</div></div>`;
+}
+function gigRowList(g){
+  const sub = g.date+' · '+g.setlist.length+' songs'+(g.mine?'':' · by '+g.by);
+  return `<div class="list-row" data-act="openGig" data-id="${g.id}"><div><div class="t">${esc(g.title)}</div><div class="s">${esc(sub)}</div></div><div class="row" style="gap:12px"><span style="font-size:11px;font-weight:700;letter-spacing:.05em;color:#f24822">${g.id==='nye'?'LIVE':''}</span>${icon('chevron_right',22)}</div></div>`;
+}
+
+function renderList(){
+  const curPl = ST.listPl ? D.playlists.find(p=>p.id===ST.listPl) : null;
+  let title, rowsHtml, empty;
+  if(ST.listKind==='songs'){
+    const ids = curPl ? (curPl.auto?D.order:curPl.ids) : D.order;
+    let rows = ids.map(id=>({ id, ...song(id) }));
+    const q = ST.listQuery.trim().toLowerCase();
+    if(q) rows = rows.filter(r=>((r.title||'')+' '+(r.sub||'')).toLowerCase().includes(q));
+    rows = sortRows(rows);
+    title = curPl ? curPl.title : 'Songs';
+    rowsHtml = rows.map(r=>songRowList(r.id, r.synced?'SYNCED':'NO TAKE', r.synced?'#1b1b1b':'#b0b0b0', 'list')).join('');
+    empty = !rows.length;
+  } else if(ST.listKind==='playlists'){
+    let rows = D.playlists.slice();
+    const q = ST.listQuery.trim().toLowerCase();
+    if(q) rows = rows.filter(r=>r.title.toLowerCase().includes(q));
+    rows = sortRows(rows);
+    title='Playlists'; rowsHtml = rows.map(playlistRow).join(''); empty = !rows.length;
+  } else {
+    let rows = D.gigs.slice();
+    const q = ST.listQuery.trim().toLowerCase();
+    if(q) rows = rows.filter(r=>r.title.toLowerCase().includes(q));
+    rows = sortRows(rows);
+    title='Gigs'; rowsHtml = rows.map(gigRowList).join(''); empty = !rows.length;
+  }
+  return `<div class="scr">
+    <div class="search-field" style="max-width:340px;margin-bottom:28px">
+      <input placeholder="Search" value="${esc(ST.listQuery)}" data-bind="listQuery">${icon('search',22)}
+    </div>
+    <div class="row" style="gap:14px;position:relative;z-index:2;margin-bottom:24px">
+      <span class="icon-btn" data-act="nav" data-to="home">${icon('chevron_left',26)}</span>
+      <span style="font-size:28px;font-weight:700">${esc(title)}</span>
+      <span class="icon-btn" title="Add" data-act="listAdd" style="margin-left:36px">${icon('add',24)}</span>
+      <div style="flex:1"></div>
+      ${sortDropdown()}
+    </div>
+    <div style="overflow:auto">${rowsHtml}${empty?'<div style="padding:24px 0;color:#8a8a8a">Nothing here yet.</div>':''}</div>
+  </div>`;
+}
+
+function renderSearch(){
+  const q = ST.searchQuery.trim().toLowerCase();
+  const match = r => !q || ((r.title||'')+' '+(r.sub||'')).toLowerCase().includes(q);
+  const songsRows = sortRows(D.order.map(id=>({id,...song(id)})).filter(match));
+  const plRows = sortRows(D.playlists.filter(match));
+  const gigRows = sortRows(D.gigs.filter(match));
+  const sections = [];
+  if(songsRows.length) sections.push(`<div><div style="font-size:24px;font-weight:700;padding-bottom:8px;border-bottom:1px solid var(--b2)">Songs</div>${songsRows.map(r=>songRowList(r.id, r.synced?'SYNCED':'NO TAKE', r.synced?'#1b1b1b':'#b0b0b0','search')).join('')}</div>`);
+  if(plRows.length) sections.push(`<div><div style="font-size:24px;font-weight:700;padding-bottom:8px;border-bottom:1px solid var(--b2)">Playlists</div>${plRows.map(playlistRow).join('')}</div>`);
+  if(gigRows.length) sections.push(`<div><div style="font-size:24px;font-weight:700;padding-bottom:8px;border-bottom:1px solid var(--b2)">Gigs</div>${gigRows.map(gigRowList).join('')}</div>`);
+  return `<div class="scr">
+    <div class="search-field" style="max-width:340px;margin-bottom:28px">
+      <input placeholder="Search songs, playlists or gigs" value="${esc(ST.searchQuery)}" data-bind="searchQuery" autofocus>${icon('search',22)}
+    </div>
+    <div class="row" style="gap:14px;position:relative;z-index:2;margin-bottom:24px">
+      <span class="icon-btn" data-act="nav" data-to="home">${icon('chevron_left',26)}</span>
+      <span style="font-size:28px;font-weight:700">Search Results</span>
+      <div style="flex:1"></div>
+      ${sortDropdown()}
+    </div>
+    <div style="display:flex;flex-direction:column;gap:40px;overflow:auto">
+      ${sections.join('') || `<div style="color:#8a8a8a;font-size:15px">No songs, playlists or gigs match "${esc(ST.searchQuery)}".</div>`}
+    </div>
+  </div>`;
+}
+/* ============================================================
+   SCREENS: Account / Collaborators
+   ============================================================ */
+function renderAccount(){
+  const planName = ST.plan==='rockstar' ? 'RockStar' : 'Free';
+  const planSub = ST.plan==='rockstar' ? '$4.99 / month · renews Nov 2, 2026' : 'Basic features for performing with Singa';
+  const planBadgeBg = ST.plan==='rockstar' ? '#f24822' : '#ececec';
+  const planBadgeCol = ST.plan==='rockstar' ? '#fff' : '#6f6f6f';
+  const collabRows = D.collabs.map((c,i)=>`<div class="list-row" data-act="editCollab" data-id="${i}"><div><div class="t">${esc(c.name)}</div><div class="s">${c.gigs.length} ${c.gigs.length===1?'gig':'gigs'}</div></div>${icon('chevron_right',22)}</div>`).join('');
+  const instRadio = INSTS.map(([v,label])=>`<div class="row" style="gap:8px;cursor:pointer;padding:6px 0" data-act="setInstrument" data-id="${v}">
+    <span style="width:20px;height:20px;border-radius:50%;border:1.5px solid var(--fg);display:flex;align-items:center;justify-content:center"><span style="width:10px;height:10px;border-radius:50%;background:var(--fg);opacity:${ST.instrument===v?1:0}"></span></span>
+    <span style="font-size:15px;font-weight:600">${label}</span></div>`).join('');
+  const startHint = ST.startMode==='countdown' ? 'Press play and Singa counts down from 3.' : 'Singa listens and starts playback when you start singing.';
+  const notifRows = [['req','Song requests'],['photos','Guest photos'],['chat','Chat messages']].map(([k,label])=>{
+    const on = ST.notif[k];
+    return `<div class="row" style="gap:14px;padding:10px 0;cursor:pointer" data-act="toggleNotif" data-id="${k}">
+      <div class="toggle" style="background:${on?'#1b1b1b':'#fff'}"><div class="dot" style="left:${on?20:2}px;background:${on?'#fff':'#1b1b1b'}"></div></div>
+      <span style="font-size:15px;font-weight:600">${label}</span></div>`;
+  }).join('');
+  return `<div class="scr" style="overflow:auto;gap:30px;padding-bottom:60px">
+    <div class="row" style="gap:14px"><span class="icon-btn" data-act="nav" data-to="home">${icon('chevron_left',26)}</span><span style="font-size:28px;font-weight:700">My Account</span></div>
+    <div>
+      <div style="font-size:21px;font-weight:700;margin-bottom:6px">Account Details</div>
+      <div style="padding:14px 0;border-bottom:1px solid var(--b2);display:flex;justify-content:space-between;align-items:center;cursor:pointer" data-act="editNickname"><div><div style="font-size:12px;color:#8a8a8a">Nickname</div><div style="font-size:16px;font-weight:600;margin-top:3px">${esc(ST.nickname || nicknameFromEmail(ST.email))}</div></div>${icon('chevron_right',22)}</div>
+      <div style="padding:14px 0;border-bottom:1px solid var(--b2)"><div style="font-size:12px;color:#8a8a8a">Email</div><div style="font-size:16px;font-weight:600;margin-top:3px">${esc(ST.email || 'Not signed in')}</div></div>
+    </div>
+    <div>
+      <div style="font-size:21px;font-weight:700;margin-bottom:6px">Subscription</div>
+      <div class="row" style="justify-content:space-between;gap:16px;padding:14px 0;border-bottom:1px solid var(--b2)">
+        <div><div class="row" style="gap:8px"><span style="font-size:16px;font-weight:700">${planName}</span><span style="font-size:11px;font-weight:800;letter-spacing:.06em;padding:3px 7px;border-radius:5px;background:${planBadgeBg};color:${planBadgeCol}">CURRENT</span></div><div style="font-size:13px;color:#8a8a8a;margin-top:3px">${planSub}</div></div>
+        ${ST.plan!=='rockstar'
+          ? `<button class="btn btn-accent btn-sm" data-act="openUpgrade">${icon('bolt',20)}Upgrade to RockStar</button>`
+          : `<a class="link link-muted" style="text-decoration:underline" data-act="downgrade">Switch to Free</a>`}
+      </div>
+    </div>
+    <div>
+      <div style="font-size:21px;font-weight:700;margin-bottom:6px">Collaborators</div>
+      ${collabRows}
+      <a class="link" style="display:inline-flex;align-items:center;gap:6px;margin-top:12px" data-act="newCollab">${icon('person_add',20)}Add collaborator</a>
+    </div>
+    <div>
+      <div style="font-size:21px;font-weight:700;margin-bottom:10px">Default instrument</div>
+      <div style="display:flex;gap:24px;flex-wrap:wrap">${instRadio}</div>
+    </div>
+    <div>
+      <div style="font-size:21px;font-weight:700;margin-bottom:6px">Start playback with</div>
+      <div style="font-size:13px;color:#8a8a8a;margin-bottom:14px">${startHint}</div>
+      <div class="seg">
+        <button class="${ST.startMode==='countdown'?'on':''}" data-act="setStartMode" data-id="countdown">Countdown</button>
+        <button class="${ST.startMode==='detect'?'on':''}" data-act="setStartMode" data-id="detect">Start detection</button>
+      </div>
+    </div>
+    <div>
+      <div style="font-size:21px;font-weight:700;margin-bottom:10px">Notify me during gigs</div>
+      ${notifRows}
+    </div>
+    <a class="link link-accent" data-act="signOut">Sign out</a>
+  </div>`;
+}
+
+function renderCollab(){
+  const cg = ST.collabFor ? D.gigs.find(g=>g.id===ST.collabFor) : null;
+  const rows = D.collabs.map((c,i)=>{
+    const inGig = cg && c.gigs.includes(cg.id);
+    const addBtn = cg ? `<span class="icon-btn" title="${inGig?'Remove from gig':'Add to gig'}" data-act="toggleCollabInGig" data-id="${i}">${icon(inGig?'check_circle':'add_circle',24)}</span>` : '<span></span>';
+    return `<div style="display:grid;grid-template-columns:1fr 32px 32px;align-items:center;gap:16px;padding:18px 0;border-bottom:1px solid var(--b2)">
+      <div><div style="font-size:16px;font-weight:600">${esc(c.name)}</div><div style="font-size:13px;color:#8a8a8a;margin-top:4px">${esc(c.gigs.map(gigName).join(' · ') || 'No gigs yet')}</div></div>
+      <span class="icon-btn" data-act="editCollab" data-id="${i}">${icon('edit',22)}</span>
+      ${addBtn}
+    </div>`;
+  }).join('');
+  return `<div class="scr" style="gap:28px">
+    <div class="row" style="gap:14px">
+      <span class="icon-btn" data-act="back" data-to="${esc(ST.back)}">${icon('chevron_left',26)}</span>
+      <div><div style="font-size:28px;font-weight:700">Collaborators</div>${cg?`<div style="font-size:14px;color:#6f6f6f;margin-top:4px">Tap + to add someone to ${esc(cg.title)}</div>`:''}</div>
+      <div style="flex:1"></div>
