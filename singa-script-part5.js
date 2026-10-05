@@ -1,4 +1,21 @@
 "use strict";
+function renderSongMenu(){
+  const s = song(ST.songId);
+  const instOpts = INSTS.map(([v,l])=>`<a class="link" style="display:flex;align-items:center;gap:8px;font-weight:${v===ST.instrument?700:500};color:${v===ST.instrument?'#1b1b1b':'#6f6f6f'}" data-act="setInstrumentMenu" data-id="${v}">${icon('check',18)}${l}</a>`).join('');
+  return `<div class="modal-backdrop" style="background:rgba(255,255,255,.9);align-items:flex-start;justify-content:flex-end;padding:20px 64px 0" data-act="toggleMenu">
+    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:12px;text-align:right" onclick="modalClick(event)">
+      <span class="icon-btn" data-act="toggleMenu">${icon('close',28)}</span>
+      <a class="link" style="font-size:17px;font-weight:700" data-act="editSong">Edit</a>
+      <a class="link" style="font-size:17px;font-weight:700;display:flex;align-items:center;gap:4px" data-act="toggleInstMenu">Change instrument${icon(ST.instMenu?'expand_less':'expand_more',20)}</a>
+      ${ST.instMenu?`<div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;margin:-4px 0 4px">${instOpts}</div>`:''}
+      <a class="link" style="font-size:17px;font-weight:700" data-act="menuAddGig">Add to a gig</a>
+      <a class="link" style="font-size:17px;font-weight:700" data-act="nav" data-to="account">Full settings</a>
+      <a class="link" style="font-size:17px;font-weight:700;margin-top:16px;display:flex;align-items:center;gap:6px" data-act="newSong">Add a new song${icon('add_circle',22)}</a>
+      <a class="link link-accent" style="font-size:17px;font-weight:700;margin-top:16px" data-act="deleteSong">Delete song</a>
+    </div>
+  </div>`;
+}
+
 function renderSong(){
   const s = song(ST.songId);
   const inst = ST.instrument, hasInst = inst!=='none';
@@ -130,7 +147,7 @@ function renderGig(){
       <button class="icon-btn" title="Start gig player" style="pointer-events:auto;width:68px;height:68px;border-radius:50%;background:#1b1b1b;color:#fff;box-shadow:0 10px 30px rgba(0,0,0,.2)" data-act="goLive">${icon('play_arrow',38)}</button>
     </div>
   </div>
-  ${ST.qrOpen?`<div class="modal-backdrop" data-act="closeQr"><div class="modal" style="align-items:center;text-align:center;max-width:380px" onclick="event.stopPropagation()">
+  ${ST.qrOpen?`<div class="modal-backdrop" data-act="closeQr"><div class="modal" style="align-items:center;text-align:center;max-width:380px" onclick="modalClick(event)">
     ${qrHTML()}
     <div style="font-size:15px;font-weight:700">singa.live/g/${esc(g.id)}</div>
     <div style="font-size:13px;color:#6f6f6f;text-align:center">Guests scan to follow the lyrics, request songs, share photos and chat. No app needed.</div>
@@ -174,44 +191,3 @@ function renderGigEdit(){
     </div>
   </div>`;
 }
-
-function renderGigSettingsModal(){
-  const g = gigObj(), gs = gigSettings(g);
-  const rows = [['photos','Enable audience photos','Guests can share photos to the gig album'],
-    ['chat','Enable audience chat','A group chat for everyone at the gig'],
-    ['dm','Allow direct messages','Guests can message the band privately'],
-    ['browse','Allow audience to browse songs','Guests can see the setlist'],
-    ['order','Allow audience to choose songs order','Guest votes reorder the upcoming songs'],
-    ['requests','Allow audience to choose songs',"Guests can request songs that aren't on the setlist"]];
-  return `<div class="modal-backdrop" data-act="closeGigSettings"><div class="modal" onclick="event.stopPropagation()">
-    <div class="mhead"><span style="font-size:21px;font-weight:600">Gig settings</span><span class="icon-btn" data-act="closeGigSettings">${icon('close',22)}</span></div>
-    <div class="msub" style="margin-bottom:6px">${esc(g.title)}</div>
-    ${rows.map(([k,label,sub])=>{ const on=gs[k]; return `<div class="row" style="gap:14px;padding:11px 0;cursor:pointer" data-act="toggleGigSetting" data-id="${k}">
-      <div class="toggle" style="flex:none;background:${on?'#1b1b1b':'#fff'}"><div class="dot" style="left:${on?20:2}px;background:${on?'#fff':'#1b1b1b'}"></div></div>
-      <div><div style="font-size:15px;font-weight:600">${label}</div><div style="font-size:12px;color:#8a8a8a;margin-top:2px">${sub}</div></div></div>`; }).join('')}
-    <button class="btn btn-dark" style="margin-top:14px" data-act="closeGigSettings">Done</button>
-  </div></div>`;
-}
-
-/* ---- Gig Player ---- */
-function queueFor(g){
-  const gs = gigSettings(g);
-  const played = ST.played.filter(id=>g.setlist.includes(id));
-  const rest = g.setlist.filter(id=>!played.includes(id));
-  const cur = ST.gigCur && rest.includes(ST.gigCur) ? ST.gigCur : null;
-  let up = rest.filter(id=>id!==cur);
-  if(gs.order) up = up.map((id,i)=>({id,i,v:ST.orderVotes[id]||0})).sort((a,b)=>b.v-a.v||a.i-b.i).map(x=>x.id);
-  const cued = cur || up[0] || null;
-  if(!cur && cued) up = up.slice(1);
-  return { played, cued, up };
-}
-function gigSongId(){ const q = queueFor(gigObj()); return q.cued || gigObj().setlist[0]; }
-function openPlayer(id){
-  stopOnsetListening();
-  const g = gigObj(); const fresh = ST._liveGig !== g.id;
-  ST.screen='gigplayer'; ST.ctx='gig'; ST._liveGig=g.id;
-  ST.gigCur = id || (fresh ? null : ST.gigCur);
-  ST.played = fresh ? [] : (id ? ST.played.filter(x=>x!==id) : ST.played);
-  ST.t=0; ST.playing=false; ST.vcd=0; ST.gListening=false;
-}
-
