@@ -1,12 +1,49 @@
 "use strict";
+function renderNewModal(){
+  const ni = ST.newItem;
+  const heading = ni.kind==='playlist' ? 'New playlist' : 'New gig';
+  const placeholder = ni.kind==='playlist' ? 'e.g. Campfire songs' : "e.g. Maya's birthday";
+  return `<div class="modal-backdrop" data-act="closeNew"><div class="modal" style="max-width:420px" onclick="modalClick(event)">
+    <div class="mhead"><span style="font-size:21px;font-weight:600">${heading}</span><span class="icon-btn" data-act="closeNew">${icon('close',22)}</span></div>
+    <label style="display:flex;flex-direction:column;gap:4px;border-bottom:1px solid #e2e2e2;padding-bottom:8px"><span style="font-size:12px;color:#8a8a8a">Name</span><input style="border:0;outline:none;font-size:16px;font-weight:600" placeholder="${placeholder}" value="${esc(ni.name)}" data-bind="newName" data-key="createNew" autofocus></label>
+    ${ni.kind==='gig'?`<label style="display:flex;flex-direction:column;gap:4px;border-bottom:1px solid #e2e2e2;padding-bottom:8px"><span style="font-size:12px;color:#8a8a8a">Date</span><input style="border:0;outline:none;font-size:16px;font-weight:600" placeholder="e.g. Oct 12, 2026" value="${esc(ni.date)}" data-bind="newDate" data-key="createNew"></label>`:''}
+    <button class="btn" style="background:${ni.name.trim()?'#1b1b1b':'#d6d6d6'};color:#fff;margin-top:6px" data-act="createNew">Create</button>
+  </div></div>`;
+}
+
+function renderCollabEditModal(){
+  const ce = ST.collabEdit;
+  const heading = ce.i==null ? 'Add Collaborator' : 'Edit Collaborator';
+  const gigRows = D.gigs.map(g=>{ const on = ce.gigs.includes(g.id); return `<div class="row" style="gap:14px;padding:9px 0;cursor:pointer" data-act="toggleCeGig" data-id="${g.id}">
+    <div class="toggle" style="background:${on?'#1b1b1b':'#fff'}"><div class="dot" style="left:${on?20:2}px;background:${on?'#fff':'#1b1b1b'}"></div></div>
+    <span style="font-size:14px;font-weight:600">${esc(g.title)}</span></div>`; }).join('');
+  return `<div class="modal-backdrop" data-act="closeCollabEdit"><div class="modal" style="max-width:440px" onclick="modalClick(event)">
+    <div class="mhead"><span style="font-size:21px;font-weight:600">${heading}</span><span class="icon-btn" data-act="closeCollabEdit">${icon('close',22)}</span></div>
+    <label style="display:flex;flex-direction:column;gap:4px;border-bottom:1px solid #e2e2e2;padding-bottom:8px"><span style="font-size:12px;color:#8a8a8a">Name</span><input style="border:0;outline:none;font-size:16px;font-weight:600" value="${esc(ce.name)}" data-bind="ceName"></label>
+    <label style="display:flex;flex-direction:column;gap:4px;border-bottom:1px solid #e2e2e2;padding-bottom:8px"><span style="font-size:12px;color:#8a8a8a">Email</span><input style="border:0;outline:none;font-size:16px;font-weight:600" value="${esc(ce.email)}" data-bind="ceEmail"></label>
+    <div style="font-size:12px;color:#8a8a8a;margin-top:6px">Gigs</div>
+    <div>${gigRows}</div>
+    <button class="btn btn-dark" style="margin-top:8px" data-act="saveCollab">Save</button>
+  </div></div>`;
+}
+
 function renderNickModal(){
-  return `<div class="modal-backdrop" data-act="closeEditNick"><div class="modal" style="max-width:380px" onclick="event.stopPropagation()">
+  return `<div class="modal-backdrop" data-act="closeEditNick"><div class="modal" style="max-width:380px" onclick="modalClick(event)">
     <div class="mhead"><span style="font-size:21px;font-weight:600">Nickname</span><span class="icon-btn" data-act="closeEditNick">${icon('close',22)}</span></div>
     <label style="display:flex;flex-direction:column;gap:4px;border-bottom:1px solid #e2e2e2;padding-bottom:8px"><span style="font-size:12px;color:#8a8a8a">Shown to collaborators and your audience</span><input style="border:0;outline:none;font-size:16px;font-weight:600" value="${esc(ST.editNick)}" data-bind="nickInput" data-key="saveNickname" autofocus></label>
     <button class="btn" style="background:${ST.editNick.trim()?'#1b1b1b':'#d6d6d6'};color:#fff;margin-top:6px" data-act="saveNickname">Save</button>
   </div></div>`;
 }
 
+function modalClick(e){
+  // Let clicks on any actionable element inside the modal (the X button,
+  // Save/Create, etc.) bubble up to the document's delegated handler;
+  // swallow clicks that land on blank modal padding so they don't fall
+  // through to the backdrop's close handler.
+  const actEl = e.target.closest('[data-act]');
+  if(actEl && e.currentTarget.contains(actEl)) return;
+  e.stopPropagation();
+}
 function renderModals(){
   let html = '';
   if(ST.gigSettings) html += renderGigSettingsModal();
@@ -20,9 +57,11 @@ function renderModals(){
 /* ============================================================
    RENDER DISPATCH
    ============================================================ */
+const DARK_MODE_SCREENS = ['gig','song','practice','gigplayer'];
 function render(){
-  document.body.classList.toggle('dark-invert', ST.perfDark);
-  document.getElementById('darkToggle').style.display = ST.screen==='login' ? 'none' : 'flex';
+  const darkAllowed = DARK_MODE_SCREENS.includes(ST.screen);
+  document.body.classList.toggle('dark-invert', ST.perfDark && darkAllowed);
+  document.getElementById('darkToggle').style.display = darkAllowed ? 'flex' : 'none';
   document.getElementById('darkPill').style.background = ST.perfDark ? '#1b1b1b' : '#fff';
   document.getElementById('darkDot').style.left = (ST.perfDark?20:2)+'px';
   document.getElementById('darkDot').style.background = ST.perfDark ? '#fff' : '#1b1b1b';
@@ -60,7 +99,28 @@ function render(){
     const want = ST.rootIdx*100;
     if(Math.abs(rs.scrollLeft-want)>1){ ST._lastProgScrollAt = Date.now(); rs.scrollLeft = want; }
   }
+  // make the native/browser Back button act as in-app Back instead of
+  // leaving the app: push a history entry whenever the screen changes,
+  // and pop one in the 'popstate' listener below instead of re-pushing.
+  if(_histScreen===null){
+    _histScreen = ST.screen;
+    try{ history.replaceState({screen:ST.screen}, '', location.href); }catch(e){}
+  } else if(_histScreen!==ST.screen){
+    if(!_poppingHistState){
+      try{ history.pushState({screen:ST.screen}, '', location.href); }catch(e){}
+    }
+    _histScreen = ST.screen;
+  }
 }
+let _histScreen = null, _poppingHistState = false;
+window.addEventListener('popstate', function(e){
+  _poppingHistState = true;
+  stopOnsetListening();
+  ST.screen = (e.state && e.state.screen) || 'home';
+  ST.menu=false; ST.qrOpen=false; ST.sortOpen=false;
+  render();
+  _poppingHistState = false;
+});
 
 /* ============================================================
    ACTIONS
@@ -69,6 +129,41 @@ function autoChordsFor(lyrics){
   const cyc = ['Am','F','G','C'], out = {};
   parseLyrics(lyrics).forEach((ws,li)=>{ out[li+'-0']=cyc[li%4]; if(ws.length>3) out[li+'-'+Math.floor(ws.length/2)]=cyc[(li+1)%4]; });
   return out;
+}
+/* ============================================================
+   CHORD-SHEET TEXT IMPORT ("From File" → a plain-text document of
+   lyrics with chord names on their own line above them, the common
+   .txt/.md chord-sheet format). Audio/video files keep using the
+   real recording pipeline above; PDF/Word parsing is not implemented
+   yet and is rejected with a clear message instead of silently failing.
+   ============================================================ */
+function looksLikeChordToken(t){
+  return /^[A-G](#|b)?(m|maj7|m6|m7|6|7|9|11|13|sus2|sus4|dim7?|aug|add9)?(\/[A-G](#|b)?)?$/.test(t);
+}
+function looksLikeChordLine(line){
+  const trimmed = (line||'').trim();
+  if(!trimmed) return false;
+  const tokens = trimmed.split(/\s+/);
+  return tokens.every(looksLikeChordToken);
+}
+function parseChordSheetText(text){
+  const rawLines = (text||'').replace(/\r\n?/g,'\n').split('\n');
+  const lyricLines = []; const chordMap = {}; let li = 0;
+  for(let i=0;i<rawLines.length;i++){
+    const line = rawLines[i];
+    const next = rawLines[i+1];
+    if(looksLikeChordLine(line) && next!==undefined && next.trim() && !looksLikeChordLine(next)){
+      const words = next.trim().split(/\s+/);
+      line.trim().split(/\s+/).forEach((ch,ci)=>{ if(ci<words.length) chordMap[li+'-'+ci] = ch; });
+      lyricLines.push(next.trim()); li++; i++;
+    } else if(looksLikeChordLine(line)){
+      continue; // a chord-only line with nothing to attach it to (e.g. an intro) — skip
+    } else {
+      lyricLines.push(line.trim());
+      if(line.trim()) li++;
+    }
+  }
+  return { lyrics: lyricLines.join('\n').trim(), chords: chordMap };
 }
 function openSongOrIncomplete(id, from){
   stopOnsetListening();
@@ -169,142 +264,3 @@ function normWord(w){ return (w||'').toLowerCase().replace(/[^a-z0-9'’]/g,'');
 // Classic edit-distance alignment of the typed/recognized lyric words (ref)
 // against the speech-recognizer's words (hyp) — for each ref word, finds the
 // best-matching hyp word (or null), so real timestamps can be looked up.
-function alignSequences(ref, hyp){
-  const n=ref.length, m=hyp.length;
-  const dp = Array.from({length:n+1}, ()=>new Array(m+1).fill(0));
-  for(let i=0;i<=n;i++) dp[i][0]=i;
-  for(let j=0;j<=m;j++) dp[0][j]=j;
-  for(let i=1;i<=n;i++) for(let j=1;j<=m;j++){
-    const cost = ref[i-1]===hyp[j-1] ? 0 : 1;
-    dp[i][j] = Math.min(dp[i-1][j-1]+cost, dp[i-1][j]+1, dp[i][j-1]+1);
-  }
-  const mapping = new Array(n).fill(null);
-  let i=n, j=m;
-  while(i>0 && j>0){
-    const cost = ref[i-1]===hyp[j-1] ? 0 : 1;
-    if(dp[i][j]===dp[i-1][j-1]+cost){ mapping[i-1]=j-1; i--; j--; }
-    else if(dp[i][j]===dp[i-1][j]+1){ i--; }
-    else { j--; }
-  }
-  return mapping;
-}
-
-// Fills in a timestamp for every ref word: matched words get the real
-// recognized timestamp, unmatched ones are linearly interpolated between
-// their nearest matched neighbors (or extrapolated at the ends).
-function fillTimestamps(mapping, hypWords, totalDuration){
-  const n = mapping.length;
-  const ts = new Array(n).fill(null);
-  for(let i=0;i<n;i++){ if(mapping[i]!=null && hypWords[mapping[i]]) ts[i] = hypWords[mapping[i]].start; }
-  let lastIdx=-1, lastT=0;
-  for(let i=0;i<n;i++){
-    if(ts[i]==null) continue;
-    if(lastIdx===-1 && i>0){ for(let k=0;k<i;k++) ts[k] = ts[i]*(k+1)/(i+1); }
-    else if(i-lastIdx>1){ const span=ts[i]-lastT; for(let k=lastIdx+1;k<i;k++) ts[k] = lastT+span*(k-lastIdx)/(i-lastIdx); }
-    lastIdx=i; lastT=ts[i];
-  }
-  if(lastIdx===-1){ for(let k=0;k<n;k++) ts[k] = totalDuration*(k+1)/(n+1); }
-  else if(lastIdx<n-1){ const span=Math.max(0,totalDuration-lastT); for(let k=lastIdx+1;k<n;k++) ts[k] = lastT+span*(k-lastIdx)/(n-lastIdx); }
-  return ts;
-}
-
-// The real pipeline: decode the take, transcribe it with an on-device speech
-// model, then either (a) force-align it against lyrics you already typed, or
-// (b) — if you recorded/uploaded with no typed lyrics — use the real
-// transcription AS the lyrics. Runs entirely client-side (Transformers.js +
-// Whisper-tiny.en, loaded from a CDN on first use).
-async function processRecordingBlob(songObj, blob){
-  const hadManualLyrics = !!(songObj.lyrics && songObj.lyrics.trim());
-  ST.phase='processing'; ST.procPct=5; ST.procNote='Listening back to your take…'; render();
-  try{
-    const { float32, durationSec } = await decodeToFloat32Mono16k(blob);
-    ST.procPct=20; render();
-    ST.procNote='Loading the speech model (first time only)…'; render();
-    const { pipeline } = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2');
-    ST.procPct=35; render();
-    const transcriber = await pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny.en');
-    ST.procPct=55; ST.procNote='Transcribing your words…'; render();
-    const output = await transcriber(float32, { return_timestamps:'word', chunk_length_s:30, stride_length_s:5 });
-    ST.procPct=82; ST.procNote='Lining up every word…'; render();
-    const hypWords = (output.chunks||[]).map(c=>({
-      text: (c.text||'').trim(),
-      norm: normWord(c.text),
-      start: (c.timestamp && typeof c.timestamp[0]==='number') ? c.timestamp[0] : 0,
-    })).filter(w=>w.norm);
-
-    if(hadManualLyrics){
-      const refWords = [];
-      parseLyrics(songObj.lyrics).forEach(ws=>ws.forEach(w=>refWords.push(normWord(w))));
-      const mapping = alignSequences(refWords, hypWords.map(w=>w.norm));
-      songObj.wordTimestamps = fillTimestamps(mapping, hypWords, durationSec);
-    } else {
-      const WORDS_PER_LINE = 7;
-      const rawWords = hypWords.map(w=>w.text).filter(Boolean);
-      if(rawWords.length){
-        const lines = [];
-        for(let i=0;i<rawWords.length;i+=WORDS_PER_LINE) lines.push(rawWords.slice(i,i+WORDS_PER_LINE).join(' '));
-        songObj.lyrics = lines.join('\n');
-        songObj.wordTimestamps = hypWords.map(w=>w.start);
-      }
-    }
-    songObj.audioDurationSec = durationSec;
-    songObj.synced = true;
-    ST.procPct=100; ST.procNote='Done'; render();
-  }catch(err){
-    console.error('Singa: speech alignment failed, falling back to estimated timing', err);
-    toast("Couldn't analyze the audio — using estimated timing instead");
-    songObj.wordTimestamps = null; songObj.audioDurationSec = null; songObj.synced = true;
-  }
-  finishSong();
-  render();
-}
-
-// Real "Start detection" playback mode: listens to the mic and auto-starts
-// (sets ST.playing/ST.gListening=true) the instant it hears you begin, via a
-// rolling energy-threshold onset detector (ported from song-builder.html's
-// startListeningForCue). onTrigger is called once, then listening stops.
-let onsetCtx=null, onsetStream=null, onsetRaf=null;
-function stopOnsetListening(){
-  if(onsetRaf!=null){ cancelAnimationFrame(onsetRaf); onsetRaf=null; }
-  if(onsetStream){ onsetStream.getTracks().forEach(t=>t.stop()); onsetStream=null; }
-  if(onsetCtx){ onsetCtx.close().catch(()=>{}); onsetCtx=null; }
-}
-async function startOnsetListening(onTrigger){
-  stopOnsetListening();
-  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ toast('Microphone not available on this device/browser'); return; }
-  let stream;
-  try{ stream = await navigator.mediaDevices.getUserMedia({ audio:true }); }
-  catch(err){ toast('Mic error: '+(err && err.name || err)); return; }
-  onsetStream = stream;
-  const actx = new (window.AudioContext||window.webkitAudioContext)();
-  onsetCtx = actx;
-  const source = actx.createMediaStreamSource(stream);
-  const analyser = actx.createAnalyser();
-  analyser.fftSize = 1024; analyser.smoothingTimeConstant = 0.2;
-  source.connect(analyser);
-  const dataArray = new Uint8Array(analyser.frequencyBinCount);
-  const HISTORY_LEN=43, THRESHOLD_MULT=1.6, MIN_ENERGY_FLOOR=12, REFRACTORY_MS=180;
-  let energyHistory=[], lastOnsetTime=0;
-  const avg = a=>a.reduce((x,y)=>x+y,0)/a.length;
-  const sd = (a,m)=>Math.sqrt(a.reduce((x,y)=>x+(y-m)*(y-m),0)/a.length);
-  function frame(){
-    if(onsetCtx!==actx) return; // superseded by a newer call
-    analyser.getByteFrequencyData(dataArray);
-    const binStart=Math.floor(dataArray.length*0.02), binEnd=Math.floor(dataArray.length*0.5);
-    let sum=0; for(let i=binStart;i<binEnd;i++) sum+=dataArray[i];
-    const energy = sum/(binEnd-binStart);
-    energyHistory.push(energy); if(energyHistory.length>HISTORY_LEN) energyHistory.shift();
-    const mean=avg(energyHistory), std=sd(energyHistory,mean);
-    const threshold = Math.max(MIN_ENERGY_FLOOR, mean+THRESHOLD_MULT*std);
-    const now = performance.now();
-    if(energy>threshold && energy>MIN_ENERGY_FLOOR && (now-lastOnsetTime)>REFRACTORY_MS && energyHistory.length>=15){
-      lastOnsetTime = now;
-      stopOnsetListening();
-      onTrigger();
-      return;
-    }
-    onsetRaf = requestAnimationFrame(frame);
-  }
-  onsetRaf = requestAnimationFrame(frame);
-}
-
