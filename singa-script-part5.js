@@ -1,4 +1,155 @@
 "use strict";
+function renderSong(){
+  const s = song(ST.songId);
+  const inst = ST.instrument, hasInst = inst!=='none';
+  const seq = chordSeq(s);
+  const vtm = timing(s);
+  const vLive = ST.playing || ST.t>0;
+  const vci = curWord(vtm, ST.t);
+  let diaChord, diaNext;
+  if(vLive){ diaChord = chordAt(s,vtm,Math.max(vci,0)) || (seq[0]||{}).ch; diaNext = (seq.find(x=>x.k>vci && x.ch!==diaChord)||{}).ch; }
+  else { diaChord = ST.viewChord || (seq[0]&&seq[0].ch); const vi = seq.findIndex(x=>x.ch===diaChord); diaNext = seq[vi+1] ? seq[vi+1].ch : (seq[0]&&seq[0].ch); }
+  const dia = diagram(diaChord, diaNext, inst);
+  const lines = buildLines(s, vLive?'play':'view', { t: vLive?ST.t:null, selChord: diaChord, hideChords: !hasInst });
+  const vPlaying = ST.playing;
+  const chordScale = Math.max(0.55, Math.min(1.9, ST.chordH/230));
+  return `<div class="scr" style="padding-bottom:0">
+    <div class="row" style="gap:14px;align-items:flex-start">
+      <span class="icon-btn" style="margin-top:4px" data-act="back" data-to="${esc(ST.back)}">${icon('chevron_left',26)}</span>
+      <div style="flex:1">
+        <div style="font-size:28px;font-weight:700;letter-spacing:-0.01em">${esc(s.title||'Untitled song')}</div>
+        <div style="font-size:14px;color:#6f6f6f;margin-top:4px">${esc(s.sub)}</div>
+        ${ST.viewBy?`<div class="row" style="gap:6px;font-size:13px;margin-top:8px">${icon('account_circle',18)}added by ${esc(ST.viewBy)}</div>`:''}
+      </div>
+      <span class="icon-btn" data-act="toggleMenu">${icon('menu',28)}</span>
+    </div>
+    ${ST.viewBy?`<button class="btn btn-dark btn-sm" style="align-self:flex-start;margin:18px 0 0 40px" data-act="copySong">Copy to your playlist</button>`:''}
+    ${hasInst?`<div style="height:${Math.round(ST.chordH)}px;display:flex;align-items:center;justify-content:center;overflow:hidden;margin-top:8px">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:14px;transform:scale(${chordScale})">
+          ${diagramHTML(dia)}
+          <button class="link" style="display:flex;align-items:center;gap:6px" data-act="playSample">${icon(ST.sampling?'stop_circle':'play_circle',22)}${ST.sampling?'Stop sample · '+Math.ceil(ST.sampleLeft)+'s':'Play Sample'}</button>
+        </div>
+      </div>
+      <div class="row" style="justify-content:center;cursor:ns-resize;height:30px" title="Drag to resize">${icon('drag_handle',26)}</div>`:''}
+    <div style="flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;align-items:center;padding:20px 0 40%" id="lyricsScroll">
+      ${linesHTML(lines)}
+    </div>
+    <div style="flex:none;min-height:92px;display:flex;align-items:center;justify-content:center;padding:10px 0">
+      ${ST.startMode==='countdown'
+        ? `<button class="icon-btn" title="Play" style="width:68px;height:68px;border-radius:50%;background:#1b1b1b;color:#fff" data-act="viewPlay">${icon(vPlaying?'pause':'play_arrow',38)}</button>`
+        : `<div class="row" style="gap:12px;cursor:pointer;max-width:520px" data-act="viewPlay">${icon('mic',30)}<div><div style="font-size:16px;font-weight:600">${vPlaying?'Following your voice':(ST.listening?"Listening… playback starts the moment you sing":'Tap to start listening')}</div><div style="font-size:12px;color:#8a8a8a;margin-top:3px">${vPlaying?'Tap to pause':(ST.listening?'Tap to cancel':'Uses your mic to detect when you start singing')}</div></div></div>`}
+    </div>
+  </div>
+  ${ST.vcd>0?`<div class="modal-backdrop" style="background:rgba(255,255,255,.75);font-size:180px;font-weight:800">${Math.max(1,Math.ceil(ST.vcd))}</div>`:''}
+  ${ST.menu?renderSongMenu():''}`;
+}
+/* ============================================================
+   SCREEN: Practice Player
+   ============================================================ */
+function renderPractice(){
+  const s = song(ST.songId);
+  const tm = timing(s);
+  const seq = chordSeq(s);
+  const ci = curWord(tm, ST.t);
+  const chord = chordAt(s,tm,Math.max(ci,0)) || (seq[0]||{}).ch;
+  const next = (seq.find(x=>x.k>ci && x.ch!==chord)||{}).ch;
+  const dia = diagram(chord, next || (seq[0]||{}).ch, ST.instrument);
+  const lines = buildLines(s, 'play', { t: ST.t, hideChords: ST.instrument==='none' });
+  const progress = tm.total ? Math.min(100, ST.t/tm.total*100) : 0;
+  const guideSegs = ['Piano','Strings','Flute','Synth'].map(v=>`<button class="${v===ST.guideInst?'on':''}" style="padding:4px 10px;font-size:12px;border-radius:8px;border:1.5px solid var(--fg)" data-act="setGuideInst" data-id="${v}">${v}</button>`).join('');
+  const practiceNote = s.synced ? 'Playing along with your recorded take. Guide melody is generated from your pitch-corrected vocal.' : 'Not recorded yet — timing is estimated. Record a take on the Sync step for word-level sync.';
+  return `<div class="scr" style="padding-bottom:30px">
+    <div class="row" style="gap:14px;align-items:flex-start">
+      <span class="icon-btn" style="margin-top:18px" data-act="exitPractice">${icon('chevron_left',26)}</span>
+      <div style="flex:1">
+        <div style="font-size:12px;font-weight:700;letter-spacing:.08em;color:#f24822">PRACTICE</div>
+        <div style="font-size:28px;font-weight:700;margin-top:4px">${esc(s.title||'Untitled song')}</div>
+        <div style="font-size:14px;color:#6f6f6f;margin-top:4px">${esc(s.sub)}</div>
+      </div>
+    </div>
+    ${ST.instrument!=='none' ? `<div style="margin-top:30px;min-height:140px">${diagramHTML(dia,'#f24822')}</div>` : ''}
+    <div style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center">
+      ${linesHTML(lines, true)}
+    </div>
+    <div style="border-top:1px solid #ececec;padding-top:22px;display:flex;flex-direction:column;gap:18px">
+      <div style="height:22px;display:flex;align-items:center;cursor:pointer" data-act="seek"><div style="flex:1;height:6px;border-radius:3px;background:#e6e6e6;position:relative"><div style="position:absolute;left:0;top:0;bottom:0;width:${progress}%;background:#1b1b1b;border-radius:3px"></div></div></div>
+      <div class="row" style="gap:16px">
+        <button class="icon-btn" style="width:48px;height:48px;border-radius:50%;border:1.5px solid var(--fg)" data-act="restart">${icon('replay',24)}</button>
+        <button class="icon-btn" style="width:64px;height:64px;border-radius:50%;background:#1b1b1b;color:#fff" data-act="togglePlay">${icon(ST.playing?'pause':'play_arrow',34)}</button>
+        <div style="font-size:14px;color:#6f6f6f;font-variant-numeric:tabular-nums">${fmtTime(ST.t)} / ${fmtTime(tm.total)}</div>
+        <div style="flex:1"></div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px">
+          <div class="row" style="gap:10px;cursor:pointer" data-act="toggleGuide">
+            <span style="font-size:14px;font-weight:600">Guide melody</span>
+            <div class="toggle" style="background:${ST.guide?'#1b1b1b':'#fff'}"><div class="dot" style="left:${ST.guide?20:2}px;background:${ST.guide?'#fff':'#1b1b1b'}"></div></div>
+          </div>
+          <div class="row" style="gap:4px;opacity:${ST.guide?1:0.35}">${guideSegs}</div>
+        </div>
+      </div>
+      <div style="font-size:12px;color:#9a9a9a">${practiceNote}</div>
+    </div>
+  </div>`;
+}
+/* ============================================================
+   SCREENS: Gig / Gig Photos / Gig Edit / Gig Player
+   ============================================================ */
+function gigSettings(g){ return { photos:true, chat:true, dm:false, order:false, requests:true, browse:true, ...(g.settings||{}) }; }
+
+function renderGig(){
+  const g = gigObj();
+  const setRows = g.setlist.map((id,i)=>{
+    const s = song(id);
+    return `<div class="list-row" data-act="openGigSong" data-id="${id}"><div><div class="t">${esc(s.title||'Untitled song')}</div><div class="s">${esc(s.sub)}</div></div><div class="row" style="gap:10px"><span style="font-size:11px;font-weight:700;letter-spacing:.05em;color:${s.synced?'#1b1b1b':'#b0b0b0'}">${s.synced?'SYNCED':'NO TAKE'}</span>${icon('chevron_right',22)}</div></div>`;
+  }).join('');
+  const rail = [
+    ['add','Add songs','gigAddSongs',true],
+    ['edit','Edit','gigEditOpen'],
+    ['image','Photos','gigPhotosOpen'],
+    ['person_add','Add Collaborator','gigAddCollab'],
+    ['settings','Settings','openGigSettings'],
+    ['share','Share','gigShare'],
+    ['qr_code_2','QR Code','openQr']
+  ];
+  const railHTML = rail.map(([ic,label,act,big])=>{
+    if(big) return `<div class="row" style="flex-direction:column;gap:6px;cursor:pointer" data-act="${act}"><div style="width:40px;height:40px;border-radius:50%;background:#1b1b1b;color:#fff;display:flex;align-items:center;justify-content:center">${icon(ic,24)}</div><span style="font-size:13px;font-weight:600">${label}</span></div>`;
+    return `<div class="row" style="flex-direction:column;gap:6px;cursor:pointer" data-act="${act}">${icon(ic,28)}<span style="font-size:13px;color:#444">${label}</span></div>`;
+  }).join('');
+  return `<div class="scr">
+    <div class="gig-grid">
+      <div style="display:flex;flex-direction:column;gap:22px">
+        <div class="search-field" style="max-width:340px;color:#8a8a8a"><span style="flex:1">Search this gig</span>${icon('search',22)}</div>
+        <div class="row" style="gap:14px;align-items:flex-start;margin-top:10px">
+          <span class="icon-btn" style="margin-top:4px" data-act="nav" data-to="home">${icon('chevron_left',26)}</span>
+          <div><div style="font-size:30px;font-weight:700;line-height:1.25">${esc(g.title)}</div><div style="font-size:14px;color:#6f6f6f;margin-top:6px">${esc(g.date)} · ${g.setlist.length} songs</div></div>
+        </div>
+        <div>${setRows}</div>
+      </div>
+      <div class="gig-rail">${railHTML}</div>
+    </div>
+    <div style="position:fixed;left:0;right:0;bottom:40px;display:flex;justify-content:center;pointer-events:none">
+      <button class="icon-btn" title="Start gig player" style="pointer-events:auto;width:68px;height:68px;border-radius:50%;background:#1b1b1b;color:#fff;box-shadow:0 10px 30px rgba(0,0,0,.2)" data-act="goLive">${icon('play_arrow',38)}</button>
+    </div>
+  </div>
+  ${ST.qrOpen?`<div class="modal-backdrop" data-act="closeQr"><div class="modal" style="align-items:center;text-align:center;max-width:380px" onclick="event.stopPropagation()">
+    ${qrHTML()}
+    <div style="font-size:15px;font-weight:700">singa.live/g/${esc(g.id)}</div>
+    <div style="font-size:13px;color:#6f6f6f;text-align:center">Guests scan to follow the lyrics, request songs, share photos and chat. No app needed.</div>
+  </div></div>`:''}`;
+}
+
+function renderGigPhotos(){
+  const g = gigObj();
+  return `<div class="scr" style="gap:28px">
+    <div class="row" style="align-items:flex-end;gap:14px">
+      <span class="icon-btn" style="margin-bottom:6px" data-act="nav" data-to="gig">${icon('chevron_left',26)}</span>
+      <div style="flex:1"><div style="font-size:13px;font-weight:700">Photos</div><div style="font-size:26px;font-weight:700;line-height:1.25;max-width:420px">${esc(g.title)}</div></div>
+      <span class="icon-btn" data-act="addPhoto">${icon('photo_camera',30)}</span>
+      <span class="icon-btn" data-act="addPhoto">${icon('upload',30)}</span>
+    </div>
+    <div class="photogrid">${D.photos.slice().reverse().map(p=>`<div class="phototile" style="grid-column:span ${p.span}"><span>photo · ${esc(p.by)}</span></div>`).join('')}</div>
+  </div>`;
+}
+
 function renderGigEdit(){
   const g = gigObj();
   const list = ST.editList || g.setlist;
@@ -62,143 +213,5 @@ function openPlayer(id){
   ST.gigCur = id || (fresh ? null : ST.gigCur);
   ST.played = fresh ? [] : (id ? ST.played.filter(x=>x!==id) : ST.played);
   ST.t=0; ST.playing=false; ST.vcd=0; ST.gListening=false;
-}
-
-function renderGigPlayer(){
-  const g = gigObj();
-  const gq = queueFor(g), gs = gigSettings(g);
-  const isCollab = !g.mine;
-  const gStarted = ST.playing || ST.t>0;
-  const curId = gigSongId();
-  const s = song(curId);
-  const tm = timing(s);
-  const ci = curWord(tm, ST.t);
-  const seq = chordSeq(s);
-  const chord = chordAt(s,tm,Math.max(ci,0)) || (seq[0]||{}).ch;
-  const next = (seq.find(x=>x.k>ci && x.ch!==chord)||{}).ch;
-  const hasInst = ST.instrument!=='none';
-  const gigShowChords = hasInst || isCollab;
-  const dia = diagram(chord, next || (seq[0]||{}).ch, isCollab ? (ST.part==='Keys'?'piano':'guitar') : ST.instrument);
-  const gigHasLyrics = !!(s.lyrics && s.lyrics.trim());
-  const lines = gigHasLyrics ? buildLines(s, gStarted?'play':'view', { t: gStarted?ST.t:null, selChord: chord, hideChords: !isCollab && !hasInst }) : [];
-
-  const qRow = (id, kind) => {
-    const x = song(id), isCur = kind==='cur';
-    const tag = isCur ? (ST.playing?'NOW PLAYING':(gStarted?'PAUSED':(ST.gListening?'LISTENING':'UP NEXT'))) : '';
-    const tagCol = isCur && (ST.playing||ST.gListening) ? '#f24822' : '#8a8a8a';
-    const col = kind==='played' ? '#b0b0b0' : '#1b1b1b';
-    const subCol = kind==='played' ? '#c4c4c4' : (isCur?'#1b1b1b':'#8a8a8a');
-    const iconName = kind==='played' ? 'check' : (isCur ? (ST.playing?'pause':'play_arrow') : '');
-    const hasVotes = kind==='up' && gs.order && (ST.orderVotes[id]||0)>0;
-    return `<div class="row" style="gap:8px;padding:12px 0;border-bottom:1px solid var(--b2);cursor:pointer;justify-content:space-between" data-act="startGig" data-id="${id}">
-      <div style="min-width:0;flex:1">
-        ${isCur?`<div style="font-size:10px;font-weight:800;letter-spacing:.08em;color:${tagCol};margin-bottom:3px">${tag}</div>`:''}
-        <div style="font-size:14px;font-weight:${isCur?700:400};color:${col};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(x.title||'Untitled song')}</div>
-        <div style="font-size:11px;color:${subCol};font-weight:${isCur?600:400};margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(x.sub)}</div>
-      </div>
-      ${hasVotes?`<span style="font-size:11px;font-weight:700;color:#6f6f6f;display:flex;align-items:center">${icon('arrow_drop_up',16)}${ST.orderVotes[id]||0}</span>`:''}
-      <span style="color:${kind==='played'?'#c4c4c4':'#1b1b1b'}">${iconName?icon(iconName,18):''}</span>
-    </div>`;
-  };
-  let queueHTML = '';
-  if(gq.cued) queueHTML += qRow(gq.cued,'cur');
-  gq.up.forEach(id=> queueHTML += qRow(id,'up'));
-  if(gq.played.length){ queueHTML += `<div style="font-size:11px;font-weight:800;letter-spacing:.08em;color:#9a9a9a;padding:22px 0 6px">PLAYED</div>`; gq.played.forEach(id=> queueHTML += qRow(id,'played')); }
-
-  const guestCount = 23 + ' guests';
-  const chordScale = Math.max(0.55, Math.min(1.9, ST.chordH/230));
-  const hint = !gigHasLyrics ? 'Tap another song to continue' : (ST.playing ? 'Tap the song in the list to pause' : (gStarted ? 'Paused · tap the song to resume' : (ST.startMode==='countdown' ? 'Tap a song in the list to start · 3-2-1 countdown' : 'Tap a song in the list to start listening')));
-
-  return `<div class="gigplayer-grid">
-    <div class="gigplayer-side">
-      <div class="row" style="gap:8px">
-        <span class="icon-btn" data-act="exitGig">${icon('chevron_left',24)}</span>
-        <span style="background:#f24822;color:#fff;font-size:10px;font-weight:800;letter-spacing:.08em;padding:3px 6px;border-radius:4px">LIVE</span>
-        <span style="font-size:12px;color:#6f6f6f;display:flex;align-items:center;gap:3px">${icon('group',16)}${guestCount}</span>
-      </div>
-      <div style="font-size:18px;font-weight:700;line-height:1.25;margin:22px 16px 18px 0">${esc(g.title)}</div>
-      <div style="flex:1;min-height:0;overflow:auto">${queueHTML}</div>
-    </div>
-    <div style="padding:20px clamp(16px,4vw,48px) 20px;display:flex;flex-direction:column;min-height:0;position:relative;flex:1">
-      <div>
-        <div style="font-size:26px;font-weight:700;letter-spacing:-0.01em">${esc(s.title||'Untitled song')}</div>
-        <div style="font-size:14px;color:#6f6f6f;margin-top:4px">${esc(s.sub)}</div>
-        ${s.by?`<div class="row" style="gap:6px;font-size:13px;margin-top:8px">${icon('account_circle',18)}added by ${esc(s.by)}</div>`:''}
-      </div>
-      ${gigHasLyrics ? `
-        ${gigShowChords ? `<div style="height:${Math.round(ST.chordH)}px;display:flex;align-items:center;justify-content:center;overflow:hidden">
-          <div style="display:flex;flex-direction:column;align-items:center;gap:14px;transform:scale(${chordScale})">${diagramHTML(dia)}
-            <button class="link" style="display:flex;align-items:center;gap:6px" data-act="playSample">${icon(ST.sampling?'stop_circle':'play_circle',22)}${ST.sampling?'Stop sample':'Play Sample'}</button>
-          </div></div>
-        <div class="row" style="justify-content:center;cursor:ns-resize;height:30px">${icon('drag_handle',26)}</div>` : ''}
-        <div style="flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;align-items:center;padding:16px 0 30%">${linesHTML(lines)}</div>
-      ` : `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:#6f6f6f">
-          ${icon('lyrics',40)}
-          <div style="font-size:16px;font-weight:600;color:#1b1b1b">No synced take for this song yet</div>
-          <div style="font-size:13px;text-align:center">Guests see "Up next" until you move on. Tap the next song to continue.</div>
-        </div>`}
-      ${isCollab ? `<div style="border:1px solid #e6e6e6;border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:12px;margin-top:10px">
-          ${icon('edit_note',24)}<div style="flex:1;font-size:12px;color:#6f6f6f;line-height:1.4"><span style="font-weight:700;color:#1b1b1b">You're a collaborator on this gig.</span> Your own chords and notes are layered on the owner's track. Only you see them.</div>
-          <button class="btn btn-outline btn-sm" data-act="editPart">Edit my part</button>
-        </div>` : ''}
-      <div style="min-height:64px;display:flex;align-items:center;justify-content:center;padding-top:8px">
-        ${ST.gListening ? `<div class="row" style="gap:12px;cursor:pointer" data-act="gigHeard">${icon('mic',30)}<div><div style="font-size:16px;font-weight:600">Listening… playback starts the moment you sing</div><div style="font-size:12px;color:#8a8a8a;margin-top:3px">Tap here to start it manually instead</div></div></div>`
-        : `<div style="font-size:13px;color:#8a8a8a;display:flex;align-items:center;gap:6px">${icon('touch_app',18)}${hint}</div>`}
-      </div>
-    </div>
-  </div>
-  ${ST.vcd>0?`<div class="modal-backdrop" style="background:rgba(255,255,255,.75);font-size:180px;font-weight:800">${Math.max(1,Math.ceil(ST.vcd))}</div>`:''}`;
-}
-/* ============================================================
-   MODALS: Upgrade / Picker / New / Collaborator editor
-   ============================================================ */
-function renderUpgradeModal(){
-  return `<div class="modal-backdrop" data-act="closeUpgrade"><div class="modal" style="max-width:520px" onclick="event.stopPropagation()">
-    <div class="mhead"><span style="font-size:21px;font-weight:600">Choose your plan</span><span class="icon-btn" data-act="closeUpgrade">${icon('close',22)}</span></div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-      <div style="border:1.5px solid #e2e2e2;border-radius:12px;padding:18px;display:flex;flex-direction:column;gap:6px">
-        <div style="font-size:17px;font-weight:700">Free</div><div style="font-size:26px;font-weight:800">$0</div><div style="font-size:12px;color:#8a8a8a">Your current plan</div>
-      </div>
-      <div style="border:2px solid #f24822;border-radius:12px;padding:18px;display:flex;flex-direction:column;gap:6px">
-        <div style="font-size:17px;font-weight:700;display:flex;align-items:center;gap:4px">${icon('bolt',20)}RockStar</div>
-        <div style="font-size:26px;font-weight:800">$4.99<span style="font-size:13px;font-weight:600;color:#6f6f6f"> / month</span></div>
-        <div style="font-size:12px;color:#8a8a8a">Billed monthly. Cancel anytime.</div>
-      </div>
-    </div>
-    <div style="font-size:13px;color:#8a8a8a;border:1px dashed #d4d4d4;border-radius:10px;padding:14px;text-align:center">RockStar features will be listed here.</div>
-    <button class="btn btn-accent" data-act="doUpgrade">Upgrade to RockStar</button>
-  </div></div>`;
-}
-
-function renderPickerModal(){
-  const pick = ST.pick, sp = ST.songPick;
-  let heading, sub, rows, hasSearch=false, hasNew=false, newLabel='', closeAct, query='';
-  if(sp){
-    const isPl = sp.kind==='playlist';
-    const target = isPl ? D.playlists.find(p=>p.id===sp.id) : D.gigs.find(g=>g.id===sp.id);
-    const ids = target ? (isPl?target.ids:target.setlist) : [];
-    const q = (ST.spQuery||'').trim().toLowerCase();
-    heading = 'Add songs'; sub = target?target.title:''; hasSearch=true; query = ST.spQuery||'';
-    rows = D.order.filter(id=>{ const x=song(id); return !q || ((x.title||'')+' '+(x.sub||'')).toLowerCase().includes(q); })
-      .map(id=>{ const x=song(id), on=ids.includes(id); return `<div class="row" style="gap:14px;padding:12px 0;border-bottom:1px solid #f0f0f0;cursor:pointer" data-act="toggleSongPick" data-id="${id}"><span style="width:22px;height:22px;flex:none;border-radius:6px;border:1.5px solid var(--fg);background:${on?'#1b1b1b':'#fff'};color:#fff;display:flex;align-items:center;justify-content:center">${on?icon('check',16):''}</span><div style="min-width:0"><div style="font-size:15px;font-weight:600">${esc(x.title||'Untitled song')}</div><div style="font-size:12px;color:#8a8a8a;margin-top:2px">${esc(x.sub||(x.synced?'':'Draft'))}</div></div></div>`; }).join('');
-    closeAct = 'closeSongPick';
-  } else if(pick){
-    const isPl = pick.kind==='playlist', sid = pick.songId;
-    heading = isPl ? 'Add to playlist' : 'Add to a gig'; sub = song(sid).title || 'Untitled song'; hasNew = true; newLabel = isPl?'New playlist':'New gig';
-    if(isPl){
-      rows = D.playlists.filter(p=>!p.auto).map(p=>{ const on=p.ids.includes(sid); return `<div class="row" style="gap:14px;padding:12px 0;border-bottom:1px solid #f0f0f0;cursor:pointer" data-act="togglePickPlaylist" data-id="${p.id}"><span style="width:22px;height:22px;flex:none;border-radius:6px;border:1.5px solid var(--fg);background:${on?'#1b1b1b':'#fff'};color:#fff;display:flex;align-items:center;justify-content:center">${on?icon('check',16):''}</span><div><div style="font-size:15px;font-weight:600">${esc(p.title)}</div><div style="font-size:12px;color:#8a8a8a;margin-top:2px">${p.ids.length} songs</div></div></div>`; }).join('');
-    } else {
-      rows = D.gigs.map(g=>{ const on=g.setlist.includes(sid); return `<div class="row" style="gap:14px;padding:12px 0;border-bottom:1px solid #f0f0f0;cursor:pointer" data-act="togglePickGig" data-id="${g.id}"><span style="width:22px;height:22px;flex:none;border-radius:6px;border:1.5px solid var(--fg);background:${on?'#1b1b1b':'#fff'};color:#fff;display:flex;align-items:center;justify-content:center">${on?icon('check',16):''}</span><div><div style="font-size:15px;font-weight:600">${esc(g.title)}</div><div style="font-size:12px;color:#8a8a8a;margin-top:2px">${esc(g.date)} · ${g.setlist.length} songs</div></div></div>`; }).join('');
-    }
-    closeAct = 'closePick';
-  }
-  return `<div class="modal-backdrop" data-act="${closeAct}"><div class="modal" style="max-width:440px" onclick="event.stopPropagation()">
-    <div class="mhead"><span style="font-size:21px;font-weight:600">${esc(heading)}</span><span class="icon-btn" data-act="${closeAct}">${icon('close',22)}</span></div>
-    <div class="msub">${esc(sub)}</div>
-    ${hasSearch?`<div class="search-field" style="margin-bottom:6px"><input placeholder="Search your songs" value="${esc(query)}" data-bind="spQuery">${icon('search',20)}</div>`:''}
-    <div style="max-height:380px;overflow:auto">${rows}</div>
-    ${hasNew?`<a class="link" style="display:flex;align-items:center;gap:6px;margin-top:8px" data-act="openNew" data-id="${heading==='Add to playlist'?'playlist':'gig'}">${icon('add',20)}${newLabel}</a>`:''}
-    <button class="btn btn-dark" style="margin-top:14px" data-act="${closeAct}">Done</button>
-  </div></div>`;
 }
 
