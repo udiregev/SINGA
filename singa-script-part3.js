@@ -11,7 +11,7 @@ function renderSearch(){
   if(gigRows.length) sections.push(`<div><div style="font-size:24px;font-weight:700;padding-bottom:8px;border-bottom:1px solid var(--b2)">Gigs</div>${gigRows.map(gigRowList).join('')}</div>`);
   return `<div class="scr">
     <div class="search-field" style="max-width:340px;margin-bottom:28px">
-      <input placeholder="Search songs, playlists or gigs" value="${esc(ST.searchQuery)}" data-bind="searchQuery" autofocus>${icon('search',22)}
+      <input placeholder="Search songs, playlists or gigs" value="${esc(ST.searchQuery)}" data-bind="searchQuery" autofocus inputmode="search" enterkeyhint="search">${icon('search',22)}
     </div>
     <div class="row" style="gap:14px;position:relative;z-index:2;margin-bottom:24px">
       <span class="icon-btn" data-act="nav" data-to="home">${icon('chevron_left',26)}</span>
@@ -45,10 +45,18 @@ function renderAccount(){
   }).join('');
   return `<div class="scr" style="overflow:auto;gap:30px;padding-bottom:60px">
     <div class="row" style="gap:14px"><span class="icon-btn" data-act="nav" data-to="home">${icon('chevron_left',26)}</span><span style="font-size:28px;font-weight:700">My Account</span></div>
-    <div>
-      <div style="font-size:21px;font-weight:700;margin-bottom:6px">Account Details</div>
-      <div style="padding:14px 0;border-bottom:1px solid var(--b2);display:flex;justify-content:space-between;align-items:center;cursor:pointer" data-act="editNickname"><div><div style="font-size:12px;color:#8a8a8a">Nickname</div><div style="font-size:16px;font-weight:600;margin-top:3px">${esc(ST.nickname || nicknameFromEmail(ST.email))}</div></div>${icon('chevron_right',22)}</div>
-      <div style="padding:14px 0;border-bottom:1px solid var(--b2)"><div style="font-size:12px;color:#8a8a8a">Email</div><div style="font-size:16px;font-weight:600;margin-top:3px">${esc(ST.email || 'Not signed in')}</div></div>
+    <div class="row" style="align-items:flex-start;gap:28px">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:21px;font-weight:700;margin-bottom:6px">Account Details</div>
+        <div style="padding:14px 0;border-bottom:1px solid var(--b2);display:flex;justify-content:space-between;align-items:center;cursor:pointer" data-act="editNickname"><div><div style="font-size:12px;color:#8a8a8a">Nickname</div><div style="font-size:16px;font-weight:600;margin-top:3px">${esc(ST.nickname || nicknameFromEmail(ST.email))}</div></div>${icon('chevron_right',22)}</div>
+        <div style="padding:14px 0;border-bottom:1px solid var(--b2)"><div style="font-size:12px;color:#8a8a8a">Email</div><div style="font-size:16px;font-weight:600;margin-top:3px">${esc(ST.email || 'Not signed in')}</div></div>
+      </div>
+      <div class="account-avatar-col" style="flex:none;flex-direction:column;align-items:center;gap:10px;width:140px">
+        <div style="width:96px;height:96px;border-radius:50%;overflow:hidden;background:#ececec;display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:700;color:#8a8a8a">
+          ${ST.avatarUrl ? `<img src="${esc(ST.avatarUrl)}" style="width:100%;height:100%;object-fit:cover" alt="">` : esc((ST.nickname||nicknameFromEmail(ST.email)||'?').charAt(0).toUpperCase())}
+        </div>
+        <a class="link" style="font-size:13px" data-act="pickAvatar">Change photo</a>
+      </div>
     </div>
     <div>
       <div style="font-size:21px;font-weight:700;margin-bottom:6px">Subscription</div>
@@ -155,7 +163,10 @@ function renderManualLyrics(d){
     <textarea class="ipt" style="min-height:300px;font-size:18px" placeholder="Type or paste lyrics, one line per row" data-bind="draftLyrics">${esc(d.lyrics)}</textarea>
     ${!hasLyrics?`<a class="link" style="text-decoration:underline;align-self:flex-start" data-act="fillExample">Paste example lyrics</a>`:''}
     ${confirmFootnote()}
-    <button class="btn ${hasLyrics?'btn-dark':'btn-disabled'}" style="align-self:center;width:170px;height:48px" data-act="lyricsNext">Next</button>
+    <div class="row" style="gap:12px;align-self:center">
+      <button class="btn btn-outline" style="width:170px;height:48px" data-act="abortCreate">Abort</button>
+      <button class="btn ${hasLyrics?'btn-dark':'btn-disabled'}" style="width:170px;height:48px" data-act="lyricsNext">Next</button>
+    </div>
   </div>`;
 }
 
@@ -171,29 +182,3 @@ function chordTileHTML(rt, q, label){
   const on = rt===ST.selRoot && q===ST.selSuffix;
   return `<button style="height:48px;border-radius:12px;border:1.5px solid var(--fg);background:${on?'#1b1b1b':'#fff'};color:${on?'#fff':'#1b1b1b'};font-size:17px;font-weight:700;padding:0 16px;white-space:nowrap" data-act="pickVariant" data-root="${esc(rt)}" data-q="${esc(q)}">${esc(label!=null?label:rt+q)}</button>`;
 }
-function renderChordWheel(){
-  const roots = LETTERS.map((r,i)=>`<div style="flex:none;width:100px;height:72px;display:flex;align-items:center;justify-content:center;font-size:${i===ST.rootIdx?44:26}px;font-weight:700;color:${i===ST.rootIdx?'#1b1b1b':'#a8a8a8'};cursor:pointer;scroll-snap-align:center" data-act="pickRoot" data-id="${i}">${r}</div>`).join('');
-  const letter = LETTERS[ST.rootIdx];
-  const variants = [letter, ACC[letter]].flatMap(rt => SUFFIXES.map(q=>chordTileHTML(rt, q))).join('');
-  const recentTiles = ST.recentChords.map(ch=>{ const p = splitChordStr(ch); return chordTileHTML(p.root, p.q, ch); }).join('');
-  return `<div style="display:flex;flex-direction:column;align-items:center;gap:10px;margin-top:26px">
-    <div style="font-size:13px;color:#6f6f6f">Spin to a letter, then tap a word to place it. Tap again to remove.</div>
-    <div style="display:flex;flex-direction:column;align-items:center;gap:12px">
-      <div style="position:relative;width:300px;height:72px">
-        <div style="position:absolute;left:100px;top:0;width:100px;height:72px;border-radius:14px;background:#f2f2f2"></div>
-        <div id="rootScroller" class="rootScroller" style="position:relative;width:300px;height:72px;overflow-x:auto;overflow-y:hidden;display:flex;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;mask-image:linear-gradient(90deg,transparent 0,#000 24%,#000 76%,transparent 100%)">
-          <div style="flex:none;width:100px"></div>${roots}<div style="flex:none;width:100px"></div>
-        </div>
-      </div>
-      <div id="chordVariants" style="opacity:1;transition:opacity .4s ease;display:flex;flex-direction:column;gap:12px;max-width:320px">
-        <div style="display:grid;grid-auto-flow:column;grid-template-rows:repeat(2,48px);grid-auto-columns:max-content;gap:6px;overflow-x:auto;padding-bottom:4px">${variants}</div>
-        ${ST.recentChords.length ? `<div style="display:flex;align-items:center;gap:10px;margin-top:6px">
-          <span style="font-size:12px;color:#8a8a8a;font-weight:700;letter-spacing:.04em;text-transform:uppercase;flex:none">recent</span>
-          <div style="display:flex;gap:6px;overflow-x:auto">${recentTiles}</div>
-        </div>` : ''}
-      </div>
-    </div>
-    <a class="link" style="text-decoration:underline" data-act="detectChords">Detect chords from a recording instead</a>
-  </div>`;
-}
-
