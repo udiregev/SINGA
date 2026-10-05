@@ -5,7 +5,7 @@
    and data always go straight to the network.
    Bump CACHE_NAME whenever the shell file list changes, so old caches get
    cleaned up automatically on the next visit. */
-const CACHE_NAME = 'singa-shell-v2';
+const CACHE_NAME = 'singa-shell-v3';
 const SHELL_FILES = [
   'singa-app.html',
   'singa-site.html',
@@ -19,7 +19,8 @@ const SHELL_FILES = [
   'singa-script-part6.js',
   'singa-script-part7.js',
   'singa-script-part8.js',
-  'singa-script-part9.js'
+  'singa-script-part9.js',
+  'singa-script-part10.js'
 ];
 
 self.addEventListener('install', function(e){
