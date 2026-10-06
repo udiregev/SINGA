@@ -79,6 +79,14 @@ async function processRecordingBlob(songObj, blob){
     }
     songObj.audioDurationSec = durationSec;
     songObj.synced = true;
+    // Keep only a short ~5s preview clip — from where the singing actually
+    // starts (the first recognized word), not the raw start of the take —
+    // instead of the full recording, which is no longer needed once it's
+    // been analysed above.
+    try{
+      const startSec = hypWords.length ? hypWords[0].start : 0;
+      await uploadSampleClip(songObj, float32, startSec);
+    }catch(e){ console.error('Singa: sample clip upload failed', e); }
     ST.procPct=100; ST.procNote='Done'; render();
   }catch(err){
     console.error('Singa: speech alignment failed, falling back to estimated timing', err);
@@ -87,6 +95,53 @@ async function processRecordingBlob(songObj, blob){
   }
   finishSong();
   render();
+}
+
+// Slices a 5s window out of the (16kHz mono) decoded take starting at
+// startSec, encodes it as a small WAV, and uploads it to the same kind of
+// Storage bucket the avatars feature already uses — same pattern as the
+// avatars bucket, just a different bucket ("song-samples"). Sets
+// songObj.sampleUrl on success; the full take blob is discarded by the
+// caller (it was only ever a local variable, never uploaded anywhere).
+function encodeWavMono16(float32, sr){
+  const numSamples = float32.length;
+  const buffer = new ArrayBuffer(44 + numSamples*2);
+  const view = new DataView(buffer);
+  function writeStr(o,s){ for(let i=0;i<s.length;i++) view.setUint8(o+i, s.charCodeAt(i)); }
+  writeStr(0,'RIFF'); view.setUint32(4, 36+numSamples*2, true); writeStr(8,'WAVE');
+  writeStr(12,'fmt '); view.setUint32(16,16,true); view.setUint16(20,1,true); view.setUint16(22,1,true);
+  view.setUint32(24,sr,true); view.setUint32(28,sr*2,true); view.setUint16(32,2,true); view.setUint16(34,16,true);
+  writeStr(36,'data'); view.setUint32(40,numSamples*2,true);
+  let off=44;
+  for(let i=0;i<numSamples;i++){ const v=Math.max(-1,Math.min(1,float32[i])); view.setInt16(off, v<0?v*0x8000:v*0x7FFF, true); off+=2; }
+  return new Blob([buffer], { type:'audio/wav' });
+}
+async function uploadSampleClip(songObj, float32, startSec){
+  if(!ST.userId) return;
+  const sr = 16000;
+  const startSample = Math.max(0, Math.round((startSec||0)*sr));
+  const endSample = Math.min(float32.length, startSample + 5*sr);
+  if(endSample<=startSample) return;
+  const wav = encodeWavMono16(float32.slice(startSample, endSample), sr);
+  const path = ST.userId+'/'+songObj.id+'.wav';
+  const up = await sb.storage.from('song-samples').upload(path, wav, { upsert:true, contentType:'audio/wav' });
+  if(up.error) throw up.error;
+  songObj.sampleUrl = sb.storage.from('song-samples').getPublicUrl(path).data.publicUrl + '?t=' + Date.now();
+}
+
+// "Play Sample" button (song viewer + gig player): plays the real ~5s
+// clip saved for the song, when there is one, instead of just a silent
+// fake countdown.
+let sampleAudioEl = null;
+function playSampleAudio(url){
+  stopSampleAudio();
+  const a = new Audio(url);
+  sampleAudioEl = a;
+  a.onended = ()=>{ if(sampleAudioEl===a){ sampleAudioEl=null; ST.sampling=false; ST.sampleLeft=0; render(); } };
+  a.play().catch(()=>{});
+}
+function stopSampleAudio(){
+  if(sampleAudioEl){ try{ sampleAudioEl.pause(); }catch(e){} sampleAudioEl=null; }
 }
 
 // Real "Start detection" playback mode: listens to the mic and auto-starts
