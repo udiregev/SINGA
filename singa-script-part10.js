@@ -5,9 +5,9 @@ const Binds = {
   homeQuery(v){ ST.homeQuery=v; },
   listQuery(v){ ST.listQuery=v; render(); },
   searchQuery(v){ ST.searchQuery=v; render(); },
-  draftTitle(v){ D.songs[ST.editId].title=v; },
-  draftSub(v){ D.songs[ST.editId].sub=v; },
-  draftLyrics(v){ D.songs[ST.editId].lyrics=v; render(); },
+  draftTitle(v){ D.songs[ST.editId].title=v; queueSaveSong(ST.editId); },
+  draftSub(v){ D.songs[ST.editId].sub=v; queueSaveSong(ST.editId); },
+  draftLyrics(v){ D.songs[ST.editId].lyrics=v; render(); queueSaveSong(ST.editId); },
   noteDraft(v){ ST.noteDraft=v; },
   newName(v){ ST.newItem.name=v; render(); },
   newDate(v){ ST.newItem.date=v; },
@@ -53,7 +53,7 @@ function tick(){
   /* 'processing' phase is now driven entirely by processRecordingBlob()'s real
      async pipeline (decode → transcribe → align), which sets ST.procPct/ST.procNote
      and calls finishSong() itself — no fake auto-advance here. */
-  if(ST.sampling){ ST.sampleLeft = Math.max(0, ST.sampleLeft-0.1); if(ST.sampleLeft<=0) ST.sampling=false; changed=true; }
+  if(ST.sampling){ ST.sampleLeft = Math.max(0, ST.sampleLeft-0.1); if(ST.sampleLeft<=0){ ST.sampling=false; stopSampleAudio(); } changed=true; }
   if(changed) render();
 }
 setInterval(tick, 100);
