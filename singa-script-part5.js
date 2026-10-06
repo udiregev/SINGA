@@ -137,7 +137,7 @@ function renderGig(){
         <div class="search-field" style="max-width:340px;color:#8a8a8a"><span style="flex:1">Search this gig</span>${icon('search',22)}</div>
         <div class="row" style="gap:14px;align-items:flex-start;margin-top:10px">
           <span class="icon-btn" style="margin-top:4px" data-act="nav" data-to="home">${icon('chevron_left',26)}</span>
-          <div><div style="font-size:30px;font-weight:700;line-height:1.25">${esc(g.title)}</div><div style="font-size:14px;color:#6f6f6f;margin-top:6px">${esc(g.date)} · ${g.setlist.length} songs</div></div>
+          <div><div style="font-size:30px;font-weight:700;line-height:1.25">${esc(g.title)}</div><div style="font-size:14px;color:#6f6f6f;margin-top:6px">${esc(g.date)} · ${g.setlist.length} songs${g.mine?` · <a class="link" style="color:${g.isPublic?'#1b1b1b':'#9a9a9a'}" data-act="toggleGigPublic">${g.isPublic?'Shared':'Make shared'}</a>`:''}</div></div>
         </div>
         <div>${setRows}</div>
       </div>
