@@ -83,9 +83,9 @@ function renderLogin(){
     <svg class="mascot" style="height:300px;margin-top:10px" viewBox="0 0 160 160" fill="none" aria-hidden="true"><circle cx="80" cy="80" r="74" fill="var(--accent)"/><path d="M50 83l19 19 41-46" stroke="#fff" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/><circle cx="18" cy="34" r="6" fill="var(--accent)"/><circle cx="142" cy="46" r="5" fill="#2a9d6b"/><circle cx="136" cy="124" r="7" fill="#4169c7"/><circle cx="16" cy="118" r="5" fill="#8e4fd6"/></svg>
     <div style="font-size:46px;font-weight:800;letter-spacing:-0.02em;margin-top:18px">make some noise!</div>
     <div style="width:100%;max-width:380px;display:flex;flex-direction:column;gap:12px;margin-top:36px">
-      <div class="seg" style="align-self:center;margin-bottom:4px">
-        <button class="${ST.authMode==='signin'?'on':''}" data-act="setAuthMode" data-id="signin">Sign In</button>
-        <button class="${ST.authMode==='signup'?'on':''}" data-act="setAuthMode" data-id="signup">Sign Up</button>
+      <div class="row" style="align-self:center;gap:28px;margin-bottom:4px">
+        <a class="link" style="font-size:17px;font-weight:700;color:${ST.authMode==='signin'?'#1b1b1b':'#9a9a9a'};text-decoration:${ST.authMode==='signin'?'underline':'none'}" data-act="setAuthMode" data-id="signin">Sign In</a>
+        <a class="link" style="font-size:17px;font-weight:700;color:${ST.authMode==='signup'?'#1b1b1b':'#9a9a9a'};text-decoration:${ST.authMode==='signup'?'underline':'none'}" data-act="setAuthMode" data-id="signup">Sign Up</a>
       </div>
       <input class="ipt" placeholder="Email" value="${esc(ST.email)}" data-bind="email" autocomplete="email" inputmode="email">
       <input class="ipt" type="password" placeholder="Password" value="${esc(ST.password)}" data-bind="password" data-key="login" autocomplete="${ST.authMode==='signup'?'new-password':'current-password'}">
@@ -215,6 +215,7 @@ function renderList(){
       <span class="icon-btn" data-act="nav" data-to="home">${icon('chevron_left',26)}</span>
       <span style="font-size:28px;font-weight:700;display:flex;align-items:center;gap:8px">${esc(title)}${titleBadge}</span>
       <span class="icon-btn" title="Add" data-act="listAdd" style="margin-left:36px">${icon('add',24)}</span>
+      ${curPl && curPl.mine && !curPl.auto ? `<a class="link" style="margin-left:18px;color:${curPl.isPublic?'#1b1b1b':'#9a9a9a'}" data-act="togglePlaylistPublic" data-id="${esc(curPl.id)}">${curPl.isPublic?'Shared':'Make shared'}</a>` : ''}
       <div style="flex:1"></div>
       ${sortDropdown()}
     </div>
