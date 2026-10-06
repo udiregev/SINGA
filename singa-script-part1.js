@@ -93,8 +93,8 @@ const ST = {
   songId:'dgbmh', viewBy:null, viewChord:null, instrument:'guitar', menu:false, instMenu:false, chordH:230,
   recentChords:[], _lastProgScrollAt:0,
   startMode:'countdown', vcd:0, listening:false,
-  editId:null, createMode:'manual', step:'lyrics', similar:false, rootIdx:0, selRoot:'A', selSuffix:'m', selWord:null, noteDraft:'', autoChords:false, editorLine:0,
-  phase:'idle', cd:0, recT:0, bars:[], procPct:0, procNote:'', isPublic:false,
+  editId:null, createMode:'manual', step:'lyrics', similar:false, similarLoading:false, similarResults:[], rootIdx:0, selRoot:'A', selSuffix:'m', selWord:null, noteDraft:'', autoChords:false, editorLine:0,
+  phase:'idle', cd:0, recT:0, bars:[], procPct:0, procNote:'',
   t:0, playing:false, ctx:'view', guide:false, guideInst:'Piano',
   gigId:'nye', gigCur:null, played:[], orderVotes:{}, gListening:false, gigSettings:false,
   plan:'free', upgrade:false, collabFor:null, editList:null, qrOpen:false,
@@ -128,12 +128,150 @@ async function applySession(session){
     if(row.notif) ST.notif = row.notif;
     ST.startMode = row.start_mode || ST.startMode;
     ST.avatarUrl = row.avatar_url || socialAvatar;
+    await loadUserData();
   } else {
     ST.nickname = ST.nickname || nicknameFromEmail(ST.email);
     ST.avatarUrl = socialAvatar;
     syncProfile();
+    await seedSampleContent();
   }
   ST.authProvider = (session.user.app_metadata && session.user.app_metadata.provider) || 'email'; ST.screen = 'home';
+}
+
+/* ============================================================
+   SONGS / PLAYLISTS / GIGS — Supabase-backed data layer
+   D used to be purely in-memory (reset on every reload, no way for
+   two people to see the same song/playlist/gig). It's now a local
+   cache: loadUserData() fills it from the songs/playlists/gigs tables
+   on sign-in, and every mutation below is mirrored back with an
+   upsert. "Shared" is a single is_public flag per item (no separate
+   collaborator roles) — a public row is readable by any signed-in
+   user, which is what the "similar titles" search and song-copy flow
+   query against.
+   ============================================================ */
+function songRowToLocal(row){
+  return {
+    id: row.id, title: row.title||'', sub: row.sub||'', lyrics: row.lyrics||'',
+    chords: row.chords||{}, notes: row.notes||{}, synced: !!row.synced,
+    wordTimestamps: row.word_timestamps||null, audioDurationSec: row.audio_duration_sec||null,
+    sampleUrl: row.sample_url||null, isPublic: !!row.is_public, plays: row.plays||0,
+    added: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+    mine: row.owner_id===ST.userId, by: row.owner_id===ST.userId ? undefined : (row.owner_nickname||'someone')
+  };
+}
+function playlistRowToLocal(row){
+  return {
+    id: row.id, title: row.title||'', ids: row.song_ids||[], auto:false,
+    isPublic: !!row.is_public, plays: row.plays||0,
+    added: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+    mine: row.owner_id===ST.userId, by: row.owner_id===ST.userId ? undefined : (row.owner_nickname||'someone')
+  };
+}
+function gigRowToLocal(row){
+  return {
+    id: row.id, title: row.title||'', date: row.date_label||'', setlist: row.setlist||[],
+    settings: row.settings||{}, isPublic: !!row.is_public, plays: row.plays||0,
+    added: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+    mine: row.owner_id===ST.userId, by: row.owner_id===ST.userId ? undefined : (row.owner_nickname||'someone')
+  };
+}
+function songToRow(s){
+  return { id:s.id, owner_id:ST.userId, owner_nickname: ST.nickname||nicknameFromEmail(ST.email),
+    title:s.title||'', sub:s.sub||'', lyrics:s.lyrics||'', chords:s.chords||{}, notes:s.notes||{},
+    word_timestamps:s.wordTimestamps||null, audio_duration_sec:s.audioDurationSec||null,
+    sample_url:s.sampleUrl||null, synced:!!s.synced, is_public:!!s.isPublic, plays:s.plays||0,
+    updated_at:new Date().toISOString() };
+}
+function playlistToRow(p){
+  return { id:p.id, owner_id:ST.userId, owner_nickname: ST.nickname||nicknameFromEmail(ST.email),
+    title:p.title||'', song_ids:p.ids||[], is_public:!!p.isPublic, plays:p.plays||0,
+    updated_at:new Date().toISOString() };
+}
+function gigToRow(g){
+  return { id:g.id, owner_id:ST.userId, owner_nickname: ST.nickname||nicknameFromEmail(ST.email),
+    title:g.title||'', date_label:g.date||'', setlist:g.setlist||[], settings:g.settings||{},
+    is_public:!!g.isPublic, plays:g.plays||0, updated_at:new Date().toISOString() };
+}
+async function saveSongRow(s){ if(!ST.userId || !s) return; try{ const r=await sb.from('songs').upsert(songToRow(s)); if(r.error) console.error('Singa: song save failed', r.error); }catch(e){ console.error('Singa: song save failed', e); } }
+async function savePlaylistRow(p){ if(!ST.userId || !p || p.auto) return; try{ const r=await sb.from('playlists').upsert(playlistToRow(p)); if(r.error) console.error('Singa: playlist save failed', r.error); }catch(e){ console.error('Singa: playlist save failed', e); } }
+async function saveGigRow(g){ if(!ST.userId || !g) return; try{ const r=await sb.from('gigs').upsert(gigToRow(g)); if(r.error) console.error('Singa: gig save failed', r.error); }catch(e){ console.error('Singa: gig save failed', e); } }
+async function deleteSongRow(id){ if(!ST.userId || !id) return; try{ await sb.from('songs').delete().eq('id',id).eq('owner_id',ST.userId); }catch(e){ console.error('Singa: song delete failed', e); } }
+
+const _saveTimers = {};
+function debounceSave(key, fn, delay){ clearTimeout(_saveTimers[key]); _saveTimers[key] = setTimeout(fn, delay||800); }
+function queueSaveSong(id){ const s=D.songs[id]; if(s) debounceSave('song:'+id, ()=>saveSongRow(s)); }
+function queueSavePlaylist(id){ const p=D.playlists.find(x=>x.id===id); if(p) debounceSave('pl:'+id, ()=>savePlaylistRow(p)); }
+function queueSaveGig(id){ const g=D.gigs.find(x=>x.id===id); if(g) debounceSave('gig:'+id, ()=>saveGigRow(g)); }
+
+async function loadUserData(){
+  if(!ST.userId) return;
+  try{
+    const [songsRes, plRes, gigRes] = await Promise.all([
+      sb.from('songs').select('*').eq('owner_id', ST.userId),
+      sb.from('playlists').select('*').eq('owner_id', ST.userId),
+      sb.from('gigs').select('*').eq('owner_id', ST.userId)
+    ]);
+    const songs = {}, order = [];
+    (songsRes.data||[]).slice().sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)).forEach(row=>{ songs[row.id]=songRowToLocal(row); order.push(row.id); });
+    D.songs = songs; D.order = order;
+    const autoPl = (D.playlists||[]).find(p=>p.auto) || { id:'my', title:'My songs', auto:true, ids:[], mine:true, added:Date.now(), plays:0 };
+    autoPl.ids = order;
+    D.playlists = [autoPl, ...(plRes.data||[]).map(playlistRowToLocal)];
+    D.gigs = (gigRes.data||[]).map(gigRowToLocal);
+  }catch(e){ console.error('Singa: failed to load your songs/playlists/gigs', e); }
+}
+
+// Real search against songs other Singa users have made public — replaces
+// the old "Similar titles" modal's two hardcoded demo rows.
+async function searchSimilarTitles(q){
+  q = (q||'').trim();
+  if(!q || !ST.userId) return [];
+  try{
+    const res = await sb.from('songs').select('id,title,sub,owner_id,owner_nickname')
+      .eq('is_public', true).ilike('title', '%'+q+'%').neq('owner_id', ST.userId).limit(5);
+    if(res.error){ console.error('Singa: similar-title search failed', res.error); return []; }
+    return res.data||[];
+  }catch(e){ console.error('Singa: similar-title search failed', e); return []; }
+}
+
+// One-time setup for a brand-new account: a sample song (built from a real
+// ~5s vocal clip so Play Sample has something to actually play), a default
+// "My favourite songs" playlist, and a "My test gig" gig, so the app isn't
+// empty on first open. Runs once, right after the profile row is created —
+// never again on later sign-ins. The clip ships as base64 text (sample-dream-data.js)
+// rather than a binary file, decoded here and uploaded to the same kind of
+// Storage bucket avatars already use.
+function b64ToBlob(b64, mime){
+  const bin = atob(b64);
+  const arr = new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) arr[i] = bin.charCodeAt(i);
+  return new Blob([arr], { type: mime });
+}
+async function seedSampleContent(){
+  if(!ST.userId) return;
+  try{
+    let sampleUrl = null;
+    try{
+      const blob = b64ToBlob(SAMPLE_DREAM_B64, 'audio/mpeg');
+      const path = ST.userId+'/sample-dream.mp3';
+      const up = await sb.storage.from('song-samples').upload(path, blob, { upsert:true, contentType:'audio/mpeg' });
+      if(!up.error) sampleUrl = sb.storage.from('song-samples').getPublicUrl(path).data.publicUrl;
+      else console.error('Singa: sample clip upload failed', up.error);
+    }catch(e){ console.error('Singa: sample clip upload failed', e); }
+    const songId = 's'+Date.now();
+    const song = { id:songId, title:'Dream a Little Dream of Me', sub:'Sample song',
+      lyrics:'Dream a little dream of me', chords:{'0-0':'A'}, notes:{}, synced:true,
+      wordTimestamps:null, audioDurationSec:5, sampleUrl, isPublic:false, plays:0, added:Date.now(), mine:true };
+    D.songs[songId] = song; D.order = [songId, ...D.order];
+    const autoPl = (D.playlists||[]).find(p=>p.auto); if(autoPl) autoPl.ids = D.order;
+    const plId = 'pl'+Date.now();
+    const playlist = { id:plId, title:'My favourite songs', ids:[songId], auto:false, isPublic:false, plays:0, added:Date.now(), mine:true };
+    D.playlists = [...D.playlists, playlist];
+    const gigId = 'g'+Date.now();
+    const gig = { id:gigId, title:'My test gig', date:'', setlist:[songId], settings:{}, isPublic:false, plays:0, added:Date.now(), mine:true };
+    D.gigs = [...D.gigs, gig];
+    await Promise.all([ saveSongRow(song), savePlaylistRow(playlist), saveGigRow(gig) ]);
+  }catch(e){ console.error('Singa: sample content setup failed', e); }
 }
 function syncProfile(){
   if(!ST.userId) return;
