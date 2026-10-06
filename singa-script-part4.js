@@ -81,15 +81,13 @@ function renderSongBody(d){
 }
 
 function renderSimilarModal(){
-  const rows = [
-    {title:"Don't Go Breaking My Heart", sub:'Dolly Parton', by:'joesnow'},
-    {title:"Don't Go Breaking My Heart", sub:'Dolly Parton & Rick Stein', by:'allhands232'}
-  ];
+  const rows = ST.similarResults || [];
+  const sub = ST.similarLoading ? 'Searching Singa…' : (rows.length ? 'Already shared on Singa. Copy one instead of starting from scratch.' : 'No similar titles shared on Singa yet.');
   return `<div class="modal-backdrop" data-act="closeSimilar" style="align-items:flex-start;padding-top:140px">
     <div class="modal" style="max-width:420px" onclick="modalClick(event)">
       <div class="mhead"><span style="font-size:15px;font-weight:700">Similar titles</span><span class="icon-btn" data-act="closeSimilar">${icon('close',22)}</span></div>
-      <div class="msub">Already on Singa. Copy one instead of starting from scratch.</div>
-      ${rows.map((r,i)=>`<div class="list-row" style="padding:12px 14px;border:1px solid #ececec;border-radius:10px" data-act="useSimilar" data-id="${i}"><div><div style="font-size:15px;font-weight:600">${esc(r.title)}</div><div style="font-size:12px;color:#8a8a8a;margin-top:2px">${esc(r.sub)} · added by ${esc(r.by)}</div></div>${icon('chevron_right',22)}</div>`).join('')}
+      <div class="msub">${sub}</div>
+      ${rows.map(r=>`<div class="list-row" style="padding:12px 14px;border:1px solid #ececec;border-radius:10px" data-act="useSimilar" data-id="${esc(r.id)}"><div><div style="font-size:15px;font-weight:600">${esc(r.title)}</div><div style="font-size:12px;color:#8a8a8a;margin-top:2px">${esc(r.sub||'')} · added by ${esc(r.owner_nickname||'someone')}</div></div>${icon('chevron_right',22)}</div>`).join('')}
       <button class="btn btn-dark" style="margin-top:8px" data-act="closeSimilar">Keep creating my own</button>
     </div>
   </div>`;
@@ -171,7 +169,7 @@ function renderDone(){
     <div style="display:flex;flex-direction:column;align-items:center;gap:12px;margin-top:30px">
       <a class="link link-muted" data-act="openPicker" data-kind="playlist">Add to playlist</a>
       <a class="link link-muted" data-act="openPicker" data-kind="gig">Add to a gig</a>
-      <a class="link" style="color:${ST.isPublic?'#1b1b1b':'#6f6f6f'}" data-act="togglePublic">${ST.isPublic?'Public · anyone can copy it':'Make publicly available'}</a>
+      <a class="link" style="color:${d.isPublic?'#1b1b1b':'#6f6f6f'}" data-act="togglePublic">${d.isPublic?'Public · anyone can copy it':'Make publicly available'}</a>
     </div>
     <div style="display:flex;flex-direction:column;gap:12px;width:100%;max-width:340px;margin-top:30px">
       <button class="btn btn-grey" style="height:64px" data-act="viewDone">View Song</button>
