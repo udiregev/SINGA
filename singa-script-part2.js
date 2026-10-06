@@ -1,17 +1,13 @@
 "use strict";
-function makeQr(seed){
-  let x = seed; const rnd=()=>{ x=(x*9301+49297)%233280; return x/233280; };
-  const N=25, out=[];
-  const finder=(r,c,R,C)=>{ const a=r-R,b=c-C; if(a<0||b<0||a>6||b>6) return null; if(a===0||a===6||b===0||b===6) return 1; return (a>=2&&a<=4&&b>=2&&b<=4)?1:0; };
-  for(let r=0;r<N;r++) for(let c=0;c<N;c++){
-    let v=finder(r,c,0,0); if(v===null) v=finder(r,c,0,18); if(v===null) v=finder(r,c,18,0);
-    if(v===null){ const zone=(r<8&&c<8)||(r<8&&c>16)||(r>16&&c<8); v = zone?0:(rnd()>0.52?1:0); }
-    out.push(v?'#111':'#fff');
-  }
-  return out;
+/* Real QR code for a gig's Audience link (singa-script-part9.js's openQr
+   generates it with the `qrcode` library and stores the PNG data URL on
+   ST.qrDataUrl — this just renders whatever's ready). Replaces the old
+   makeQr()/QR grid, which was a decorative seeded-random pattern styled to
+   look like a QR code but never actually encoded a link. */
+function qrHTML(){
+  if(!ST.qrDataUrl) return `<div class="qrgrid" style="display:flex;align-items:center;justify-content:center;color:#9a9a9a;font-size:13px;height:220px">Generating…</div>`;
+  return `<img src="${ST.qrDataUrl}" alt="QR code" width="220" height="220" style="border-radius:8px">`;
 }
-const QR = makeQr(42);
-function qrHTML(){ return `<div class="qrgrid">${QR.map(c=>`<div style="background:${c}"></div>`).join('')}</div>`; }
 
 function buildLines(s, mode, opt){
   opt = opt || {};

@@ -97,7 +97,7 @@ const ST = {
   phase:'idle', cd:0, recT:0, bars:[], procPct:0, procNote:'',
   t:0, playing:false, ctx:'view', guide:false, guideInst:'Piano',
   gigId:'nye', gigCur:null, played:[], orderVotes:{}, gListening:false, gigSettings:false,
-  plan:'free', upgrade:false, collabFor:null, editList:null, qrOpen:false,
+  plan:'free', upgrade:false, collabFor:null, editList:null, qrOpen:false, qrDataUrl:null,
   collabEdit:null, newItem:null, pick:null, songPick:null, spQuery:'',
   notif:{req:true,photos:true,chat:false},
   perfDark:false, toast:null, sampling:false, sampleLeft:0, part:'Keys', avatarUrl:null
@@ -202,6 +202,34 @@ function debounceSave(key, fn, delay){ clearTimeout(_saveTimers[key]); _saveTime
 function queueSaveSong(id){ const s=D.songs[id]; if(s) debounceSave('song:'+id, ()=>saveSongRow(s)); }
 function queueSavePlaylist(id){ const p=D.playlists.find(x=>x.id===id); if(p) debounceSave('pl:'+id, ()=>savePlaylistRow(p)); }
 function queueSaveGig(id){ const g=D.gigs.find(x=>x.id===id); if(g) debounceSave('gig:'+id, ()=>saveGigRow(g)); }
+
+/* ============================================================
+   LIVE GIG BROADCAST (performer → Audience Guest Site)
+   A Supabase Realtime broadcast channel, one per gig, carries the
+   currently-playing song id + playback position from the performer's
+   app out to anyone with audience.html open for that gig (no login,
+   no row writes — broadcast messages aren't persisted). The audience
+   page joins the same channel name and listens for 'state' events.
+   ============================================================ */
+let _liveChannel = null, _liveChannelGigId = null;
+function joinGigChannel(gigId){
+  if(!gigId || (_liveChannelGigId===gigId && _liveChannel)) return;
+  leaveGigChannel();
+  _liveChannel = sb.channel('gig-live-'+gigId, { config: { broadcast: { self: false } } });
+  _liveChannel.subscribe();
+  _liveChannelGigId = gigId;
+}
+function leaveGigChannel(){
+  if(_liveChannel){ try{ sb.removeChannel(_liveChannel); }catch(e){} _liveChannel=null; _liveChannelGigId=null; }
+}
+function broadcastGigState(payload){
+  if(_liveChannel) _liveChannel.send({ type:'broadcast', event:'state', payload });
+}
+// The Audience Guest Site lives at audience.html next to this app, so the
+// link always matches wherever Singa itself is actually hosted (GitHub
+// Pages, a future custom domain, even a local test server) instead of a
+// hardcoded domain.
+function audienceUrl(gigId){ return new URL('audience.html?gig='+encodeURIComponent(gigId), location.href).href; }
 
 async function loadUserData(){
   if(!ST.userId) return;
