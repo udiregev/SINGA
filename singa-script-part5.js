@@ -149,8 +149,8 @@ function renderGig(){
   </div>
   ${ST.qrOpen?`<div class="modal-backdrop" data-act="closeQr"><div class="modal" style="align-items:center;text-align:center;max-width:380px" onclick="modalClick(event)">
     ${qrHTML()}
-    <div style="font-size:15px;font-weight:700">singa.live/g/${esc(g.id)}</div>
-    <div style="font-size:13px;color:#6f6f6f;text-align:center">Guests scan to follow the lyrics, request songs, share photos and chat. No app needed.</div>
+    <div style="font-size:13px;font-weight:600;word-break:break-all">${esc(audienceUrl(g.id))}</div>
+    <div style="font-size:13px;color:#6f6f6f;text-align:center">Guests scan to follow the lyrics in sync, karaoke-style. No app or sign-in needed.</div>
   </div></div>`:''}`;
 }
 

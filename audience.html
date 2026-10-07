@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Singa — Audience</title>
+<meta name="theme-color" content="#1b1b1b">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=Source+Serif+4:opsz,wght@8..60,700&display=swap" rel="stylesheet">
+<style>
+:root{ --fg:#1b1b1b; --m2:#8a8a8a; --m3:#6f6f6f; --canvas:#ecebe8; --accent:#f24822; --b2:#ececec; --chordblue:#2f8fe0; }
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--canvas)}
+body{font-family:'Hanken Grotesk',system-ui,sans-serif;color:var(--fg);-webkit-font-smoothing:antialiased;min-height:100vh;display:flex;flex-direction:column}
+#top{flex:none;background:#fff;padding:16px 20px;border-bottom:1px solid var(--b2)}
+.wordmark{font-family:'Source Serif 4',serif;font-weight:700;font-size:20px}
+.live{background:var(--accent);color:#fff;font-size:10px;font-weight:800;letter-spacing:.08em;padding:3px 7px;border-radius:4px;margin-left:10px}
+#gigTitle{font-size:22px;font-weight:700;margin-top:10px}
+#gigMeta{font-size:13px;color:var(--m3);margin-top:4px}
+#status{flex:none;padding:14px 20px;font-size:14px;color:var(--m3);background:#fff;border-bottom:1px solid var(--b2)}
+#songHead{flex:none;padding:16px 20px 4px}
+#songTitle{font-size:19px;font-weight:700}
+#songSub{font-size:13px;color:var(--m3);margin-top:2px}
+#stage{flex:1;min-height:0;overflow:auto;padding:14px 20px 40%;display:flex;flex-direction:column;align-items:center}
+.lyrics-wrap{display:flex;flex-direction:column;align-items:flex-start;gap:16px;width:100%;max-width:640px}
+.lline{display:flex;flex-wrap:wrap;column-gap:7px}
+.lword{display:flex;flex-direction:column;cursor:default}
+.lword .lchord{height:18px;font-size:13px;font-weight:600;color:var(--chordblue)}
+.lword .ltext{font-size:22px;color:#aaa;transition:color .15s}
+.lword.cur .ltext{color:var(--fg);font-weight:700}
+.lword.done .ltext{color:#555}
+#setlist{flex:none;padding:16px 20px 28px;border-top:1px solid var(--b2);background:#fff}
+#setlist h3{font-size:12px;font-weight:800;letter-spacing:.06em;color:var(--m2);margin:0 0 8px}
+.slRow{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--b2);font-size:14px}
+.slRow:last-child{border-bottom:0}
+.slRow .n{color:var(--m2);font-size:12px}
+.empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;padding:40px 24px;color:var(--m3)}
+.empty h2{font-size:18px;color:var(--fg);margin:0}
+</style>
+</head>
+<body>
+<div id="top">
+  <span class="wordmark">Singa<span class="live" id="liveBadge" style="display:none">LIVE</span></span>
+  <div id="gigTitle">Loading…</div>
+  <div id="gigMeta"></div>
+</div>
+<div id="status" style="display:none"></div>
+<div id="songHead" style="display:none">
+  <div id="songTitle"></div>
+  <div id="songSub"></div>
+</div>
+<div id="stage"></div>
+<div id="setlist" style="display:none"><h3>TONIGHT'S SETLIST</h3><div id="setlistRows"></div></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>
+"use strict";
+/* ============================================================
+   Audience Guest Site — a no-login, read-only page guests reach by
+   scanning a gig's QR code (see openQr/audienceUrl in the main app's
+   singa-script-part1.js/part9.js). It reads the gig's public row (and
+   its setlist's songs) directly from Supabase, then listens on the
+   same Realtime broadcast channel the performer's app publishes
+   playback position to (joinGigChannel/broadcastGigState), so the
+   lyrics here scroll in sync with what's actually being sung —
+   no separate server, no polling.
+   ============================================================ */
+const sb = supabase.createClient(
+  'https://xnzytiaixthfbmejltww.supabase.co',
+  'sb_publishable_JTLPNLQNOHL3TmbS1MiGWg_rsX_QqmH'
+);
+
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function parseLyrics(text){ return (text||'').split('\n').map(l=>l.trim()).filter(Boolean).map(l=>l.split(/\s+/)); }
+function timing(s){
+  const lines = parseLyrics(s && s.lyrics); const words = [];
+  lines.forEach((ws,li)=>ws.forEach((w,wi)=>words.push({li,wi,t:1+li*4+wi*(3.2/ws.length)})));
+  const realTs = s && s.word_timestamps;
+  if(realTs && realTs.length===words.length){
+    words.forEach((w,i)=>{ if(typeof realTs[i]==='number' && isFinite(realTs[i])) w.t = realTs[i]; });
+  }
+  const total = (s && typeof s.audio_duration_sec==='number') ? s.audio_duration_sec : (1+lines.length*4+1.5);
+  return { lines, words, total };
+}
+function curWord(tm,t){ let i=-1; for(let k=0;k<tm.words.length;k++){ if(tm.words[k].t<=t) i=k; else break; } return i; }
+
+const params = new URLSearchParams(location.search);
+const gigId = params.get('gig');
+
+const els = {
+  gigTitle: document.getElementById('gigTitle'),
+  gigMeta: document.getElementById('gigMeta'),
+  liveBadge: document.getElementById('liveBadge'),
+  status: document.getElementById('status'),
+  songHead: document.getElementById('songHead'),
+  songTitle: document.getElementById('songTitle'),
+  songSub: document.getElementById('songSub'),
+  stage: document.getElementById('stage'),
+  setlist: document.getElementById('setlist'),
+  setlistRows: document.getElementById('setlistRows'),
+};
+
+function showEmpty(title, sub){
+  els.stage.innerHTML = `<div class="empty"><h2>${esc(title)}</h2><div>${esc(sub||'')}</div></div>`;
+}
+function setStatus(msg){
+  if(!msg){ els.status.style.display='none'; return; }
+  els.status.style.display='block'; els.status.textContent = msg;
+}
+
+let gig = null, songsById = {};
+// Live state received from the performer's broadcast, plus the moment it
+// arrived — used to interpolate playback position locally between
+// messages (they land every ~400ms, not every frame).
+let live = null, receivedAt = 0;
+
+async function init(){
+  if(!gigId){ els.gigTitle.textContent = 'No gig link'; showEmpty('Nothing to show', 'This link is missing a gig.'); return; }
+  let gigRes;
+  try{ gigRes = await sb.from('gigs').select('*').eq('id', gigId).eq('is_public', true).maybeSingle(); }
+  catch(e){ els.gigTitle.textContent = 'Could not connect'; showEmpty('Could not connect', 'Check your internet connection and reload.'); return; }
+  if(gigRes.error || !gigRes.data){
+    els.gigTitle.textContent = 'Gig not found';
+    showEmpty("This gig isn't available", 'Ask the performer to open the gig and tap "Make shared", then re-scan the QR code.');
+    return;
+  }
+  gig = gigRes.data;
+  els.gigTitle.textContent = gig.title || 'Gig';
+  els.gigMeta.textContent = (gig.date_label || '') + (gig.setlist && gig.setlist.length ? ' · ' + gig.setlist.length + ' song' + (gig.setlist.length===1?'':'s') : '');
+
+  if(gig.setlist && gig.setlist.length){
+    try{
+      const songsRes = await sb.from('songs').select('*').in('id', gig.setlist);
+      (songsRes.data||[]).forEach(row=>{ songsById[row.id] = row; });
+    }catch(e){ console.error('Singa audience: failed to load songs', e); }
+    els.setlist.style.display='block';
+    els.setlistRows.innerHTML = gig.setlist.map((id,i)=>{
+      const s = songsById[id];
+      return `<div class="slRow"><span>${esc(s ? (s.title||'Untitled song') : 'Untitled song')}</span><span class="n">${i+1}</span></div>`;
+    }).join('');
+  }
+
+  setStatus('Waiting for the performer to start a song…');
+  showEmpty('Waiting for the performer…', 'The lyrics will appear here as soon as they start playing.');
+
+  const channel = sb.channel('gig-live-'+gigId);
+  channel.on('broadcast', { event:'state' }, msg => {
+    live = msg.payload; receivedAt = performance.now();
+    if(live.ended){ els.liveBadge.style.display='none'; setStatus(null); els.songHead.style.display='none'; showEmpty('This gig has ended', 'Thanks for watching!'); live=null; }
+  }).subscribe();
+
+  setInterval(renderFrame, 150);
+}
+
+function renderFrame(){
+  if(!live) return;
+  els.liveBadge.style.display='inline';
+  const s = songsById[live.songId];
+  if(!s){
+    els.songHead.style.display='none';
+    showEmpty('Up next…', "The performer hasn't shared this song's lyrics yet.");
+    return;
+  }
+  els.songHead.style.display='block';
+  els.songTitle.textContent = s.title || 'Untitled song';
+  els.songSub.textContent = s.sub || '';
+
+  if(live.vcd>0){
+    setStatus(null);
+    els.stage.innerHTML = `<div class="empty"><h2>Starting in ${Math.max(1,Math.ceil(live.vcd))}…</h2></div>`;
+    return;
+  }
+  if(live.listening){ setStatus('Listening for the performer to start singing…'); }
+  else if(!live.playing){ setStatus('Paused'); }
+  else { setStatus(null); }
+
+  const tm = timing(s);
+  const elapsed = live.playing ? (performance.now() - receivedAt) / 1000 : 0;
+  const t = Math.min(tm.total, (live.t||0) + elapsed);
+  const ci = curWord(tm, t);
+
+  if(!s.lyrics || !s.lyrics.trim()){
+    showEmpty('No synced lyrics for this song yet', '');
+    return;
+  }
+  let k = -1;
+  const html = tm.lines.map((ws, li) => {
+    const wordsHTML = ws.map((w, wi) => {
+      k++;
+      const chord = (s.chords||{})[li+'-'+wi];
+      const cls = k===ci ? 'cur' : (k<ci ? 'done' : '');
+      return `<div class="lword ${cls}">${chord?`<div class="lchord">${esc(chord)}</div>`:'<div class="lchord"></div>'}<div class="ltext">${esc(w)}</div></div>`;
+    }).join('');
+    return `<div class="lline">${wordsHTML}</div>`;
+  }).join('');
+  els.stage.innerHTML = `<div class="lyrics-wrap" id="lyricsWrap">${html}</div>`;
+  const cur = els.stage.querySelector('.lword.cur');
+  if(cur) cur.scrollIntoView({ block:'center', behavior:'smooth' });
+}
+
+init();
+</script>
+</body>
+</html>

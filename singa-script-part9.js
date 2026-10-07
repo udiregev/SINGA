@@ -1,4 +1,34 @@
 "use strict";
+function computeModeSegShown(){
+  return ST.phase==='idle' && (ST.createMode!=='manual' || ST.step==='lyrics');
+}
+// Collapses/expands the Manual/From Recording/From File toggle with a real
+// CSS transition around a step change that crosses in or out of the Lyrics
+// step, instead of the full re-render just snapping it away. #modeSegWrap
+// is mutated in place first so the browser actually animates the existing
+// node; the normal full re-render then runs once the collapse has played
+// out (or immediately, with the freshly-rendered wrapper pre-collapsed, so
+// an expand can animate in on the next frame).
+function withModeSegTransition(mutate){
+  if(ST.screen!=='create'){ mutate(); render(); return; }
+  const wasShown = computeModeSegShown();
+  mutate();
+  const nowShown = computeModeSegShown();
+  const wrap = document.getElementById('modeSegWrap');
+  if(!wrap || wasShown===nowShown){ render(); return; }
+  if(wasShown && !nowShown){
+    wrap.style.maxHeight = '0px'; wrap.style.opacity = '0';
+    setTimeout(render, 240);
+  } else {
+    render();
+    const w2 = document.getElementById('modeSegWrap');
+    if(w2){
+      w2.style.maxHeight = '0px'; w2.style.opacity = '0';
+      void w2.offsetHeight;
+      requestAnimationFrame(()=>{ w2.style.maxHeight = '60px'; w2.style.opacity = '1'; });
+    }
+  }
+}
 const Actions = {
   setAuthMode(d){ ST.authMode = d.id; render(); },
   async login(){
@@ -93,17 +123,18 @@ const Actions = {
   },
   createBack(){
     if(ST.phase!=='idle'){ ST.phase='idle'; render(); return; }
-    const order=['lyrics','chords','markings','sync'], i=order.indexOf(ST.step);
-    if(ST.createMode==='manual' && i>0){ ST.step=order[i-1]; ST.selWord=null; ST.editorLine=0; } else ST.screen='home';
-    render();
+    withModeSegTransition(()=>{
+      const order=['lyrics','chords','markings','sync'], i=order.indexOf(ST.step);
+      if(ST.createMode==='manual' && i>0){ ST.step=order[i-1]; ST.selWord=null; ST.editorLine=0; } else ST.screen='home';
+    });
   },
   goCreateStep(d){
     const s = D.songs[ST.editId]; const hasLyrics = !!(s && s.lyrics.trim());
     if(ST.phase!=='idle') return;
     if(!hasLyrics && d.id!=='lyrics'){ toast('Add lyrics first'); return; }
-    ST.step=d.id; ST.selWord=null; ST.editorLine=0; render();
+    withModeSegTransition(()=>{ ST.step=d.id; ST.selWord=null; ST.editorLine=0; });
   },
-  createNextStep(){ const order=['lyrics','chords','markings','sync']; const i=order.indexOf(ST.step); ST.step=order[Math.min(3,i+1)]; ST.selWord=null; ST.editorLine=0; render(); },
+  createNextStep(){ withModeSegTransition(()=>{ const order=['lyrics','chords','markings','sync']; const i=order.indexOf(ST.step); ST.step=order[Math.min(3,i+1)]; ST.selWord=null; ST.editorLine=0; }); },
   lyricsNext(){ const s = D.songs[ST.editId]; if(s.lyrics.trim()) Actions.createNextStep(); },
   async openSimilar(){
     const d = D.songs[ST.editId];
@@ -251,9 +282,23 @@ const Actions = {
   gigPhotosOpen(){ ST.screen='gigphotos'; render(); },
   gigAddCollab(){ ST.screen='collab'; ST.back='gig'; ST.collabFor = gigObj().id; render(); },
   openGigSettings(){ ST.gigSettings=true; render(); },
-  gigShare(){ toast('Link copied · singa.live/g/'+gigObj().id); },
-  openQr(){ ST.qrOpen=true; render(); },
-  closeQr(){ ST.qrOpen=false; render(); },
+  async gigShare(){
+    const g = gigObj();
+    if(!g.isPublic){ toast('Make this gig "Shared" first so guests can open the link'); return; }
+    const url = audienceUrl(g.id);
+    try{ await navigator.clipboard.writeText(url); toast('Audience link copied'); }
+    catch(e){ toast(url); }
+  },
+  async openQr(){
+    const g = gigObj();
+    if(!g.isPublic){ toast('Make this gig "Shared" first so guests can scan in'); return; }
+    ST.qrOpen=true; ST.qrDataUrl=null; render();
+    try{
+      const dataUrl = await QRCode.toDataURL(audienceUrl(g.id), { width:440, margin:1, color:{ dark:'#1b1b1b', light:'#ffffff' } });
+      if(ST.qrOpen){ ST.qrDataUrl=dataUrl; render(); }
+    }catch(e){ console.error('Singa: QR generation failed', e); toast('Could not generate the QR code'); ST.qrOpen=false; render(); }
+  },
+  closeQr(){ ST.qrOpen=false; ST.qrDataUrl=null; render(); },
   closeGigSettings(){ ST.gigSettings=false; render(); },
   toggleGigSetting(d){ const g = gigObj(); const gs = gigSettings(g); g.settings = { ...gs, [d.id]: !gs[d.id] }; render(); },
   openGigSong(d){ openPlayer(d.id); render(); },
@@ -261,9 +306,10 @@ const Actions = {
     const g = gigObj(); if(!g.setlist.length){ toast('Add songs to this gig first'); return; }
     openPlayer(null); render();
   },
-  exitGig(){ stopOnsetListening(); ST.screen='gig'; ST.playing=false; ST.listening=false; ST.gListening=false; render(); },
+  exitGig(){ stopOnsetListening(); broadcastGigState({ ended:true }); leaveGigChannel(); ST.screen='gig'; ST.playing=false; ST.listening=false; ST.gListening=false; render(); },
   startGig(d){
     const g = gigObj();
+    joinGigChannel(g.id);
     if(ST.vcd>0) return;
     const cur = gigSongId();
     const gStarted = ST.playing || ST.t>0;

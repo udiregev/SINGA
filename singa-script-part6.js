@@ -34,6 +34,7 @@ function openPlayer(id){
   stopOnsetListening();
   const g = gigObj(); const fresh = ST._liveGig !== g.id;
   ST.screen='gigplayer'; ST.ctx='gig'; ST._liveGig=g.id;
+  joinGigChannel(g.id);
   ST.gigCur = id || (fresh ? null : ST.gigCur);
   ST.played = fresh ? [] : (id ? ST.played.filter(x=>x!==id) : ST.played);
   ST.t=0; ST.playing=false; ST.vcd=0; ST.gListening=false;
