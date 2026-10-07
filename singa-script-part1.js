@@ -27,7 +27,12 @@ const LETTERS = ['A','B','C','D','E','F','G'];
 const ACC = { A:'Ab', B:'Bb', C:'C#', D:'Db', E:'Eb', F:'F#', G:'G#' };
 const ROOTS = ['C','C#','D','Eb','E','F','F#','G','Ab','A','Bb','B'];
 const ALT = { Db:1, 'D#':3, Gb:6, 'G#':8, 'A#':10 };
-const SUFFIXES = ['','m','7','m7','maj7','6','sus2','sus4','dim','aug','add9','9'];
+// Derivative-chord suggestions shown per root on the Chords step, curated to
+// the qualities musicians actually reach for most often and ordered most-
+// common-first (full set — '6','sus2','dim','aug','add9','9' — stays
+// available via IV/E_SHAPE/A_SHAPE for anything that still looks them up,
+// just not offered as a one-tap suggestion anymore).
+const SUFFIXES = ['','m','7','m7','maj7','sus4','sus2'];
 const IV = { '':[0,4,7], m:[0,3,7], '7':[0,4,7,10], m7:[0,3,7,10], maj7:[0,4,7,11], '6':[0,4,7,9], sus2:[0,2,7], sus4:[0,5,7], dim:[0,3,6], aug:[0,4,8], add9:[0,4,7,14], '9':[0,4,7,10,14] };
 const E_SHAPE = { '':[0,2,2,1,0,0], m:[0,2,2,0,0,0], '7':[0,2,0,1,0,0], m7:[0,2,0,0,0,0], maj7:[0,2,1,1,0,0], '6':[0,2,2,1,2,0], sus4:[0,2,2,2,0,0], '9':[0,2,0,1,0,2] };
 const A_SHAPE = { '':[-1,0,2,2,2,0], m:[-1,0,2,2,1,0], '7':[-1,0,2,0,2,0], m7:[-1,0,2,0,1,0], maj7:[-1,0,2,1,2,0], '6':[-1,0,2,2,2,2], sus2:[-1,0,2,2,0,0], sus4:[-1,0,2,2,3,0], dim:[-1,0,1,2,1,-1], aug:[-1,0,3,2,2,1], add9:[-1,0,2,4,2,0], '9':[-1,0,2,4,2,3] };
@@ -74,7 +79,7 @@ function emptyData(){
   return {
     songs: {},
     order: [],
-    playlists: [ { id:'my', title:'My songs', auto:true, ids:[], mine:true, added:Date.now(), plays:0 } ],
+    playlists: [ { id:'my', title:'Demo Playlist', auto:true, ids:[], mine:true, added:Date.now(), plays:0 } ],
     gigs: [],
     collabs: [],
     photos: []
@@ -242,7 +247,7 @@ async function loadUserData(){
     const songs = {}, order = [];
     (songsRes.data||[]).slice().sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)).forEach(row=>{ songs[row.id]=songRowToLocal(row); order.push(row.id); });
     D.songs = songs; D.order = order;
-    const autoPl = (D.playlists||[]).find(p=>p.auto) || { id:'my', title:'My songs', auto:true, ids:[], mine:true, added:Date.now(), plays:0 };
+    const autoPl = (D.playlists||[]).find(p=>p.auto) || { id:'my', title:'Demo Playlist', auto:true, ids:[], mine:true, added:Date.now(), plays:0 };
     autoPl.ids = order;
     D.playlists = [autoPl, ...(plRes.data||[]).map(playlistRowToLocal)];
     D.gigs = (gigRes.data||[]).map(gigRowToLocal);
@@ -263,8 +268,8 @@ async function searchSimilarTitles(q){
 }
 
 // One-time setup for a brand-new account: a sample song (built from a real
-// ~5s vocal clip so Play Sample has something to actually play), a default
-// "My favourite songs" playlist, and a "My test gig" gig, so the app isn't
+// ~5s vocal clip so Play Sample has something to actually play) added to the
+// account's default auto playlist, and a "Demo Gig" gig, so the app isn't
 // empty on first open. Runs once, right after the profile row is created —
 // never again on later sign-ins. The clip ships as base64 text (sample-dream-data.js)
 // rather than a binary file, decoded here and uploaded to the same kind of
@@ -287,18 +292,15 @@ async function seedSampleContent(){
       else console.error('Singa: sample clip upload failed', up.error);
     }catch(e){ console.error('Singa: sample clip upload failed', e); }
     const songId = 's'+Date.now();
-    const song = { id:songId, title:'Dream a Little Dream of Me', sub:'Sample song',
+    const song = { id:songId, title:'Demo Song', sub:'Sample song',
       lyrics:'Dream a little dream of me', chords:{'0-0':'A'}, notes:{}, synced:true,
       wordTimestamps:null, audioDurationSec:5, sampleUrl, isPublic:false, plays:0, added:Date.now(), mine:true };
     D.songs[songId] = song; D.order = [songId, ...D.order];
     const autoPl = (D.playlists||[]).find(p=>p.auto); if(autoPl) autoPl.ids = D.order;
-    const plId = 'pl'+Date.now();
-    const playlist = { id:plId, title:'My favourite songs', ids:[songId], auto:false, isPublic:false, plays:0, added:Date.now(), mine:true };
-    D.playlists = [...D.playlists, playlist];
     const gigId = 'g'+Date.now();
-    const gig = { id:gigId, title:'My test gig', date:'', setlist:[songId], settings:{}, isPublic:false, plays:0, added:Date.now(), mine:true };
+    const gig = { id:gigId, title:'Demo Gig', date:'', setlist:[songId], settings:{}, isPublic:false, plays:0, added:Date.now(), mine:true };
     D.gigs = [...D.gigs, gig];
-    await Promise.all([ saveSongRow(song), savePlaylistRow(playlist), saveGigRow(gig) ]);
+    await Promise.all([ saveSongRow(song), saveGigRow(gig) ]);
   }catch(e){ console.error('Singa: sample content setup failed', e); }
 }
 function syncProfile(){

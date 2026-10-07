@@ -109,7 +109,10 @@ function playlistRow(p){
   return `<div class="list-row" data-act="openPlaylist" data-id="${p.id}"><div><div class="t">${esc(p.title)}${badge}</div><div class="s">${esc(sub)}</div></div></div>`;
 }
 function gigRowHome(g){
-  return `<div class="list-row" data-act="openGig" data-id="${g.id}"><div style="min-width:0"><div class="t" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(g.title)}</div><div class="s">${esc(g.date)}</div></div>${g.id==='nye'?'<span style="font-size:11px;font-weight:700;letter-spacing:.06em;color:#f24822">LIVE</span>':''}</div>`;
+  const count = (g.setlist||[]).length;
+  const songCount = count+' song'+(count===1?'':'s');
+  const sub = g.date ? (g.date+' · '+songCount) : songCount;
+  return `<div class="list-row" data-act="openGig" data-id="${g.id}"><div style="min-width:0"><div class="t" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(g.title)}</div><div class="s">${esc(sub)}</div></div>${g.id==='nye'?'<span style="font-size:11px;font-weight:700;letter-spacing:.06em;color:#f24822">LIVE</span>':''}</div>`;
 }
 function songRowHome(s){
   return `<div class="list-row" data-act="openSongFrom" data-id="${s.id}" data-from="home" style="border-bottom:1px solid var(--b2)"><div><div class="t">${esc(s.title||'Untitled song')}</div><div class="s">${esc(s.sub || (s.synced?'':'Draft'))}</div></div></div>`;
