@@ -97,9 +97,10 @@ function renderCreate(){
   const d = D.songs[ST.editId] || { id:'x', title:'', sub:'', lyrics:'', chords:{}, notes:{} };
   const phaseIdle = ST.phase==='idle';
   const modeLocked = !phaseIdle || (ST.createMode==='manual' && ST.step!=='lyrics');
+  const modeSegShown = !modeLocked;
   const modes = [['manual','Manual'],['recording','From Recording'],['file','From File']];
-  const modeSeg = `<div class="seg" style="opacity:${modeLocked?0.4:1};border-color:${modeLocked?'#bdbdbd':'#1b1b1b'}">
-    ${modes.map(([v,l])=>`<button class="${v===ST.createMode?'on':''}" ${modeLocked?'':`data-act="setCreateMode" data-id="${v}"`}>${l}</button>`).join('')}
+  const modeSeg = `<div class="seg">
+    ${modes.map(([v,l])=>`<button class="${v===ST.createMode?'on':''}" data-act="setCreateMode" data-id="${v}">${l}</button>`).join('')}
   </div>`;
   const hasLyrics = !!d.lyrics.trim();
   const stepTabs = ['lyrics','chords','markings','sync'];
@@ -148,7 +149,7 @@ function renderCreate(){
   }
 
   return `<div class="scr center" style="padding-top:16px">
-    ${modeSeg}
+    <div id="modeSegWrap" style="display:flex;justify-content:center;overflow:hidden;max-height:${modeSegShown?'60px':'0px'};opacity:${modeSegShown?1:0}">${modeSeg}</div>
     <div style="width:100%;display:flex;align-items:center;margin-top:20px;min-height:44px;max-width:760px">
       <span class="icon-btn" data-act="createBack">${icon('chevron_left',26)}</span>
       <div style="flex:1;display:flex;justify-content:center">${stepTabsHTML}</div>

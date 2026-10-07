@@ -21,6 +21,19 @@ const Binds = {
 function playId(){ return ST.ctx==='gig' ? gigSongId() : ST.songId; }
 function endGigSong(){ const cur = gigSongId(); if(!ST.played.includes(cur)) ST.played=[...ST.played,cur]; ST.gigCur=null; ST.t=0; ST.playing=false; ST.gListening=false; }
 
+// Throttles the live-gig broadcast (see joinGigChannel/broadcastGigState in
+// singa-script-part1.js) to a few times a second instead of every 100ms
+// tick — plenty for the Audience Guest Site to stay in sync, since it
+// interpolates playback position locally between messages.
+let _lastBroadcastAt = 0;
+function broadcastLiveTick(){
+  if(!(ST._liveGig && ST.ctx==='gig')) return;
+  const now = Date.now();
+  if(now - _lastBroadcastAt < 400) return;
+  _lastBroadcastAt = now;
+  broadcastGigState({ songId: gigSongId(), t: ST.t, playing: ST.playing, listening: ST.gListening, vcd: ST.vcd, ended:false });
+}
+
 function tick(){
   let changed = false;
   if(ST.vcd>0){ const v=ST.vcd-0.1; if(v<=0){ ST.vcd=0; ST.playing=true; } else ST.vcd=v; changed=true; }
@@ -34,7 +47,7 @@ function tick(){
     if(t>=tm.total){
       if(ST.ctx==='practice') t=0;
       else if(ST.ctx==='view'){ ST.playing=false; t=0; }
-      else { endGigSong(); render(); return; }
+      else { endGigSong(); broadcastLiveTick(); render(); return; }
     }
     ST.t = t; changed=true;
   }
@@ -54,6 +67,7 @@ function tick(){
      async pipeline (decode → transcribe → align), which sets ST.procPct/ST.procNote
      and calls finishSong() itself — no fake auto-advance here. */
   if(ST.sampling){ ST.sampleLeft = Math.max(0, ST.sampleLeft-0.1); if(ST.sampleLeft<=0){ ST.sampling=false; stopSampleAudio(); } changed=true; }
+  broadcastLiveTick();
   if(changed) render();
 }
 setInterval(tick, 100);
