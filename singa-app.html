@@ -71,6 +71,8 @@ textarea.ipt{height:auto;padding:16px 18px;line-height:1.5;resize:none}
 .seg button{border:0;border-radius:7px;padding:8px 18px;font-size:14px;font-weight:600;background:transparent;color:var(--fg);transition:background .2s,color .2s}
 .seg button.on{background:var(--fg);color:#fff}
 
+#modeSegWrap{transition:max-height .26s cubic-bezier(.4,0,.2,1),opacity .2s ease}
+
 .toggle{width:40px;height:22px;border-radius:11px;border:1.5px solid var(--fg);position:relative;flex:none;cursor:pointer;transition:background .25s}
 .toggle .dot{position:absolute;top:2px;width:15px;height:15px;border-radius:50%;transition:left .25s cubic-bezier(.2,.8,.2,1)}
 
@@ -152,6 +154,7 @@ textarea.ipt{height:auto;padding:16px 18px;line-height:1.5;resize:none}
 <input type="file" id="fileInput" accept="audio/*,video/*,.txt,.md,text/plain,.pdf,.doc,.docx" style="display:none">
 <input type="file" id="avatarInput" accept="image/*" style="display:none">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
 <script src="sample-dream-data.js"></script>
 <script src="singa-script-part1.js"></script>
 <script src="singa-script-part2.js"></script>
