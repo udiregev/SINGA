@@ -1,4 +1,24 @@
 "use strict";
+// A single-line, chevron-navigated chip strip: no visible scrollbar, and
+// nothing is ever permanently cropped at the edge — left/right chevrons
+// appear only when there's actually more content in that direction, and
+// content only looks clipped transiently while mid-scroll.
+function chipRowHTML(rowId, itemsHTML){
+  return `<div class="chiprow-wrap">
+    <button class="chiprow-chevron" data-act="scrollChipRow" data-id="${rowId}" data-dir="-1" id="${rowId}-chevL" style="display:none">${icon('chevron_left',18)}</button>
+    <div class="chiprow" id="${rowId}">${itemsHTML}</div>
+    <button class="chiprow-chevron" data-act="scrollChipRow" data-id="${rowId}" data-dir="1" id="${rowId}-chevR" style="display:none">${icon('chevron_right',18)}</button>
+  </div>`;
+}
+function updateChipRowChevrons(id){
+  const el = document.getElementById(id);
+  const chevL = document.getElementById(id+'-chevL');
+  const chevR = document.getElementById(id+'-chevR');
+  if(!el || !chevL || !chevR) return;
+  const overflow = el.scrollWidth > el.clientWidth + 1;
+  chevL.style.display = overflow && el.scrollLeft > 2 ? 'flex' : 'none';
+  chevR.style.display = overflow && el.scrollLeft < el.scrollWidth - el.clientWidth - 2 ? 'flex' : 'none';
+}
 function renderChordWheel(){
   const roots = LETTERS.map((r,i)=>`<div style="flex:none;width:100px;height:72px;display:flex;align-items:center;justify-content:center;font-size:${i===ST.rootIdx?44:26}px;font-weight:700;color:${i===ST.rootIdx?'#1b1b1b':'#a8a8a8'};cursor:pointer;scroll-snap-align:center" data-act="pickRoot" data-id="${i}">${r}</div>`).join('');
   const letter = LETTERS[ST.rootIdx];
@@ -12,11 +32,11 @@ function renderChordWheel(){
           <div style="flex:none;width:100px"></div>${roots}<div style="flex:none;width:100px"></div>
         </div>
       </div>
-      <div id="chordVariants" style="opacity:1;transition:opacity .4s ease;display:flex;flex-direction:column;gap:12px;max-width:320px">
-        <div style="display:grid;grid-auto-flow:column;grid-template-rows:repeat(2,48px);grid-auto-columns:max-content;gap:6px;overflow-x:auto;padding-bottom:4px">${variants}</div>
+      <div id="chordVariants" style="opacity:1;transition:opacity .4s ease;display:flex;flex-direction:column;gap:12px;width:300px">
+        ${chipRowHTML('chordVariantRow', variants)}
         ${ST.recentChords.length ? `<div style="display:flex;align-items:center;gap:10px;margin-top:6px">
           <span style="font-size:12px;color:#8a8a8a;font-weight:700;letter-spacing:.04em;text-transform:uppercase;flex:none">recent</span>
-          <div style="display:flex;gap:6px;overflow-x:auto">${recentTiles}</div>
+          ${chipRowHTML('recentChordRow', recentTiles)}
         </div>` : ''}
       </div>
     </div>
@@ -45,8 +65,13 @@ function renderNoteEditor(d){
 }
 
 function renderSongBody(d){
-  const editMode = ST.step==='chords' ? 'chords' : ST.step==='markings' ? 'markings' : 'static';
-  const lines = buildLines(d, editMode, ST.phase==='recording' ? {t:ST.recT} : null);
+  // During live Practice/Record, lyrics scroll in time (karaoke-paced) but
+  // no line is bolded yet — that only happens once there's a real take to
+  // play back (see syncPreviewPlay), using real forced-alignment timing.
+  const previewPlaying = ST.step==='sync' && ST.ctx==='syncpreview' && ST.playing;
+  const editMode = ST.step==='chords' ? 'chords' : ST.step==='markings' ? 'markings' : (previewPlaying ? 'play' : 'static');
+  const liveT = (ST.phase==='recording'||ST.phase==='practicing') ? ST.recT : (previewPlaying ? ST.t : null);
+  const lines = buildLines(d, editMode, liveT!=null ? {t:liveT} : null);
   const opacity = (ST.phase==='countdown'||ST.phase==='processing') ? 0.12 : 1;
   const skipLabel = ST.step==='chords' ? 'Skip (detect chords from a recording instead)' : 'Skip';
   const skipAct = ST.step==='chords' ? 'detectChords' : 'createNextStep';
@@ -71,12 +96,14 @@ function renderSongBody(d){
       </div>` : ''}
     ${ST.step==='sync' && ST.phase==='idle' ? `<div style="flex:none;display:flex;flex-direction:column;align-items:center;gap:12px;width:100%;max-width:340px;margin:0 auto">
         ${ST.autoChords?`<div style="font-size:13px;color:#2f8fe0;text-align:center;margin-bottom:6px">Chords will be detected from the instruments in your recording.</div>`:''}
+        ${d.synced ? `<button class="btn btn-dark" style="width:100%" data-act="syncPreviewPlay">${previewPlaying?'Pause':'Play your synced take'}</button>` : ''}
         <button class="btn btn-grey" style="width:100%" data-act="practiceDraft">Practice</button>
         <button class="btn btn-accent" style="width:100%" data-act="startRecord">Record</button>
         <a class="link" style="text-decoration:underline;margin-top:4px" data-act="startUpload">Upload</a>
         <div style="font-size:12px;color:#8a8a8a;text-align:center">Sing and play it once. Singa isolates your vocal, aligns every word and detects the chords.</div>
       </div>` : ''}
     ${ST.step==='sync' && (ST.phase==='countdown'||ST.phase==='recording') ? waveformBlock() : ''}
+    ${ST.step==='sync' && ST.phase==='practicing' ? practiceBlock() : ''}
   </div>`;
 }
 

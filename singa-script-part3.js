@@ -151,6 +151,17 @@ function waveformBlock(){
 function countdownBlock(){
   return `<div style="position:relative;top:40px;display:flex;justify-content:center;font-size:160px;font-weight:800;line-height:1">${Math.max(1,Math.ceil(ST.cd))}</div>`;
 }
+// Practice follows along with the lyrics (same scrolling 4-line window as
+// Record) without saving a take — no mic, no waveform, just a clock and a
+// Stop button. Lyrics scroll karaoke-paced but no line bolds yet; that only
+// happens once there's a real recorded-and-aligned take to play back.
+function practiceBlock(){
+  return `<div style="display:flex;flex-direction:column;align-items:center;gap:20px">
+    <div style="font-size:14px;color:#6f6f6f;text-align:center">Practicing — follow along with the lyrics. Nothing is being recorded.</div>
+    <div style="font-size:14px;color:#6f6f6f;font-variant-numeric:tabular-nums">${fmtTime(ST.recT)}</div>
+    <button class="btn btn-outline" style="width:170px" data-act="stopPractice">Stop</button>
+  </div>`;
+}
 
 function renderManualLyrics(d){
   const hasLyrics = !!d.lyrics.trim();
