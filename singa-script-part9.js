@@ -154,11 +154,18 @@ const Actions = {
     ST.screen='song'; ST.songId=r.id; ST.viewBy=r.owner_nickname||'someone'; ST.back='create'; ST.ctx='view'; ST.t=0; ST.playing=false; render();
   },
   pickRoot(d){ ST.rootIdx = +d.id; ST.selRoot = LETTERS[+d.id]; render(); },
+  scrollChipRow(d){
+    const el = document.getElementById(d.id);
+    if(!el) return;
+    el.scrollBy({ left: (+d.dir) * Math.round(el.clientWidth*0.8), behavior:'smooth' });
+  },
   pickVariant(d){ ST.selRoot = d.root; ST.selSuffix = d.q; render(); },
   placeChord(d){
     const s = D.songs[ST.editId]; const sel = ST.selRoot+ST.selSuffix;
-    const li = +String(d.id).split('-')[0]; if(!isNaN(li)) ST.editorLine = li;
-    if(s.chords[d.id]===sel) delete s.chords[d.id]; else { s.chords[d.id]=sel; recordRecentChord(sel); } render();
+    const [li, wi] = String(d.id).split('-').map(Number); if(!isNaN(li)) ST.editorLine = li;
+    if(s.chords[d.id]===sel) delete s.chords[d.id];
+    else { s.chords[d.id]=sel; recordRecentChord(sel); applyChordPatternToRepeats(s, li, wi, sel); }
+    render();
     queueSaveSong(ST.editId);
   },
   pickMarkWord(d){
@@ -170,7 +177,25 @@ const Actions = {
   removeNote(){ const s = D.songs[ST.editId]; const n = {...s.notes}; delete n[ST.selWord]; s.notes=n; ST.selWord=null; ST.noteDraft=''; render(); queueSaveSong(ST.editId); },
   closeNoteEditor(){ ST.selWord=null; ST.noteDraft=''; render(); },
   detectChords(){ ST.autoChords=true; ST.step='sync'; render(); },
-  practiceDraft(){ ST.screen='practice'; ST.ctx='practice'; ST.t=0; ST.playing=false; ST.songId=ST.editId; ST.back='create'; render(); },
+  // Practice stays right here on the Sync step (same compact scrolling
+  // lyrics window Record uses) instead of jumping to the full Practice
+  // Player — nothing is captured, it just paces through the lyrics so you
+  // can rehearse against the beat before actually recording a take.
+  practiceDraft(){
+    if(ST.phase!=='idle') return;
+    ST.phase='practicing'; ST.recT=0; ST.editorLine=0; render();
+  },
+  stopPractice(){ if(ST.phase==='practicing'){ ST.phase='idle'; ST.recT=0; render(); } },
+  // "Play your synced take": previews the song's real recorded-and-aligned
+  // take right there on the Sync step, with the same bold-focus progression
+  // the Practice Player/Song Viewer use — reusing their exact timing/curWord
+  // machinery via ST.ctx='syncpreview' (see tick() and playId()).
+  syncPreviewPlay(){
+    if(ST.ctx==='syncpreview' && ST.playing){ ST.playing=false; render(); return; }
+    const s = D.songs[ST.editId]; if(!s) return;
+    const tm = timing(s);
+    ST.ctx='syncpreview'; ST.t = ST.t<tm.total ? ST.t : 0; ST.playing=true; render();
+  },
   async startRecord(){
     // Ask for the mic right now, before showing the 3-2-1 countdown, so the
     // browser's permission prompt appears immediately on tapping Record
@@ -235,6 +260,7 @@ const Actions = {
   toggleInstMenu(d,e){ if(e) e.stopPropagation(); ST.instMenu = !ST.instMenu; render(); },
   setInstrumentMenu(d, e){ if(e) e.stopPropagation(); ST.instrument=d.id; ST.menu=false; ST.instMenu=false; render(); },
   menuAddGig(){ ST.menu=false; ST.pick = { kind:'gig', songId: ST.songId }; render(); },
+  removeMarkings(){ const s = song(ST.songId); if(!s || s.id==='none') return; s.notes={}; ST.menu=false; render(); toast('Markings removed'); queueSaveSong(s.id); },
   editSong(){ stopOnsetListening(); ST.editId = ST.songId; ST.screen='create'; ST.createMode='manual'; ST.step='chords'; ST.phase='idle'; ST.menu=false; ST.editorLine=0; render(); },
   deleteSong(){ stopOnsetListening(); const delId=ST.songId; delete D.songs[delId]; D.order = D.order.filter(x=>x!==delId); const autoPl=D.playlists.find(p=>p.auto); if(autoPl) autoPl.ids=D.order; ST.screen='home'; ST.menu=false; render(); toast('Song deleted'); deleteSongRow(delId); },
   copySong(){
@@ -266,8 +292,12 @@ const Actions = {
   playSample(){
     if(ST.sampling){ stopSampleAudio(); ST.sampling=false; ST.sampleLeft=0; render(); return; }
     const s = song(ST.ctx==='gig' ? gigSongId() : ST.songId);
-    if(s.sampleUrl){ playSampleAudio(s.sampleUrl); ST.sampling=true; ST.sampleLeft = s.audioDurationSec && s.audioDurationSec<=5 ? s.audioDurationSec : 5; render(); }
-    else { ST.sampling=true; ST.sampleLeft=5; render(); toast('No recorded sample yet — playing a short preview'); }
+    // Previously this faked a 5s countdown with no audio when sampleUrl was
+    // missing — looked like it was "playing" but nothing was ever audible.
+    // Be honest instead: only animate the countdown when a clip will
+    // actually play.
+    if(!s.sampleUrl){ toast('No recorded sample for this song yet'); return; }
+    playSampleAudio(s.sampleUrl); ST.sampling=true; ST.sampleLeft = s.audioDurationSec && s.audioDurationSec<=5 ? s.audioDurationSec : 5; render();
   },
 
   exitPractice(){ ST.playing=false; ST.screen = ST.back==='create' ? 'create' : 'song'; ST.back = ST.back==='create' ? 'home' : ST.back; render(); },
