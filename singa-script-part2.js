@@ -16,19 +16,23 @@ function buildLines(s, mode, opt){
   const cw = ci>=0 ? tm.words[ci] : null;
   let curChordK = -1; if(ci>=0) for(let k=0;k<=ci;k++){ const w=tm.words[k]; if(s.chords[w.li+'-'+w.wi]) curChordK=k; }
   const notes = { ...(s.notes||{}), ...(opt.extraNotes||{}) };
-  const sel = ST.selRoot + ST.selSuffix;
   let g = 0;
   return tm.lines.map((ws,li)=>{
+    const header = isHeaderLine(ws);
     const curLine = cw && cw.li===li, last = ws.length-1;
     const w2 = ws.map((w,wi)=>{
-      const id = li+'-'+wi, ch = opt.hideChords ? '' : (s.chords[id]||''), gi = g++;
-      const mark = notes[id] || '';
-      // Marks always sit to the left or right of the line, whichever edge the
-      // marked word is closer to — never above/below it any more.
+      const id = li+'-'+wi, gi = header ? -1 : g++;
+      const ch = (header || opt.hideChords) ? '' : (s.chords[id]||'');
+      const mark = header ? '' : (notes[id] || '');
+      // Each mark anchors to its own word (left/right of just that word),
+      // whichever edge the word is closer to — never the whole line, so two
+      // marks on one line never collide with each other.
       const markSide = mark ? (wi <= last/2 ? 'left' : 'right') : null;
       const o = { id, w, chord:ch, col:'#333', chordCol:'#9a9a9a', weight:400, cursor:'default', mark, markSide,
         selected: ST.selWord===id };
-      if(mode==='chords'){
+      if(header){
+        // Never interactive, never chorded/marked.
+      } else if(mode==='chords'){
         o.col='#a3a3a3'; o.chordCol='#1b1b1b'; o.cursor='pointer'; o.clickAct='placeChord'; o.clickId=id;
       } else if(mode==='markings'){
         o.cursor='pointer'; o.clickAct='pickMarkWord'; o.clickId=id;
@@ -43,32 +47,34 @@ function buildLines(s, mode, opt){
       }
       return o;
     });
-    const leftMarks = w2.filter(o=>o.markSide==='left');
-    const rightMarks = w2.filter(o=>o.markSide==='right');
-    const isPlay = mode==='play', on = isPlay && curLine;
-    return { li, words:w2, leftMarks, rightMarks, padTop: on?10:0, mb: on?10:0, scale: on?1.12:1, op: isPlay && cw && li<cw.li ? 0.75:1, cur: on };
+    const isPlay = mode==='play', on = !header && isPlay && curLine;
+    return { li, words:w2, header, padTop: on?10:0, mb: on?10:0, scale: on?1.12:1, op: (!header && isPlay && cw && li<cw.li) ? 0.75:1, cur: on };
   });
 }
-function markBubbleHTML(w, side){
+function markBubbleHTML(mark, side){
   const arrow = side==='left'
     ? `<svg width="34" height="14" viewBox="0 0 34 14" fill="none" stroke="#2f8fe0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 7h27"></path><path d="M22 2l6.5 5-6.5 5"></path></svg>`
     : `<svg width="34" height="14" viewBox="0 0 34 14" fill="none" stroke="#2f8fe0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M32.5 7h-27"></path><path d="M12 2l-6.5 5 6.5 5"></path></svg>`;
   return side==='left'
-    ? `<span class="markbubble"><span class="mtext">${esc(w.mark)}</span>${arrow}</span>`
-    : `<span class="markbubble">${arrow}<span class="mtext">${esc(w.mark)}</span></span>`;
+    ? `<span class="markbubble"><span class="mtext">${esc(mark)}</span>${arrow}</span>`
+    : `<span class="markbubble">${arrow}<span class="mtext">${esc(mark)}</span></span>`;
 }
 function linesHTML(lines, big){
   return `<div class="lyrics-wrap">` + lines.map(l=>{
+    if(l.header){
+      const text = l.words.map(w=>w.w).join(' ');
+      return `<div class="lline lheader">${esc(text)}</div>`;
+    }
     const style = `margin-top:${l.padTop}px;margin-bottom:${l.mb}px;transform:scale(${l.scale});transform-origin:left center;opacity:${l.op}`;
     const words = l.words.map(w=>{
       const act = w.clickAct ? `data-act="${w.clickAct}" data-id="${esc(w.clickId)}"` : '';
       const bg = w.selected ? 'background:#e5f0fc' : '';
       const fsz = big ? 'font-size:32px;padding:0 2px' : 'font-size:24px';
       const fszc = big ? 'font-size:15px;font-weight:700' : 'font-size:14px;font-weight:600';
-      return `<span class="lword" style="cursor:${w.cursor};border-radius:5px;${bg}" ${act}><span class="lchord" style="${fszc};color:${w.chordCol}">${esc(w.chord)}</span><span class="ltext" style="${fsz};font-weight:${w.weight};color:${w.col}">${esc(w.w)}</span></span>`;
+      const markHTML = w.mark ? `<span class="markanchor markanchor-${w.markSide}">${markBubbleHTML(w.mark, w.markSide)}</span>` : '';
+      return `<span class="lword" style="cursor:${w.cursor};border-radius:5px;${bg}" ${act}><span class="lchord" style="${fszc};color:${w.chordCol}">${esc(w.chord)}</span><span class="ltext" style="${fsz};font-weight:${w.weight};color:${w.col}">${esc(w.w)}</span>${markHTML}</span>`;
     }).join('');
-    const markStack = (marks, side) => !marks.length ? '' : `<div class="markside markside-${side}">${marks.map(m=>markBubbleHTML(m,side)).join('')}</div>`;
-    return `<div class="lline" style="${style}">${markStack(l.leftMarks,'left')}${words}${markStack(l.rightMarks,'right')}</div>`;
+    return `<div class="lline" style="${style}">${words}</div>`;
   }).join('') + `</div>`;
 }
 /* ============================================================
