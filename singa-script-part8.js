@@ -64,7 +64,10 @@ async function processRecordingBlob(songObj, blob){
 
     if(hadManualLyrics){
       const refWords = [];
-      parseLyrics(songObj.lyrics).forEach(ws=>ws.forEach(w=>refWords.push(normWord(w))));
+      // Structural labels ("[Verse 2]") are never sung, so they're excluded
+      // here too — keeps this index-for-index aligned with timing()'s word
+      // list, which skips them the same way.
+      parseLyrics(songObj.lyrics).forEach(ws=>{ if(!isHeaderLine(ws)) ws.forEach(w=>refWords.push(normWord(w))); });
       const mapping = alignSequences(refWords, hypWords.map(w=>w.norm));
       songObj.wordTimestamps = fillTimestamps(mapping, hypWords, durationSec);
     } else {
@@ -86,7 +89,7 @@ async function processRecordingBlob(songObj, blob){
     try{
       const startSec = hypWords.length ? hypWords[0].start : 0;
       await uploadSampleClip(songObj, float32, startSec);
-    }catch(e){ console.error('Singa: sample clip upload failed', e); }
+    }catch(e){ console.error('Singa: sample clip upload failed', e); toast('Saved the take, but the Play Sample clip failed to upload — make sure the "song-samples" Storage bucket exists and is public'); }
     ST.procPct=100; ST.procNote='Done'; render();
   }catch(err){
     console.error('Singa: speech alignment failed, falling back to estimated timing', err);

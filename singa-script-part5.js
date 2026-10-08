@@ -8,6 +8,7 @@ function renderSongMenu(){
       <a class="link" style="font-size:17px;font-weight:700" data-act="editSong">Edit</a>
       <a class="link" style="font-size:17px;font-weight:700;display:flex;align-items:center;gap:4px" data-act="toggleInstMenu">Change instrument${icon(ST.instMenu?'expand_less':'expand_more',20)}</a>
       ${ST.instMenu?`<div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;margin:-4px 0 4px">${instOpts}</div>`:''}
+      ${Object.keys(s.notes||{}).length ? `<a class="link" style="font-size:17px;font-weight:700" data-act="removeMarkings">Remove markings</a>` : ''}
       <a class="link" style="font-size:17px;font-weight:700" data-act="menuAddGig">Add to a gig</a>
       <a class="link" style="font-size:17px;font-weight:700" data-act="nav" data-to="account">Full settings</a>
       <a class="link" style="font-size:17px;font-weight:700;margin-top:16px;display:flex;align-items:center;gap:6px" data-act="newSong">Add a new song${icon('add_circle',22)}</a>
@@ -144,7 +145,7 @@ function renderGig(){
       <div class="gig-rail">${railHTML}</div>
     </div>
     <div style="position:fixed;left:0;right:0;bottom:40px;display:flex;justify-content:center;pointer-events:none">
-      <button class="icon-btn" title="Start gig player" style="pointer-events:auto;width:68px;height:68px;border-radius:50%;background:#1b1b1b;color:#fff;box-shadow:0 10px 30px rgba(0,0,0,.2)" data-act="goLive">${icon('play_arrow',38)}</button>
+      <button class="icon-btn" title="Start gig player" style="pointer-events:auto;width:68px;height:68px;border-radius:50%;background:#1b1b1b;color:#fff;box-shadow:0 10px 30px rgba(0,0,0,.2)" data-act="goLive">${icon('rocket_launch',34)}</button>
     </div>
   </div>
   ${ST.qrOpen?`<div class="modal-backdrop" data-act="closeQr"><div class="modal" style="align-items:center;text-align:center;max-width:380px" onclick="modalClick(event)">
