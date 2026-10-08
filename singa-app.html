@@ -109,11 +109,26 @@ textarea.ipt{height:auto;padding:16px 18px;line-height:1.5;resize:none}
 .lword{position:relative;display:flex;flex-direction:column;cursor:default}
 .lword .lchord{height:18px;font-size:14px;font-weight:600;color:#9a9a9a}
 .lword .ltext{font-size:24px;color:#333}
-.markside{position:absolute;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:10px;pointer-events:none;z-index:1}
-.markside-left{right:100%;margin-right:4px;align-items:flex-end}
-.markside-right{left:100%;margin-left:4px;align-items:flex-start}
+/* Marks anchor to the specific word they're on (not the whole line), so two
+   marks on the same line never collide — each sits immediately beside its
+   own word regardless of where else on the line other marks land. */
+.markanchor{position:absolute;top:50%;transform:translateY(-50%);pointer-events:none;z-index:1;white-space:nowrap}
+.markanchor-left{right:100%;margin-right:4px}
+.markanchor-right{left:100%;margin-left:4px}
 .markbubble{display:flex;align-items:center;gap:2px;white-space:nowrap}
 .markbubble .mtext{font-family:Caveat,cursive;font-size:26px;line-height:1;color:var(--chordblue)}
+
+/* Structural lyric headers ("[Verse 2]", "(Chorus)") are never sung — shown
+   greyed-out and non-interactive, excluded from chords/marks/word-timing. */
+.lline.lheader{opacity:.5;font-style:italic;font-size:13px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--m2);cursor:default}
+
+/* A single-row, chevron-navigated strip of chips (chord quality/root
+   suggestions, recent chords) — no visible scrollbar, no permanent clipping;
+   content only looks cropped transiently while actively scrolling. */
+.chiprow-wrap{position:relative;display:flex;align-items:center;gap:4px;max-width:100%}
+.chiprow{display:flex;flex-wrap:nowrap;gap:6px;overflow-x:auto;scroll-behavior:smooth;scrollbar-width:none;-ms-overflow-style:none;-webkit-overflow-scrolling:touch}
+.chiprow::-webkit-scrollbar{display:none}
+.chiprow-chevron{flex:none;width:28px;height:36px;border-radius:50%;background:#fff;border:1.5px solid var(--fg);display:flex;align-items:center;justify-content:center;cursor:pointer}
 
 /* responsive grids */
 .home-grid{display:grid;grid-template-columns:1fr;gap:40px}
@@ -151,7 +166,7 @@ textarea.ipt{height:auto;padding:16px 18px;line-height:1.5;resize:none}
 </div>
 <div id="modalLayer"></div>
 <div class="toast-box" id="toastBox"></div>
-<input type="file" id="fileInput" accept="audio/*,video/*,.txt,.md,text/plain,.pdf,.doc,.docx" style="display:none">
+<input type="file" id="fileInput" accept="audio/*,video/*,.txt,.md,text/plain,.pdf,.doc,.docx" multiple style="display:none">
 <input type="file" id="avatarInput" accept="image/*" style="display:none">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
