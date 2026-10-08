@@ -116,6 +116,9 @@ function render(){
     const want = ST.rootIdx*100;
     if(Math.abs(rs.scrollLeft-want)>1){ ST._lastProgScrollAt = Date.now(); rs.scrollLeft = want; }
   }
+  // chord-chip row chevrons: recompute every render, since content (and so
+  // overflow) can change — e.g. switching root letter or adding a recent chord
+  ['chordVariantRow','recentChordRow'].forEach(updateChipRowChevrons);
   // Keep the chords/markings editor's fixed ~4-line lyrics viewport scrolled
   // so the line you're currently working on sits as the 2nd of the visible
   // rows — like a typewriter margin — clamping at the very top of the first
@@ -161,6 +164,24 @@ function autoChordsFor(lyrics){
   parseLyrics(lyrics).forEach((ws,li)=>{ out[li+'-0']=cyc[li%4]; if(ws.length>3) out[li+'-'+Math.floor(ws.length/2)]=cyc[(li+1)%4]; });
   return out;
 }
+// Pattern recognition for chords: when a chord is placed on word `wi` of
+// line `li`, any OTHER line whose text is identical (e.g. a repeated verse
+// or chorus line) gets the same chord at the same word position — but only
+// where that spot is still empty, so it never overwrites a chord the user
+// already set differently on a particular repeat.
+function applyChordPatternToRepeats(s, li, wi, chordVal){
+  if(isNaN(li) || isNaN(wi)) return;
+  const lines = parseLyrics(s.lyrics);
+  const ws0 = lines[li]; if(!ws0 || isHeaderLine(ws0)) return;
+  const target = ws0.join(' ').toLowerCase();
+  if(!target) return;
+  lines.forEach((ws, i)=>{
+    if(i===li || isHeaderLine(ws)) return;
+    if(ws.join(' ').toLowerCase() !== target) return;
+    const id = i+'-'+wi;
+    if(wi < ws.length && !s.chords[id]) s.chords[id] = chordVal;
+  });
+}
 /* ============================================================
    CHORD-SHEET TEXT IMPORT ("From File" → a plain-text document of
    lyrics with chord names on their own line above them, the common
@@ -178,7 +199,21 @@ function looksLikeChordLine(line){
   return tokens.every(looksLikeChordToken);
 }
 function parseChordSheetText(text){
-  const rawLines = (text||'').replace(/\r\n?/g,'\n').split('\n');
+  let rawLines = (text||'').replace(/\r\n?/g,'\n').split('\n');
+  // Common chord-sheet convention: a title (and optionally a sub/artist
+  // line) on their own, followed by a blank line, before the lyrics proper.
+  // Detected only when that shape is actually there — never guessed from
+  // the lyrics themselves — so a plain lyrics-only file is untouched.
+  let title = '', sub = '';
+  if(rawLines[0] && rawLines[0].trim() && !looksLikeChordLine(rawLines[0])){
+    if(rawLines[1]!==undefined && !rawLines[1].trim()){
+      title = rawLines[0].trim();
+      rawLines = rawLines.slice(2);
+    } else if(rawLines[1]!==undefined && rawLines[1].trim() && !looksLikeChordLine(rawLines[1]) && rawLines[2]!==undefined && !rawLines[2].trim()){
+      title = rawLines[0].trim(); sub = rawLines[1].trim();
+      rawLines = rawLines.slice(3);
+    }
+  }
   const lyricLines = []; const chordMap = {}; let li = 0;
   for(let i=0;i<rawLines.length;i++){
     const line = rawLines[i];
@@ -194,7 +229,39 @@ function parseChordSheetText(text){
       if(line.trim()) li++;
     }
   }
-  return { lyrics: lyricLines.join('\n').trim(), chords: chordMap };
+  return { lyrics: lyricLines.join('\n').trim(), chords: chordMap, title, sub };
+}
+// Batch "From File" import: each selected file becomes its own song, saved
+// straight into the library rather than routed through the Create flow one
+// at a time. Text/chord-sheet files get their lyrics/chords/title parsed
+// immediately; audio/video files are saved as a bare unsynced shell (title
+// from the filename) — the user records or uploads a sync track later from
+// the song's own (incomplete-song) screen, same as any other unsynced song.
+async function handleBatchFileUpload(files){
+  let added = 0, skipped = 0;
+  for(const file of files){
+    const isTextDoc = file.type==='text/plain' || /\.(txt|md)$/i.test(file.name);
+    const isUnsupportedDoc = !isTextDoc && /\.(pdf|docx?)$/i.test(file.name);
+    if(isUnsupportedDoc){ skipped++; continue; }
+    const baseName = file.name.replace(/\.[^.]+$/, '').trim() || 'Untitled song';
+    const id = 'n'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
+    const songObj = { id, title:baseName, sub:'', lyrics:'', chords:{}, notes:{}, synced:false, isPublic:false, plays:0, added:Date.now(), mine:true };
+    if(isTextDoc){
+      try{
+        const parsed = parseChordSheetText(await file.text());
+        if(parsed.lyrics) songObj.lyrics = parsed.lyrics;
+        if(Object.keys(parsed.chords).length) songObj.chords = parsed.chords;
+        if(parsed.title) songObj.title = parsed.title;
+        if(parsed.sub) songObj.sub = parsed.sub;
+      }catch(e){ console.error('Singa: batch file read failed', e); }
+    }
+    D.songs[id] = songObj; D.order = [id, ...D.order]; added++;
+    saveSongRow(songObj);
+  }
+  const autoPl = (D.playlists||[]).find(p=>p.auto); if(autoPl) autoPl.ids = D.order;
+  render();
+  if(added) toast(`Added ${added} song${added===1?'':'s'}${skipped?` (skipped ${skipped} unsupported)`:''} — open each to sync it`);
+  else toast('No supported files in that selection');
 }
 function openSongOrIncomplete(id, from){
   stopOnsetListening();
