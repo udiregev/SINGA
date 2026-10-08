@@ -289,8 +289,8 @@ async function seedSampleContent(){
       const path = ST.userId+'/sample-dream.mp3';
       const up = await sb.storage.from('song-samples').upload(path, blob, { upsert:true, contentType:'audio/mpeg' });
       if(!up.error) sampleUrl = sb.storage.from('song-samples').getPublicUrl(path).data.publicUrl;
-      else console.error('Singa: sample clip upload failed', up.error);
-    }catch(e){ console.error('Singa: sample clip upload failed', e); }
+      else { console.error('Singa: sample clip upload failed', up.error); toast('Play Sample won’t work yet — make sure the "song-samples" Storage bucket exists and is public'); }
+    }catch(e){ console.error('Singa: sample clip upload failed', e); toast('Play Sample won’t work yet — make sure the "song-samples" Storage bucket exists and is public'); }
     const songId = 's'+Date.now();
     // Real lyrics, chords, and per-word timing for "Dream a Little Dream of Me"
     // (public domain in the US as of Jan 1, 2026), captured via forced alignment
@@ -315,7 +315,7 @@ Dream a little dream of me`;
     const SEED_CHORDS = {'0-0':'C', '0-1':'B7', '0-2':'Ab', '0-3':'G7', '1-0':'C', '1-4':'B7', '1-6':'A7', '2-0':'F', '2-4':'Fm', '3-0':'C', '3-2':'Ab', '3-4':'G7', '4-0':'C', '4-1':'B7', '4-2':'Ab', '4-3':'G7', '5-0':'C', '5-3':'B7', '5-5':'A7', '6-0':'F', '6-5':'Fm', '7-0':'C', '7-2':'Ab', '7-4':'C', '8-0':'A', '8-4':'E7', '9-0':'A', '10-0':'D', '10-5':'E7', '11-0':'A', '12-0':'F', '12-3':'C', '13-0':'F', '13-5':'Fm', '14-0':'C', '14-4':'G7', '15-0':'C', '15-2':'Ab', '15-4':'C'};
     const SEED_NOTES = {'2-4':'song marking 1', '8-0':'song marking 2'};
     const SEED_WORD_TIMESTAMPS = [1.44,3.04,5.42,5.67,5.84,6.55,6.8,7.57,8.41,10.54,14.79,14.83,15.29,15.35,16.32,17.25,17.46,25.13,26.9,27.01,29.09,30.39,34.14,34.49,34.62,34.72,34.79,35.49,36.43,36.53,42.21,42.56,42.72,46.59,46.85,50.04,50.7,51.57,52.4,52.6,52.66,52.93,53.09,53.24,53.62,54.15,57.47,59.88,59.97,60.46,60.93,62.13,62.98,63.57,63.64,64.08,64.72,67.79,68.68,68.99,70.33,70.52,70.82,71.57,73.7,74.91,75.88,76.66,81.67,83.95,84.06,85.97,86.44,86.67,89.51,91.58,92.18,95.33,96.05,97.28,100.98,104.45,105.17,105.63,106.17,106.58,106.86,107.04,109.06,109.14,112.28,112.95,113.04,116.9,119.92,120.04,122.36,124.42,133.53,141.33,141.72,146.19];
-    const song = { id:songId, title:'Demo Song', sub:'Sample song',
+    const song = { id:songId, title:'Dream a little dream of me', sub:'Demo song',
       lyrics:SEED_LYRICS, chords:SEED_CHORDS, notes:SEED_NOTES, synced:true,
       wordTimestamps:SEED_WORD_TIMESTAMPS, audioDurationSec:147.62, sampleUrl, isPublic:false, plays:0, added:Date.now(), mine:true };
     D.songs[songId] = song; D.order = [songId, ...D.order];
@@ -361,9 +361,16 @@ function toast(msg){
   toastTimer = setTimeout(()=>{ ST.toast=null; render(); }, 2200);
 }
 function parseLyrics(text){ return (text||'').split('\n').map(l=>l.trim()).filter(Boolean).map(l=>l.split(/\s+/)); }
+// A line that's wrapped entirely in brackets/parens, e.g. "[Verse 2]" or
+// "(Chorus)", is a structural label rather than something actually sung —
+// it's excluded from word timing/chords/marks and shown greyed out instead.
+function isHeaderLine(ws){
+  if(!ws || !ws.length) return false;
+  return /^[\[(]/.test(ws[0]) && /[\])]$/.test(ws[ws.length-1]);
+}
 function timing(s){
   const lines = parseLyrics(s && s.lyrics); const words = [];
-  lines.forEach((ws,li)=>ws.forEach((w,wi)=>words.push({li,wi,t:1+li*4+wi*(3.2/ws.length)})));
+  lines.forEach((ws,li)=>{ if(isHeaderLine(ws)) return; ws.forEach((w,wi)=>words.push({li,wi,t:1+li*4+wi*(3.2/ws.length)})); });
   // If a real recording was captured and force-aligned (see processRecordingBlob),
   // s.wordTimestamps holds one real timestamp per word (seconds into the take) —
   // use those instead of the evenly-spaced estimate above. Falls through to the
