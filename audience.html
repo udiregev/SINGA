@@ -29,6 +29,7 @@ body{font-family:'Hanken Grotesk',system-ui,sans-serif;color:var(--fg);-webkit-f
 .lword .lchord{height:18px;font-size:13px;font-weight:600;color:var(--chordblue)}
 .lword .ltext{font-size:22px;color:#aaa;transition:color .15s}
 .lword.cur .ltext{color:var(--fg);font-weight:700}
+.lline.lheader{opacity:.5;font-style:italic;font-size:13px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--m3)}
 .lword.done .ltext{color:#555}
 #setlist{flex:none;padding:16px 20px 28px;border-top:1px solid var(--b2);background:#fff}
 #setlist h3{font-size:12px;font-weight:800;letter-spacing:.06em;color:var(--m2);margin:0 0 8px}
@@ -73,9 +74,16 @@ const sb = supabase.createClient(
 
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function parseLyrics(text){ return (text||'').split('\n').map(l=>l.trim()).filter(Boolean).map(l=>l.split(/\s+/)); }
+// A line wrapped entirely in brackets/parens ("[Verse 2]") is a structural
+// label, not something actually sung — kept out of the word list, same as
+// the performer app's timing(), so indices into word_timestamps still line up.
+function isHeaderLine(ws){
+  if(!ws || !ws.length) return false;
+  return /^[\[(]/.test(ws[0]) && /[\])]$/.test(ws[ws.length-1]);
+}
 function timing(s){
   const lines = parseLyrics(s && s.lyrics); const words = [];
-  lines.forEach((ws,li)=>ws.forEach((w,wi)=>words.push({li,wi,t:1+li*4+wi*(3.2/ws.length)})));
+  lines.forEach((ws,li)=>{ if(isHeaderLine(ws)) return; ws.forEach((w,wi)=>words.push({li,wi,t:1+li*4+wi*(3.2/ws.length)})); });
   const realTs = s && s.word_timestamps;
   if(realTs && realTs.length===words.length){
     words.forEach((w,i)=>{ if(typeof realTs[i]==='number' && isFinite(realTs[i])) w.t = realTs[i]; });
@@ -186,6 +194,7 @@ function renderFrame(){
   }
   let k = -1;
   const html = tm.lines.map((ws, li) => {
+    if(isHeaderLine(ws)) return `<div class="lline lheader">${esc(ws.join(' '))}</div>`;
     const wordsHTML = ws.map((w, wi) => {
       k++;
       const chord = (s.chords||{})[li+'-'+wi];
