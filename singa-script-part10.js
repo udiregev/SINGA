@@ -18,7 +18,7 @@ const Binds = {
 /* ============================================================
    PLAYBACK TICK (simulated — no real audio capture/analysis)
    ============================================================ */
-function playId(){ return ST.ctx==='gig' ? gigSongId() : ST.songId; }
+function playId(){ return ST.ctx==='gig' ? gigSongId() : (ST.ctx==='syncpreview' ? ST.editId : ST.songId); }
 function endGigSong(){ const cur = gigSongId(); if(!ST.played.includes(cur)) ST.played=[...ST.played,cur]; ST.gigCur=null; ST.t=0; ST.playing=false; ST.gListening=false; }
 
 // Throttles the live-gig broadcast (see joinGigChannel/broadcastGigState in
@@ -37,7 +37,7 @@ function broadcastLiveTick(){
 function tick(){
   let changed = false;
   if(ST.vcd>0){ const v=ST.vcd-0.1; if(v<=0){ ST.vcd=0; ST.playing=true; } else ST.vcd=v; changed=true; }
-  if((ST.ctx==='view' && ST.screen!=='song') || (ST.ctx==='practice' && ST.screen!=='practice')){
+  if((ST.ctx==='view' && ST.screen!=='song') || (ST.ctx==='practice' && ST.screen!=='practice') || (ST.ctx==='syncpreview' && (ST.screen!=='create' || ST.step!=='sync'))){
     if(ST.playing){ ST.playing=false; changed=true; }
     if(ST.vcd>0){ ST.vcd=0; ST.playing=false; changed=true; }
   }
@@ -45,7 +45,7 @@ function tick(){
     const s = song(playId()); const tm = timing(s);
     let t = ST.t + 0.1;
     if(t>=tm.total){
-      if(ST.ctx==='practice') t=0;
+      if(ST.ctx==='practice' || ST.ctx==='syncpreview') t=0;
       else if(ST.ctx==='view'){ ST.playing=false; t=0; }
       else { endGigSong(); broadcastLiveTick(); render(); return; }
     }
@@ -63,9 +63,29 @@ function tick(){
     ST.bars=[...ST.bars, lvl!=null?lvl:(10+Math.round(Math.random()*80))].slice(-18);
     changed=true;
   }
+  else if(ST.phase==='practicing'){
+    ST.recT += 0.1;
+    changed=true;
+  }
   /* 'processing' phase is now driven entirely by processRecordingBlob()'s real
      async pipeline (decode → transcribe → align), which sets ST.procPct/ST.procNote
      and calls finishSong() itself — no fake auto-advance here. */
+  // Auto-scroll the Sync step's compact lyrics window: karaoke-paced (no
+  // bold focus) while practicing/recording a take, or real-alignment-paced
+  // (with bold focus, via buildLines' 'play' mode) while previewing an
+  // already-synced take — both drive the same typewriter-scroll mechanism
+  // in render() that keeps the current line as the 2nd visible row.
+  if(ST.screen==='create' && ST.createMode==='manual' && ST.step==='sync'){
+    const s = D.songs[ST.editId];
+    let liveT = null;
+    if(ST.phase==='recording' || ST.phase==='practicing') liveT = ST.recT;
+    else if(ST.ctx==='syncpreview' && ST.playing) liveT = ST.t;
+    if(s && liveT!=null){
+      const tm = timing(s); const ci = curWord(tm, liveT);
+      const li = ci>=0 ? tm.words[ci].li : 0;
+      if(li !== ST.editorLine){ ST.editorLine = li; changed = true; }
+    }
+  }
   if(ST.sampling){ ST.sampleLeft = Math.max(0, ST.sampleLeft-0.1); if(ST.sampleLeft<=0){ ST.sampling=false; stopSampleAudio(); } changed=true; }
   broadcastLiveTick();
   if(changed) render();
@@ -106,9 +126,15 @@ document.addEventListener('keydown', function(e){
 });
 
 document.getElementById('fileInput').addEventListener('change', function(e){
-  const file = e.target.files && e.target.files[0];
-  if(!file) return;
+  const files = Array.from(e.target.files||[]);
+  if(!files.length) return;
   e.target.value = '';
+  // Multiple files at once: a batch import. Each one is saved straight into
+  // the library as its own unsynced song (no detour through the Create
+  // flow for each) — opening one later prompts for a sync track the normal
+  // "incomplete song" way.
+  if(files.length > 1){ handleBatchFileUpload(files); return; }
+  const file = files[0];
   const s = D.songs[ST.editId];
   const isTextDoc = file.type==='text/plain' || /\.(txt|md)$/i.test(file.name);
   const isUnsupportedDoc = !isTextDoc && /\.(pdf|docx?)$/i.test(file.name);
@@ -123,9 +149,12 @@ document.getElementById('fileInput').addEventListener('change', function(e){
       if(!parsed.lyrics){ toast("Couldn't find any lyrics in that file"); return; }
       s.lyrics = parsed.lyrics;
       if(Object.keys(parsed.chords).length) s.chords = { ...s.chords, ...parsed.chords };
+      if(parsed.title && !s.title.trim()) s.title = parsed.title;
+      if(parsed.sub && !s.sub.trim()) s.sub = parsed.sub;
       ST.editId = s.id; ST.screen='create'; ST.createMode='manual'; ST.step='lyrics'; ST.phase='idle';
       render();
-      toast('Imported lyrics'+(Object.keys(parsed.chords).length?' and chords':'')+' from file — review and continue');
+      const got = ['lyrics', Object.keys(parsed.chords).length&&'chords', parsed.title&&'title'].filter(Boolean).join(', ');
+      toast('Imported '+got+' from file — review and continue');
     };
     reader.readAsText(file);
     return;
@@ -157,7 +186,11 @@ document.getElementById('avatarInput').addEventListener('change', async function
 let rootScrollTimer = null;
 document.addEventListener('scroll', function(e){
   const el = e.target;
-  if(!el || !el.classList || !el.classList.contains('rootScroller')) return;
+  if(!el || !el.classList) return;
+  // Chord-chip rows (quality suggestions, recent chords): just keep their
+  // chevrons in sync with however far the user has actually scrolled.
+  if(el.classList.contains('chiprow')){ updateChipRowChevrons(el.id); return; }
+  if(!el.classList.contains('rootScroller')) return;
   if(Date.now() - ST._lastProgScrollAt < 60) return; // ignore our own programmatic sync
   const fadeEl = document.getElementById('chordVariants');
   if(fadeEl) fadeEl.style.opacity = '0';
