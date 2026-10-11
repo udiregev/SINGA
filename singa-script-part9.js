@@ -314,14 +314,20 @@ const Actions = {
   openGigSettings(){ ST.gigSettings=true; render(); },
   async gigShare(){
     const g = gigObj();
-    if(!g.isPublic){ toast('Make this gig "Shared" first so guests can open the link'); return; }
+    if(!g.isPublic){
+      if(!g.mine){ toast('Only this gig\'s owner can share it'); return; }
+      g.isPublic = true; saveGigRow(g); render();
+    }
     const url = audienceUrl(g.id);
-    try{ await navigator.clipboard.writeText(url); toast('Audience link copied'); }
+    try{ await navigator.clipboard.writeText(url); toast('This gig is now shared — audience link copied'); }
     catch(e){ toast(url); }
   },
   async openQr(){
     const g = gigObj();
-    if(!g.isPublic){ toast('Make this gig "Shared" first so guests can scan in'); return; }
+    if(!g.isPublic){
+      if(!g.mine){ toast('Only this gig\'s owner can share it'); return; }
+      g.isPublic = true; saveGigRow(g);
+    }
     ST.qrOpen=true; ST.qrDataUrl=null; render();
     try{
       const dataUrl = await QRCode.toDataURL(audienceUrl(g.id), { width:440, margin:1, color:{ dark:'#1b1b1b', light:'#ffffff' } });
