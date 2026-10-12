@@ -552,15 +552,19 @@ async function getAsrPipeline(onProgress){
 }
 
 async function transcribeClientSide(pcm16k){
+  // Returns { words, failed }. failed=true means the model/pipeline itself
+  // errored out (load failure, CDN unreachable, inference threw) — a real
+  // fault. failed=false with an empty words array means the model ran fine
+  // but genuinely found no speech to transcribe — not a fault by itself.
   log('Loading in-browser Whisper model (first time only, ~40–75MB)…');
   setProgress(0);
   let pipe;
   try{
     pipe = await getAsrPipeline(pct=>setProgress(pct));
   }catch(e){
-    log('Model failed to load: '+e.message, 'err');
+    log('Model failed to load: '+e.message+' — this is usually the browser failing to fetch the transformers.js library from the CDN (network issue, ad/content blocker, or firewall blocking cdn.jsdelivr.net), not a problem with your audio file.', 'err');
     setProgress(null);
-    return null;
+    return { words: [], failed: true };
   }
   log('Model ready. Transcribing…');
   setProgress(null);
@@ -582,10 +586,10 @@ async function transcribeClientSide(pcm16k){
       w.forEach((text,i)=>words.push({ text, start:(i/w.length)*total, end:((i+1)/w.length)*total }));
     }
     log('Transcribed '+words.length+' words.', 'ok');
-    return words;
+    return { words, failed: false };
   }catch(e){
     log('Transcription failed: '+e.message, 'err');
-    return null;
+    return { words: [], failed: true };
   }
 }
 
@@ -668,9 +672,19 @@ async function runAudioPipeline(){
   state.chords = chords;
   log('Found '+chords.length+' chord segments.', 'ok');
 
-  let words = await transcribeClientSide(state.pcm16k);
+  const overallRms = rms(state.pcm16k);
+  const overallDb = overallRms>0 ? (20*Math.log10(overallRms)).toFixed(1) : '-inf';
+  log('Decoded audio: '+(state.pcm16k.length/16000).toFixed(1)+'s at 16kHz, overall level '+overallDb+' dBFS.');
+
+  const { words, failed } = await transcribeClientSide(state.pcm16k);
   if(!words || !words.length){
-    log('In-browser transcription came back empty.', 'err');
+    if(failed){
+      // Already logged a specific reason (model load / inference error) above.
+    } else if(overallRms < 0.003){
+      log('In-browser transcription came back empty, and the decoded audio is very quiet/near-silent — check that the recording actually captured sound.', 'err');
+    } else {
+      log('In-browser transcription came back empty. The audio itself decoded fine and is not silent (chords were detected from it), so this usually means Whisper did not hear anything it recognized as speech in this clip — most often because the clip has no singing/vocals (just instrumental playing), or the vocals are quiet relative to the instruments. If you expected words here, try the OpenAI fallback below as a second opinion, or test with a clip that has clearer vocals.', 'err');
+    }
     $('aiFallback').style.display='block';
     // Still show chords/sections even without a transcript.
     state.words = [];
