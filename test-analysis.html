@@ -185,6 +185,7 @@
 // ============================================================
 const state = {
   audioBlob: null, audioBuffer: null, pcm16k: null, sampleRate16k: 16000,
+  audioFileName: null, // real filename (with correct extension) for the loaded blob
   words: [], // {text, start, end}
   chords: [], // {start, end, label, conf}
   sections: [], // {start, end, label}
@@ -252,7 +253,12 @@ async function startRecording(){
     const blob = new Blob(recChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
     micStream.getTracks().forEach(t=>t.stop());
     micStream=null;
-    loadAudioBlob(blob, 'recording');
+    // Give the recording a real filename+extension matching its actual
+    // container, so anything that cares about the extension (like the
+    // OpenAI API) doesn't get told the wrong format.
+    const mt = (mediaRecorder.mimeType||'').toLowerCase();
+    const ext = mt.includes('ogg') ? 'ogg' : mt.includes('mp4') ? 'mp4' : 'webm';
+    loadAudioBlob(blob, 'recording.'+ext);
   };
   mediaRecorder.start();
   recStartedAt = Date.now();
@@ -296,6 +302,7 @@ $('audioFileInput').addEventListener('change', (e)=>{
 
 function loadAudioBlob(blob, name){
   state.audioBlob = blob;
+  state.audioFileName = name;
   const url = URL.createObjectURL(blob);
   const player = $('player');
   player.src = url; player.style.display='block';
@@ -595,8 +602,12 @@ async function transcribeClientSide(pcm16k){
 
 async function transcribeWithOpenAI(blob, apiKey){
   log('Sending audio to the OpenAI Whisper API…');
+  // Use the real filename (with its real extension) so OpenAI doesn't get
+  // told the wrong container format — e.g. an uploaded .m4a file must not
+  // be labeled "audio.webm", which the API rejects outright.
+  const filename = state.audioFileName || 'audio.webm';
   const form = new FormData();
-  form.append('file', blob, 'audio.webm');
+  form.append('file', blob, filename);
   form.append('model', 'whisper-1');
   form.append('response_format', 'verbose_json');
   form.append('timestamp_granularities[]', 'word');
