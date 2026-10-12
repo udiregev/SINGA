@@ -233,7 +233,6 @@ const Actions = {
   toggleSongPick(d){ const sp = ST.songPick; const isPl = sp.kind==='playlist'; const target = isPl ? D.playlists.find(p=>p.id===sp.id) : D.gigs.find(g=>g.id===sp.id); const ids = isPl?target.ids:target.setlist; const on = ids.includes(d.id); const next = on ? ids.filter(i=>i!==d.id) : [...ids, d.id]; if(isPl) target.ids=next; else target.setlist=next; render(); if(isPl) queueSavePlaylist(sp.id); else queueSaveGig(sp.id); },
   togglePublic(){ const s = D.songs[ST.editId]; if(!s) return; s.isPublic = !s.isPublic; render(); saveSongRow(s); },
   togglePlaylistPublic(d){ const p = D.playlists.find(x=>x.id===d.id); if(!p) return; p.isPublic = !p.isPublic; render(); savePlaylistRow(p); },
-  toggleGigPublic(){ const g = gigObj(); if(!g) return; g.isPublic = !g.isPublic; render(); saveGigRow(g); },
   viewDone(){ openSongOrIncomplete(ST.editId, 'home'); render(); },
   continueSong(){ ST.editId = ST.songId; ST.screen='create'; ST.createMode='manual'; ST.step='lyrics'; ST.phase='idle'; ST.editorLine=0; render(); },
 
@@ -248,7 +247,9 @@ const Actions = {
       ST.newItem=null; if(!ST.pick){ ST.screen='list'; ST.listKind='songs'; ST.listPl=id; } toast('Playlist created');
       savePlaylistRow(p);
     } else {
-      const id='g'+Date.now(); const g = { id, title:ni.name.trim(), date: ni.date.trim()||'Date to be confirmed', setlist:withSong, mine:true, isPublic:false, added:Date.now(), plays:0, settings:{} };
+      // Gigs are shareable from the moment they exist — no separate "make
+      // shared" step (see gigShare/openQr/deleteGig).
+      const id='g'+Date.now(); const g = { id, title:ni.name.trim(), date: ni.date.trim()||'Date to be confirmed', setlist:withSong, mine:true, isPublic:true, added:Date.now(), plays:0, settings:{} };
       D.gigs.unshift(g);
       ST.newItem=null; if(!ST.pick){ ST.screen='gig'; ST.gigId=id; } toast('Gig created');
       saveGigRow(g);
@@ -312,22 +313,18 @@ const Actions = {
   gigPhotosOpen(){ ST.screen='gigphotos'; render(); },
   gigAddCollab(){ ST.screen='collab'; ST.back='gig'; ST.collabFor = gigObj().id; render(); },
   openGigSettings(){ ST.gigSettings=true; render(); },
+  // Every gig is shareable the moment it exists — there's no separate
+  // "make shared" step. Audience access is just: does this gig still
+  // exist (and isn't deleted)? See deleteGig() below for the only way a
+  // gig stops being reachable.
   async gigShare(){
     const g = gigObj();
-    if(!g.isPublic){
-      if(!g.mine){ toast('Only this gig\'s owner can share it'); return; }
-      g.isPublic = true; saveGigRow(g); render();
-    }
     const url = audienceUrl(g.id);
-    try{ await navigator.clipboard.writeText(url); toast('This gig is now shared — audience link copied'); }
+    try{ await navigator.clipboard.writeText(url); toast('Audience link copied'); }
     catch(e){ toast(url); }
   },
   async openQr(){
     const g = gigObj();
-    if(!g.isPublic){
-      if(!g.mine){ toast('Only this gig\'s owner can share it'); return; }
-      g.isPublic = true; saveGigRow(g);
-    }
     ST.qrOpen=true; ST.qrDataUrl=null; render();
     try{
       const dataUrl = await QRCode.toDataURL(audienceUrl(g.id), { width:440, margin:1, color:{ dark:'#1b1b1b', light:'#ffffff' } });
@@ -337,6 +334,12 @@ const Actions = {
   closeQr(){ ST.qrOpen=false; ST.qrDataUrl=null; render(); },
   closeGigSettings(){ ST.gigSettings=false; render(); },
   toggleGigSetting(d){ const g = gigObj(); const gs = gigSettings(g); g.settings = { ...gs, [d.id]: !gs[d.id] }; render(); },
+  deleteGig(){
+    const delId = gigObj().id;
+    D.gigs = D.gigs.filter(g=>g.id!==delId);
+    ST.gigSettings=false; ST.screen='home'; render();
+    toast('Gig deleted'); deleteGigRow(delId);
+  },
   openGigSong(d){ openPlayer(d.id); render(); },
   goLive(){
     const g = gigObj(); if(!g.setlist.length){ toast('Add songs to this gig first'); return; }

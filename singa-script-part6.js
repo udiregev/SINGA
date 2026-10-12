@@ -13,6 +13,9 @@ function renderGigSettingsModal(){
     ${rows.map(([k,label,sub])=>{ const on=gs[k]; return `<div class="row" style="gap:14px;padding:11px 0;cursor:pointer" data-act="toggleGigSetting" data-id="${k}">
       <div class="toggle" style="flex:none;background:${on?'#1b1b1b':'#fff'}"><div class="dot" style="left:${on?20:2}px;background:${on?'#fff':'#1b1b1b'}"></div></div>
       <div><div style="font-size:15px;font-weight:600">${label}</div><div style="font-size:12px;color:#8a8a8a;margin-top:2px">${sub}</div></div></div>`; }).join('')}
+    <div style="border-top:1px solid var(--b2);margin-top:4px;padding-top:14px">
+      <a class="link" style="color:var(--accent)" data-act="deleteGig">Delete gig</a>
+    </div>
     <button class="btn btn-dark" style="margin-top:14px" data-act="closeGigSettings">Done</button>
   </div></div>`;
 }

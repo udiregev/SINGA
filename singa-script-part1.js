@@ -201,6 +201,7 @@ async function saveSongRow(s){ if(!ST.userId || !s) return; try{ const r=await s
 async function savePlaylistRow(p){ if(!ST.userId || !p || p.auto) return; try{ const r=await sb.from('playlists').upsert(playlistToRow(p)); if(r.error) console.error('Singa: playlist save failed', r.error); }catch(e){ console.error('Singa: playlist save failed', e); } }
 async function saveGigRow(g){ if(!ST.userId || !g) return; try{ const r=await sb.from('gigs').upsert(gigToRow(g)); if(r.error) console.error('Singa: gig save failed', r.error); }catch(e){ console.error('Singa: gig save failed', e); } }
 async function deleteSongRow(id){ if(!ST.userId || !id) return; try{ await sb.from('songs').delete().eq('id',id).eq('owner_id',ST.userId); }catch(e){ console.error('Singa: song delete failed', e); } }
+async function deleteGigRow(id){ if(!ST.userId || !id) return; try{ await sb.from('gigs').delete().eq('id',id).eq('owner_id',ST.userId); }catch(e){ console.error('Singa: gig delete failed', e); } }
 
 const _saveTimers = {};
 function debounceSave(key, fn, delay){ clearTimeout(_saveTimers[key]); _saveTimers[key] = setTimeout(fn, delay||800); }
@@ -321,7 +322,7 @@ Dream a little dream of me`;
     D.songs[songId] = song; D.order = [songId, ...D.order];
     const autoPl = (D.playlists||[]).find(p=>p.auto); if(autoPl) autoPl.ids = D.order;
     const gigId = 'g'+Date.now();
-    const gig = { id:gigId, title:'Demo Gig', date:'', setlist:[songId], settings:{}, isPublic:false, plays:0, added:Date.now(), mine:true };
+    const gig = { id:gigId, title:'Demo Gig', date:'', setlist:[songId], settings:{}, isPublic:true, plays:0, added:Date.now(), mine:true };
     D.gigs = [...D.gigs, gig];
     await Promise.all([ saveSongRow(song), saveGigRow(gig) ]);
   }catch(e){ console.error('Singa: sample content setup failed', e); }

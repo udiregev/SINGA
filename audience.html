@@ -130,7 +130,7 @@ async function init(){
   catch(e){ els.gigTitle.textContent = 'Could not connect'; showEmpty('Could not connect', 'Check your internet connection and reload.'); return; }
   if(gigRes.error || !gigRes.data){
     els.gigTitle.textContent = 'Gig not found';
-    showEmpty("This gig isn't available", 'Ask the performer to open the gig and tap "Make shared", then re-scan the QR code.');
+    showEmpty("This gig isn't available", "It may have been deleted, or the link/QR code is out of date — ask the performer for a fresh one.");
     return;
   }
   gig = gigRes.data;

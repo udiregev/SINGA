@@ -92,7 +92,10 @@ create table if not exists public.gigs (
   date_label text not null default '',
   setlist jsonb not null default '[]'::jsonb,
   settings jsonb not null default '{}'::jsonb,
-  is_public boolean not null default false,
+  -- Gigs are shareable from the moment they're created — unlike songs/
+  -- playlists, there's no separate "make shared" step, so this defaults
+  -- to true (the app also always sends it explicitly on insert).
+  is_public boolean not null default true,
   plays integer not null default 0,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
