@@ -8,64 +8,92 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=Source+Serif+4:opsz,wght@8..60,700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,300,0..1,0" rel="stylesheet">
 <style>
-:root{ --fg:#1b1b1b; --m2:#8a8a8a; --m3:#6f6f6f; --canvas:#ecebe8; --accent:#f24822; --b2:#ececec; --chordblue:#2f8fe0; }
+:root{
+  --bg:#fff; --fg:#1b1b1b; --muted:#8a8a8a; --line:#ececec; --s1:#ececec; --s2:#e3e3e3;
+  --accent:#f24822; --chordblue:#2f8fe0; --canvas:#ecebe8;
+}
+:root[data-theme="dark"]{ --bg:#1b1b1b; --fg:#fff; --muted:#8f8f8f; --line:#353535; --s1:#2a2a2a; --s2:#242424; }
 *{box-sizing:border-box}
-html,body{margin:0;background:var(--canvas)}
-body{font-family:'Hanken Grotesk',system-ui,sans-serif;color:var(--fg);-webkit-font-smoothing:antialiased;min-height:100vh;display:flex;flex-direction:column}
-#top{flex:none;background:#fff;padding:16px 20px;border-bottom:1px solid var(--b2)}
-.wordmark{font-family:'Source Serif 4',serif;font-weight:700;font-size:20px}
-.live{background:var(--accent);color:#fff;font-size:10px;font-weight:800;letter-spacing:.08em;padding:3px 7px;border-radius:4px;margin-left:10px}
-#gigTitle{font-size:22px;font-weight:700;margin-top:10px}
-#gigMeta{font-size:13px;color:var(--m3);margin-top:4px}
-#status{flex:none;padding:14px 20px;font-size:14px;color:var(--m3);background:#fff;border-bottom:1px solid var(--b2)}
-#songHead{flex:none;padding:16px 20px 4px}
-#songTitle{font-size:19px;font-weight:700}
-#songSub{font-size:13px;color:var(--m3);margin-top:2px}
-#stage{flex:1;min-height:0;overflow:auto;padding:14px 20px 40%;display:flex;flex-direction:column;align-items:center}
+html,body{margin:0;background:var(--canvas);height:100%}
+body{font-family:'Hanken Grotesk',system-ui,sans-serif;color:var(--fg);-webkit-font-smoothing:antialiased;min-height:100vh;display:flex;flex-direction:column;background:var(--bg);transition:background .25s,color .25s}
+.msi{font-family:'Material Symbols Outlined';font-weight:normal;font-style:normal;line-height:1;display:inline-block;vertical-align:middle}
+a{color:inherit}
+input,textarea,button{font-family:inherit;color:inherit}
+button{cursor:pointer}
+#app{flex:1;display:flex;flex-direction:column;min-height:100vh;max-width:520px;margin:0 auto;width:100%;position:relative}
+#head{flex:none;height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 18px;border-bottom:1px solid var(--line)}
+.darkToggle{display:flex;align-items:center;gap:6px;cursor:pointer}
+.darkToggle .track{width:38px;height:22px;border-radius:11px;border:1.5px solid var(--fg);position:relative}
+.darkToggle .track .dot{position:absolute;top:2px;left:var(--knob,2px);transition:left .25s cubic-bezier(.2,.8,.2,1);width:15px;height:15px;border-radius:50%;background:var(--fg)}
+.wordmark{font-family:'Source Serif 4',serif;font-weight:700;font-size:19px}
+.live{background:var(--accent);color:#fff;font-size:10px;font-weight:800;letter-spacing:.08em;padding:3px 7px;border-radius:4px;margin-left:8px;vertical-align:middle}
+.iconbtn{border:0;background:transparent;display:flex;align-items:center;justify-content:center;color:var(--fg)}
+#main{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column}
+.pad{padding:18px 22px}
+.btn{height:52px;border:0;border-radius:12px;background:var(--fg);color:var(--bg);font-size:16px;font-weight:700}
+.btn-outline{height:46px;border:1.5px solid var(--fg);border-radius:10px;background:transparent;color:var(--fg);font-size:14px;font-weight:700}
+input.field{height:50px;border:1.5px solid var(--line);border-radius:12px;padding:0 16px;font-size:16px;outline:none;background:transparent;color:var(--fg);width:100%}
+/* ---- Lyrics tab ---- */
 .lyrics-wrap{display:flex;flex-direction:column;align-items:flex-start;gap:16px;width:100%;max-width:640px}
 .lline{display:flex;flex-wrap:wrap;column-gap:7px}
 .lword{display:flex;flex-direction:column;cursor:default}
 .lword .lchord{height:18px;font-size:13px;font-weight:600;color:var(--chordblue)}
-.lword .ltext{font-size:22px;color:#aaa;transition:color .15s}
+.lword .ltext{font-size:22px;color:var(--muted);transition:color .15s}
 .lword.cur .ltext{color:var(--fg);font-weight:700}
-.lline.lheader{opacity:.5;font-style:italic;font-size:13px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--m3)}
-.lword.done .ltext{color:#555}
-#setlist{flex:none;padding:16px 20px 28px;border-top:1px solid var(--b2);background:#fff}
-#setlist h3{font-size:12px;font-weight:800;letter-spacing:.06em;color:var(--m2);margin:0 0 8px}
-.slRow{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--b2);font-size:14px}
-.slRow:last-child{border-bottom:0}
-.slRow .n{color:var(--m2);font-size:12px}
-.empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;padding:40px 24px;color:var(--m3)}
+.lline.lheader{opacity:.5;font-style:italic;font-size:13px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--muted)}
+.lword.done .ltext{color:var(--muted);opacity:.6}
+.empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;padding:40px 24px;color:var(--muted)}
 .empty h2{font-size:18px;color:var(--fg);margin:0}
+/* ---- Tabs ---- */
+#tabbar{flex:none;height:76px;border-top:1px solid var(--line);display:flex;padding:8px 6px 16px;background:var(--bg)}
+#tabbar button{flex:1;border:0;background:transparent;display:flex;flex-direction:column;align-items:center;gap:2px;color:var(--muted)}
+#tabbar button.on{color:var(--fg)}
+#tabbar button span.lbl{font-size:11px;font-weight:700}
+/* ---- Photos ---- */
+.photogrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.phototile{position:relative;border-radius:10px;overflow:hidden;background:var(--s1);aspect-ratio:1}
+.phototile img{width:100%;height:100%;object-fit:cover;display:block}
+.phototile .by{position:absolute;left:6px;bottom:6px;font-size:10px;background:rgba(0,0,0,.55);color:#fff;padding:2px 6px;border-radius:5px}
+.phototile .dl{position:absolute;right:6px;top:6px;width:26px;height:26px;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;display:flex;align-items:center;justify-content:center;text-decoration:none}
+.fabPhoto{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);width:58px;height:58px;border-radius:50%;border:0;background:var(--fg);color:var(--bg);display:flex;align-items:center;justify-content:center;box-shadow:0 8px 24px rgba(0,0,0,.2)}
+/* ---- Chat ---- */
+.chatRow{display:flex;flex-direction:column;gap:3px;max-width:80%}
+.chatRow .who{font-size:11px;color:var(--muted);font-weight:600}
+.chatRow .bub{padding:10px 14px;border-radius:14px;font-size:15px;line-height:1.35}
+.chatRow .dmtag{font-size:10px;color:var(--muted);display:flex;align-items:center;gap:3px}
+/* ---- Requests ---- */
+.reqRow{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--line)}
+.voteBtn{min-width:58px;height:40px;border-radius:10px;border:1.5px solid var(--fg);background:transparent;color:var(--fg);font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:2px}
+.voteBtn.on{background:var(--fg);color:var(--bg)}
+/* ---- Share overlay ---- */
+#shareOverlay{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;z-index:40;padding:40px 26px}
+#shareOverlay img{width:220px;height:220px;border-radius:12px;background:#fff;padding:12px}
+.toast{position:fixed;left:50%;bottom:96px;transform:translateX(-50%);background:#1b1b1b;color:#fff;font-size:13px;font-weight:600;padding:10px 16px;border-radius:10px;z-index:50}
 </style>
 </head>
 <body>
-<div id="top">
-  <span class="wordmark">Singa<span class="live" id="liveBadge" style="display:none">LIVE</span></span>
-  <div id="gigTitle">Loading…</div>
-  <div id="gigMeta"></div>
+<div id="app">
+  <div id="head"></div>
+  <div id="main"></div>
+  <div id="tabbarWrap"></div>
 </div>
-<div id="status" style="display:none"></div>
-<div id="songHead" style="display:none">
-  <div id="songTitle"></div>
-  <div id="songSub"></div>
-</div>
-<div id="stage"></div>
-<div id="setlist" style="display:none"><h3>TONIGHT'S SETLIST</h3><div id="setlistRows"></div></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.js"></script>
 <script>
 "use strict";
 /* ============================================================
-   Audience Guest Site — a no-login, read-only page guests reach by
-   scanning a gig's QR code (see openQr/audienceUrl in the main app's
-   singa-script-part1.js/part9.js). It reads the gig's public row (and
-   its setlist's songs) directly from Supabase, then listens on the
-   same Realtime broadcast channel the performer's app publishes
-   playback position to (joinGigChannel/broadcastGigState), so the
-   lyrics here scroll in sync with what's actually being sung —
-   no separate server, no polling.
+   Audience Guest Site — a no-login page guests reach by scanning a
+   gig's QR code (see openQr/audienceUrl in the main app's
+   singa-script-part1.js/part9.js). Built from the Audience Phone
+   webapp design (dark/light toggle, Join screen, Lyrics/Requests/
+   Photos/Chat tab bar, share-QR overlay). Guests have no account —
+   each browser gets a random guest id + a name they type once,
+   both kept in localStorage — so "who sent this" is self-reported,
+   not authenticated; see the privacy note on gig_chat_messages in
+   supabase-schema.sql for what that trade-off means for DMs.
    ============================================================ */
 const sb = supabase.createClient(
   'https://xnzytiaixthfbmejltww.supabase.co',
@@ -73,21 +101,15 @@ const sb = supabase.createClient(
 );
 
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function icon(name,size){ return `<span class="msi" style="font-size:${size||22}px">${name}</span>`; }
+function uid(){ try{ return crypto.randomUUID(); }catch(e){ return 'id'+Date.now()+Math.random().toString(16).slice(2); } }
 function parseLyrics(text){ return (text||'').split('\n').map(l=>l.trim()).filter(Boolean).map(l=>l.split(/\s+/)); }
-// A line wrapped entirely in brackets/parens ("[Verse 2]") is a structural
-// label, not something actually sung — kept out of the word list, same as
-// the performer app's timing(), so indices into word_timestamps still line up.
-function isHeaderLine(ws){
-  if(!ws || !ws.length) return false;
-  return /^[\[(]/.test(ws[0]) && /[\])]$/.test(ws[ws.length-1]);
-}
+function isHeaderLine(ws){ if(!ws || !ws.length) return false; return /^[\[(]/.test(ws[0]) && /[\])]$/.test(ws[ws.length-1]); }
 function timing(s){
   const lines = parseLyrics(s && s.lyrics); const words = [];
   lines.forEach((ws,li)=>{ if(isHeaderLine(ws)) return; ws.forEach((w,wi)=>words.push({li,wi,t:1+li*4+wi*(3.2/ws.length)})); });
   const realTs = s && s.word_timestamps;
-  if(realTs && realTs.length===words.length){
-    words.forEach((w,i)=>{ if(typeof realTs[i]==='number' && isFinite(realTs[i])) w.t = realTs[i]; });
-  }
+  if(realTs && realTs.length===words.length){ words.forEach((w,i)=>{ if(typeof realTs[i]==='number' && isFinite(realTs[i])) w.t = realTs[i]; }); }
   const total = (s && typeof s.audio_duration_sec==='number') ? s.audio_duration_sec : (1+lines.length*4+1.5);
   return { lines, words, total };
 }
@@ -96,116 +118,388 @@ function curWord(tm,t){ let i=-1; for(let k=0;k<tm.words.length;k++){ if(tm.word
 const params = new URLSearchParams(location.search);
 const gigId = params.get('gig');
 
-const els = {
-  gigTitle: document.getElementById('gigTitle'),
-  gigMeta: document.getElementById('gigMeta'),
-  liveBadge: document.getElementById('liveBadge'),
-  status: document.getElementById('status'),
-  songHead: document.getElementById('songHead'),
-  songTitle: document.getElementById('songTitle'),
-  songSub: document.getElementById('songSub'),
-  stage: document.getElementById('stage'),
-  setlist: document.getElementById('setlist'),
-  setlistRows: document.getElementById('setlistRows'),
+function lsGet(k,fallback){ try{ const v = localStorage.getItem(k); return v==null?fallback:v; }catch(e){ return fallback; } }
+function lsSet(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
+
+let guestId = lsGet('singa_guest_id', null);
+if(!guestId){ guestId = uid(); lsSet('singa_guest_id', guestId); }
+
+const ST = {
+  loading:true, notFoundReason:null,
+  gig:null, songsById:{}, settings:{},
+  theme: lsGet('singa_aud_theme','light'),
+  joined: gigId ? lsGet('singa_joined_'+gigId,'')==='1' : false,
+  nameDraft: lsGet('singa_aud_name',''),
+  name: lsGet('singa_aud_name',''),
+  tab:'lyrics', share:false, qrDataUrl:null,
+  live:null, receivedAt:0, ended:false,
+  photos:[], photosLoading:true,
+  chat:[], chatLoading:true, chatDraft:'', chatDM:false, chatNameGate:false, chatNameDraft: lsGet('singa_aud_name',''),
+  requests:[], reqLoading:true, reqDraft:'',
+  toast:null
 };
+let toastTimer=null;
+function toast(msg){ ST.toast=msg; render(); clearTimeout(toastTimer); toastTimer=setTimeout(()=>{ ST.toast=null; render(); }, 2200); }
 
-function showEmpty(title, sub){
-  els.stage.innerHTML = `<div class="empty"><h2>${esc(title)}</h2><div>${esc(sub||'')}</div></div>`;
-}
-function setStatus(msg){
-  if(!msg){ els.status.style.display='none'; return; }
-  els.status.style.display='block'; els.status.textContent = msg;
-}
+function gigSettings(g){ return { photos:true, chat:true, dm:false, order:false, requests:true, browse:true, ...((g&&g.settings)||{}) }; }
 
-let gig = null, songsById = {};
-// Live state received from the performer's broadcast, plus the moment it
-// arrived — used to interpolate playback position locally between
-// messages (they land every ~400ms, not every frame).
-let live = null, receivedAt = 0;
+/* ============================================================ */
+function applyTheme(){ document.documentElement.setAttribute('data-theme', ST.theme); }
+function toggleTheme(){ ST.theme = ST.theme==='dark' ? 'light' : 'dark'; lsSet('singa_aud_theme', ST.theme); applyTheme(); render(); }
 
-async function init(){
-  if(!gigId){ els.gigTitle.textContent = 'No gig link'; showEmpty('Nothing to show', 'This link is missing a gig.'); return; }
-  let gigRes;
-  try{ gigRes = await sb.from('gigs').select('*').eq('id', gigId).eq('is_public', true).maybeSingle(); }
-  catch(e){ els.gigTitle.textContent = 'Could not connect'; showEmpty('Could not connect', 'Check your internet connection and reload.'); return; }
-  if(gigRes.error || !gigRes.data){
-    els.gigTitle.textContent = 'Gig not found';
-    showEmpty("This gig isn't available", "It may have been deleted, or the link/QR code is out of date — ask the performer for a fresh one.");
-    return;
-  }
-  gig = gigRes.data;
-  els.gigTitle.textContent = gig.title || 'Gig';
-  els.gigMeta.textContent = (gig.date_label || '') + (gig.setlist && gig.setlist.length ? ' · ' + gig.setlist.length + ' song' + (gig.setlist.length===1?'':'s') : '');
-
-  if(gig.setlist && gig.setlist.length){
-    try{
-      const songsRes = await sb.from('songs').select('*').in('id', gig.setlist);
-      (songsRes.data||[]).forEach(row=>{ songsById[row.id] = row; });
-    }catch(e){ console.error('Singa audience: failed to load songs', e); }
-    els.setlist.style.display='block';
-    els.setlistRows.innerHTML = gig.setlist.map((id,i)=>{
-      const s = songsById[id];
-      return `<div class="slRow"><span>${esc(s ? (s.title||'Untitled song') : 'Untitled song')}</span><span class="n">${i+1}</span></div>`;
-    }).join('');
-  }
-
-  setStatus('Waiting for the performer to start a song…');
-  showEmpty('Waiting for the performer…', 'The lyrics will appear here as soon as they start playing.');
-
-  const channel = sb.channel('gig-live-'+gigId);
-  channel.on('broadcast', { event:'state' }, msg => {
-    live = msg.payload; receivedAt = performance.now();
-    if(live.ended){ els.liveBadge.style.display='none'; setStatus(null); els.songHead.style.display='none'; showEmpty('This gig has ended', 'Thanks for watching!'); live=null; }
-  }).subscribe();
-
-  setInterval(renderFrame, 150);
+function renderHead(){
+  const knob = ST.theme==='dark' ? 18 : 2;
+  return `<div class="darkToggle" data-act="toggleTheme">
+      <div class="track" style="--knob:${knob}px"><div class="dot"></div></div>
+      <span class="msi" style="font-size:19px">light_mode</span>
+    </div>
+    <span class="wordmark">Singa${ST.live && !ST.ended ? '<span class="live">LIVE</span>' : ''}</span>
+    <button class="iconbtn" data-act="toggleShare" title="Share">${icon(ST.share?'close':'qr_code_2',24)}</button>`;
 }
 
-function renderFrame(){
-  if(!live) return;
-  els.liveBadge.style.display='inline';
-  const s = songsById[live.songId];
-  if(!s){
-    els.songHead.style.display='none';
-    showEmpty('Up next…', "The performer hasn't shared this song's lyrics yet.");
-    return;
-  }
-  els.songHead.style.display='block';
-  els.songTitle.textContent = s.title || 'Untitled song';
-  els.songSub.textContent = s.sub || '';
+async function ensureQr(){
+  if(ST.qrDataUrl || !window.QRCode) return;
+  try{
+    ST.qrDataUrl = await QRCode.toDataURL(location.href, { width:440, margin:1, color:{ dark:'#1b1b1b', light:'#ffffff' } });
+    render();
+  }catch(e){ console.error('Singa audience: QR generation failed', e); }
+}
 
-  if(live.vcd>0){
-    setStatus(null);
-    els.stage.innerHTML = `<div class="empty"><h2>Starting in ${Math.max(1,Math.ceil(live.vcd))}…</h2></div>`;
-    return;
+function renderShareOverlay(){
+  ensureQr();
+  return `<div id="shareOverlay">
+    <div style="font-size:21px;font-weight:700;text-align:center">Bring a friend</div>
+    ${ST.qrDataUrl ? `<img src="${ST.qrDataUrl}" alt="QR code">` : `<div style="width:220px;height:220px;border-radius:12px;background:var(--s1)"></div>`}
+    <div style="font-size:13px;font-weight:600;word-break:break-all;text-align:center">${esc(location.href)}</div>
+  </div>`;
+}
+
+/* ============================================================
+   JOIN SCREEN
+   ============================================================ */
+function renderJoin(){
+  const g = ST.gig;
+  return `<div class="pad" style="flex:1;display:flex;flex-direction:column;gap:14px">
+    <div style="font-size:13px;color:var(--muted);font-weight:600">You're invited to</div>
+    <div style="font-size:28px;font-weight:700;line-height:1.2">${esc(g.title||'Gig')}</div>
+    <div style="font-size:14px;color:var(--muted)">${g.owner_nickname?'Hosted by '+esc(g.owner_nickname)+' · ':''}${esc(g.date_label||'')}</div>
+    <div style="flex:1"></div>
+    <input class="field" placeholder="Your name (optional)" value="${esc(ST.nameDraft)}" data-bind="nameDraft">
+    <button class="btn" data-act="join">Join the gig</button>
+    <div style="font-size:12px;color:var(--muted);text-align:center">Follow the lyrics, request songs, share photos.</div>
+  </div>`;
+}
+
+/* ============================================================
+   LYRICS TAB
+   ============================================================ */
+function renderLyricsTab(){
+  if(ST.ended){
+    return `<div class="empty"><h2>This gig has ended</h2><div>Thanks for watching! Photos and chat are still here below.</div></div>`;
   }
-  if(live.listening){ setStatus('Listening for the performer to start singing…'); }
-  else if(!live.playing){ setStatus('Paused'); }
-  else { setStatus(null); }
+  const live = ST.live;
+  if(!live){
+    const first = ST.gig.setlist && ST.gig.setlist.length ? ST.songsById[ST.gig.setlist[0]] : null;
+    return `<div class="empty"><h2>Waiting for the performer…</h2><div>${first?('First up: '+esc(first.title||'Untitled song')):'The lyrics will appear here as soon as they start playing.'}</div></div>`;
+  }
+  const s = ST.songsById[live.songId];
+  if(!s){ return `<div class="empty"><h2>Up next…</h2><div>The performer hasn't shared this song's lyrics yet.</div></div>`; }
+  if(live.vcd>0){ return `<div class="empty"><h2>Starting in ${Math.max(1,Math.ceil(live.vcd))}…</h2></div>`; }
+  if(!s.lyrics || !s.lyrics.trim()){ return `<div class="empty"><h2>No synced lyrics for this song yet</h2></div>`; }
 
   const tm = timing(s);
-  const elapsed = live.playing ? (performance.now() - receivedAt) / 1000 : 0;
+  const elapsed = live.playing ? (performance.now() - ST.receivedAt) / 1000 : 0;
   const t = Math.min(tm.total, (live.t||0) + elapsed);
   const ci = curWord(tm, t);
-
-  if(!s.lyrics || !s.lyrics.trim()){
-    showEmpty('No synced lyrics for this song yet', '');
-    return;
-  }
-  let k = -1;
-  const html = tm.lines.map((ws, li) => {
+  let k=-1;
+  const html = tm.lines.map((ws,li)=>{
     if(isHeaderLine(ws)) return `<div class="lline lheader">${esc(ws.join(' '))}</div>`;
-    const wordsHTML = ws.map((w, wi) => {
+    const wordsHTML = ws.map((w,wi)=>{
       k++;
       const chord = (s.chords||{})[li+'-'+wi];
-      const cls = k===ci ? 'cur' : (k<ci ? 'done' : '');
+      const cls = k===ci?'cur':(k<ci?'done':'');
       return `<div class="lword ${cls}">${chord?`<div class="lchord">${esc(chord)}</div>`:'<div class="lchord"></div>'}<div class="ltext">${esc(w)}</div></div>`;
     }).join('');
     return `<div class="lline">${wordsHTML}</div>`;
   }).join('');
-  els.stage.innerHTML = `<div class="lyrics-wrap" id="lyricsWrap">${html}</div>`;
-  const cur = els.stage.querySelector('.lword.cur');
-  if(cur) cur.scrollIntoView({ block:'center', behavior:'smooth' });
+  const statusLine = live.listening ? 'Listening for the performer to start singing…' : (!live.playing ? 'Paused' : '');
+  return `<div style="padding:14px 22px 4px">
+      <div style="font-size:11px;font-weight:800;letter-spacing:.08em;color:var(--accent)">${live.playing?'NOW PLAYING':(live.listening?'LISTENING':'PAUSED')}</div>
+      <div style="font-size:16px;font-weight:700;margin-top:2px">${esc(s.title||'Untitled song')}</div>
+      ${statusLine?`<div style="font-size:12px;color:var(--muted);margin-top:2px">${statusLine}</div>`:''}
+    </div>
+    <div style="flex:1;min-height:0;overflow:auto;padding:14px 22px 30%;display:flex;flex-direction:column;align-items:flex-start">
+      <div class="lyrics-wrap">${html}</div>
+    </div>`;
+}
+
+/* ============================================================
+   REQUESTS TAB ("song voting")
+   ============================================================ */
+async function loadRequests(){
+  if(!gigId) return;
+  try{
+    const res = await sb.from('gig_requests').select('*').eq('gig_id', gigId).order('votes', { ascending:false }).order('created_at', { ascending:true });
+    ST.requests = res.data||[];
+  }catch(e){ console.error('Singa audience: failed to load requests', e); }
+  ST.reqLoading=false; render();
+}
+async function sendRequest(){
+  const t = (ST.reqDraft||'').trim(); if(!t) return;
+  ST.reqDraft='';
+  const row = { id:'r'+Date.now()+Math.random().toString(16).slice(2,6), gig_id:gigId, title:t, sub:'Requested by '+(ST.name.trim()||'Someone'), votes:1, voter_ids:[guestId] };
+  ST.requests = [row, ...ST.requests]; render();
+  try{ const r = await sb.from('gig_requests').insert(row); if(r.error) console.error('Singa audience: request insert failed', r.error); }
+  catch(e){ console.error('Singa audience: request insert failed', e); }
+}
+async function toggleVote(id){
+  const r = ST.requests.find(x=>x.id===id); if(!r) return;
+  const voters = r.voter_ids||[]; const mine = voters.includes(guestId);
+  r.voter_ids = mine ? voters.filter(x=>x!==guestId) : [...voters, guestId];
+  r.votes = (r.votes||0) + (mine?-1:1);
+  render();
+  try{ const res = await sb.from('gig_requests').update({ votes:r.votes, voter_ids:r.voter_ids }).eq('id', id); if(res.error) console.error('Singa audience: vote update failed', res.error); }
+  catch(e){ console.error('Singa audience: vote update failed', e); }
+}
+function renderRequestsTab(){
+  const rows = ST.requests.slice().sort((a,b)=> (b.votes-a.votes) || (new Date(a.created_at)-new Date(b.created_at)));
+  return `<div class="pad" style="display:flex;flex-direction:column;gap:12px;flex:1;min-height:0">
+    <div style="font-size:24px;font-weight:700">Requests</div>
+    <div style="font-size:13px;color:var(--muted)">Vote for what's next. The band sees the top of the list.</div>
+    <div style="display:flex;gap:8px">
+      <input class="field" style="height:46px" placeholder="Request a song" value="${esc(ST.reqDraft)}" data-bind="reqDraft" data-enter="sendRequest">
+      <button class="btn" style="height:46px;width:auto;padding:0 18px" data-act="sendRequest">Send</button>
+    </div>
+    <div style="overflow:auto;flex:1">
+      ${ST.reqLoading ? `<div style="color:var(--muted);padding:16px 0">Loading…</div>` :
+        (rows.length ? rows.map(r=>{
+          const mine = (r.voter_ids||[]).includes(guestId);
+          return `<div class="reqRow"><div style="flex:1"><div style="font-size:15px;font-weight:600">${esc(r.title)}</div><div style="font-size:12px;color:var(--muted);margin-top:2px">${esc(r.sub||'')}</div></div>
+            <button class="voteBtn ${mine?'on':''}" data-act="toggleVote" data-id="${esc(r.id)}">${icon('arrow_drop_up',20)}${r.votes||0}</button></div>`;
+        }).join('') : `<div style="color:var(--muted);padding:16px 0">No requests yet — be the first.</div>`)}
+    </div>
+  </div>`;
+}
+
+/* ============================================================
+   PHOTOS TAB
+   ============================================================ */
+async function loadPhotos(){
+  if(!gigId) return;
+  try{
+    const res = await sb.from('gig_photos').select('*').eq('gig_id', gigId).order('created_at', { ascending:false });
+    ST.photos = (res.data||[]).map(p=>({ ...p, url: sb.storage.from('gig-photos').getPublicUrl(p.storage_path).data.publicUrl }));
+  }catch(e){ console.error('Singa audience: failed to load photos', e); }
+  ST.photosLoading=false; render();
+}
+function pickPhoto(){ document.getElementById('photoInput').click(); }
+async function uploadPhoto(file){
+  if(!file) return;
+  const ext = (file.name && file.name.includes('.')) ? file.name.split('.').pop() : 'jpg';
+  const path = gigId+'/'+guestId+'-'+Date.now()+'.'+ext;
+  try{
+    const up = await sb.storage.from('gig-photos').upload(path, file, { contentType: file.type||'image/jpeg' });
+    if(up.error){ console.error('Singa audience: photo upload failed', up.error); toast('Could not upload photo'); return; }
+    const row = { id:'p'+Date.now()+Math.random().toString(16).slice(2,6), gig_id:gigId, guest_id:guestId, author_name: ST.name.trim()||'Someone', storage_path:path };
+    const ins = await sb.from('gig_photos').insert(row);
+    if(ins.error){ console.error('Singa audience: photo row insert failed', ins.error); toast('Could not save photo'); return; }
+    ST.photos = [{ ...row, created_at:new Date().toISOString(), url: sb.storage.from('gig-photos').getPublicUrl(path).data.publicUrl }, ...ST.photos];
+    render();
+  }catch(e){ console.error('Singa audience: photo upload failed', e); toast('Could not upload photo'); }
+}
+function renderPhotosTab(){
+  return `<div class="pad" style="display:flex;flex-direction:column;gap:14px;flex:1;min-height:0;position:relative">
+    <div><div style="font-size:13px;font-weight:700">Photos</div><div style="font-size:22px;font-weight:700;line-height:1.25">${esc(ST.gig.title||'')}</div></div>
+    <div style="flex:1;overflow:auto;padding-bottom:70px">
+      ${ST.photosLoading ? `<div style="color:var(--muted)">Loading…</div>` :
+        (ST.photos.length ? `<div class="photogrid">${ST.photos.map(p=>`<div class="phototile"><img src="${esc(p.url)}" loading="lazy" alt="Photo by ${esc(p.author_name)}"><span class="by">${esc(p.author_name||'Someone')}</span><a class="dl" href="${esc(p.url)}" download title="Download">${icon('download',16)}</a></div>`).join('')}</div>`
+          : `<div style="color:var(--muted);padding:16px 0">No photos yet — add the first one.</div>`)}
+    </div>
+    <input id="photoInput" type="file" accept="image/*" capture="environment" style="display:none">
+    <button class="fabPhoto" data-act="pickPhoto">${icon('photo_camera',26)}</button>
+  </div>`;
+}
+
+/* ============================================================
+   CHAT TAB (+ DM to the band)
+   ============================================================ */
+async function loadChat(){
+  if(!gigId) return;
+  try{
+    const res = await sb.from('gig_chat_messages').select('*').eq('gig_id', gigId).order('created_at', { ascending:true });
+    ST.chat = (res.data||[]).filter(m=> !m.is_dm || m.guest_id===guestId );
+  }catch(e){ console.error('Singa audience: failed to load chat', e); }
+  ST.chatLoading=false; render(); scrollChatToBottom();
+}
+function scrollChatToBottom(){
+  requestAnimationFrame(()=>{ const el = document.getElementById('chatScroll'); if(el) el.scrollTop = el.scrollHeight; });
+}
+async function sendChat(){
+  const t = (ST.chatDraft||'').trim(); if(!t || !ST.name.trim()) return;
+  ST.chatDraft='';
+  const row = { id:'c'+Date.now()+Math.random().toString(16).slice(2,6), gig_id:gigId, guest_id:guestId, author_name:ST.name.trim(), is_owner:false, is_dm:ST.chatDM, text:t };
+  ST.chat = [...ST.chat, row]; render(); scrollChatToBottom();
+  try{ const r = await sb.from('gig_chat_messages').insert(row); if(r.error) console.error('Singa audience: chat insert failed', r.error); }
+  catch(e){ console.error('Singa audience: chat insert failed', e); }
+}
+function openChatTab(){
+  ST.tab='chat';
+  ST.chatNameGate = !ST.name.trim();
+  render();
+}
+function saveChatName(){
+  const n = (ST.chatNameDraft||'').trim(); if(!n) return;
+  ST.name = n; lsSet('singa_aud_name', n); ST.nameDraft = n; ST.chatNameGate=false; render();
+}
+function renderChatNameGate(){
+  return `<div class="pad" style="flex:1;display:flex;flex-direction:column;gap:14px;justify-content:center">
+    <div style="font-size:22px;font-weight:700">What should we call you?</div>
+    <div style="font-size:13px;color:var(--muted)">Your name is shown next to your chat messages.</div>
+    <input class="field" placeholder="Your name" value="${esc(ST.chatNameDraft)}" data-bind="chatNameDraft" data-enter="saveChatName">
+    <button class="btn" data-act="saveChatName">Continue</button>
+  </div>`;
+}
+function renderChatTab(){
+  if(ST.chatNameGate) return renderChatNameGate();
+  const gs = ST.settings;
+  const rows = ST.chat.slice(-100);
+  const chatHTML = rows.map(m=>{
+    const mine = m.guest_id===guestId && !m.is_owner;
+    const align = (mine) ? 'flex-end' : 'flex-start';
+    const bg = m.is_owner ? 'var(--accent)' : (mine ? 'var(--fg)' : 'var(--s1)');
+    const col = (m.is_owner||mine) ? 'var(--bg)' : 'var(--fg)';
+    return `<div class="chatRow" style="align-self:${align}">
+      <span class="who" style="align-self:${align}">${esc(m.author_name||'Someone')}${m.is_owner?' · the band':''}</span>
+      <div class="bub" style="background:${bg};color:${col}">${esc(m.text)}</div>
+      ${m.is_dm?`<span class="dmtag" style="align-self:${align}">${icon('lock',12)}Only you and the band can see this</span>`:''}
+    </div>`;
+  }).join('');
+  return `<div class="pad" style="display:flex;flex-direction:column;gap:10px;flex:1;min-height:0">
+    <div style="font-size:24px;font-weight:700">Chat</div>
+    <div id="chatScroll" style="flex:1;overflow:auto;display:flex;flex-direction:column;gap:10px">
+      ${ST.chatLoading ? `<div style="color:var(--muted)">Loading…</div>` : (chatHTML || `<div style="color:var(--muted)">No messages yet — say hi.</div>`)}
+    </div>
+    <div style="display:flex;gap:8px">
+      ${gs.dm ? `<button class="iconbtn" title="Message the band privately" data-act="toggleChatDM" style="height:46px;padding:0 12px;border-radius:23px;border:1.5px solid var(--fg);background:${ST.chatDM?'var(--fg)':'transparent'};color:${ST.chatDM?'var(--bg)':'var(--fg)'};font-size:12px;font-weight:700;gap:4px">${icon('lock',18)}Band</button>` : ''}
+      <input class="field" style="height:46px;border-radius:23px" placeholder="${ST.chatDM?'Message the band privately…':'Say something to everyone…'}" value="${esc(ST.chatDraft)}" data-bind="chatDraft" data-enter="sendChat">
+      <button class="iconbtn" data-act="sendChat" style="width:46px;height:46px;border-radius:50%;background:var(--fg);color:var(--bg)">${icon('arrow_upward',22)}</button>
+    </div>
+  </div>`;
+}
+
+/* ============================================================
+   TAB BAR + MAIN RENDER
+   ============================================================ */
+function tabList(){
+  const gs = ST.settings;
+  const t = [['lyrics','lyrics','Lyrics']];
+  if(gs.requests) t.push(['requests','queue_music','Requests']);
+  if(gs.photos) t.push(['photos','photo_library','Photos']);
+  if(gs.chat) t.push(['chat','chat_bubble','Chat']);
+  return t;
+}
+function renderTabbar(){
+  if(!ST.joined) return '';
+  const tabs = tabList();
+  return `<div id="tabbar">${tabs.map(([v,ic,label])=>`<button class="${ST.tab===v?'on':''}" data-act="${v==='chat'?'openChatTab':'setTab'}" data-id="${v}">${icon(ic,22)}<span class="lbl">${label}</span></button>`).join('')}</div>`;
+}
+function renderMain(){
+  if(ST.loading) return `<div class="empty"><h2>Loading…</h2></div>`;
+  if(ST.notFoundReason) return `<div class="empty"><h2>${esc(ST.notFoundReason.title)}</h2><div>${esc(ST.notFoundReason.sub)}</div></div>`;
+  if(!ST.joined) return renderJoin();
+  if(ST.tab==='requests') return renderRequestsTab();
+  if(ST.tab==='photos') return renderPhotosTab();
+  if(ST.tab==='chat') return renderChatTab();
+  return renderLyricsTab();
+}
+function render(){
+  document.getElementById('head').innerHTML = (ST.loading||ST.notFoundReason) ? `<span class="wordmark">Singa</span>` : renderHead();
+  document.getElementById('main').innerHTML = renderMain();
+  document.getElementById('tabbarWrap').innerHTML = renderTabbar();
+  if(ST.share) document.body.insertAdjacentHTML('beforeend', renderShareOverlay());
+  else { const ov=document.getElementById('shareOverlay'); if(ov) ov.remove(); }
+  if(ST.toast) document.body.insertAdjacentHTML('beforeend', `<div class="toast">${esc(ST.toast)}</div>`);
+  else { document.querySelectorAll('.toast').forEach(t=>t.remove()); }
+  bindInputs();
+}
+function bindInputs(){
+  document.querySelectorAll('[data-bind]').forEach(el=>{
+    const key = el.getAttribute('data-bind');
+    el.oninput = ()=>{ ST[key]=el.value; };
+    const enterAct = el.getAttribute('data-enter');
+    if(enterAct) el.onkeydown = (e)=>{ if(e.key==='Enter'){ e.preventDefault(); ACTIONS[enterAct](); } };
+  });
+  const pi = document.getElementById('photoInput');
+  if(pi) pi.onchange = (e)=>{ const f=e.target.files && e.target.files[0]; if(f) uploadPhoto(f); e.target.value=''; };
+}
+document.body.addEventListener('click', e=>{
+  const t = e.target.closest('[data-act]'); if(!t) return;
+  const act = t.getAttribute('data-act'); const id = t.getAttribute('data-id');
+  if(ACTIONS[act]) ACTIONS[act](id);
+});
+document.body.addEventListener('click', e=>{
+  if(e.target.id==='shareOverlay') { ST.share=false; render(); }
+});
+
+const ACTIONS = {
+  toggleTheme, toggleShare(){ ST.share=!ST.share; render(); },
+  join(){ ST.name = ST.nameDraft.trim(); lsSet('singa_aud_name', ST.name); ST.joined=true; lsSet('singa_joined_'+gigId,'1'); ST.tab='lyrics'; render(); },
+  setTab(id){ ST.tab=id; render(); },
+  openChatTab,
+  saveChatName,
+  sendRequest, toggleVote,
+  pickPhoto,
+  toggleChatDM(){ ST.chatDM=!ST.chatDM; render(); },
+  sendChat
+};
+
+/* ============================================================
+   INIT + LIVE SYNC
+   ============================================================ */
+async function init(){
+  applyTheme();
+  if(!gigId){ ST.loading=false; ST.notFoundReason={ title:'No gig link', sub:'This link is missing a gig.' }; render(); return; }
+  let gigRes;
+  try{ gigRes = await sb.from('gigs').select('*').eq('id', gigId).eq('is_public', true).maybeSingle(); }
+  catch(e){ ST.loading=false; ST.notFoundReason={ title:'Could not connect', sub:'Check your internet connection and reload.' }; render(); return; }
+  if(gigRes.error || !gigRes.data){
+    ST.loading=false; ST.notFoundReason={ title:"This gig isn't available", sub:"It may have been deleted, or the link/QR code is out of date — ask the performer for a fresh one." }; render(); return;
+  }
+  ST.gig = gigRes.data; ST.settings = gigSettings(ST.gig);
+  if(ST.gig.setlist && ST.gig.setlist.length){
+    try{
+      const songsRes = await sb.from('songs').select('*').in('id', ST.gig.setlist);
+      (songsRes.data||[]).forEach(row=>{ ST.songsById[row.id]=row; });
+    }catch(e){ console.error('Singa audience: failed to load songs', e); }
+  }
+  ST.loading=false; render();
+
+  loadRequests(); loadPhotos(); loadChat();
+
+  const channel = sb.channel('gig-live-'+gigId);
+  channel.on('broadcast', { event:'state' }, msg=>{
+    ST.live = msg.payload; ST.receivedAt = performance.now();
+    if(ST.live.ended){ ST.ended=true; ST.live=null; }
+    render();
+  }).subscribe();
+
+  const dataChannel = sb.channel('gig-data-'+gigId);
+  dataChannel.on('postgres_changes', { event:'INSERT', schema:'public', table:'gig_chat_messages', filter:'gig_id=eq.'+gigId }, payload=>{
+    const m = payload.new;
+    if(m.is_dm && m.guest_id!==guestId) return;
+    if(ST.chat.some(x=>x.id===m.id)) return;
+    ST.chat=[...ST.chat, m]; render(); scrollChatToBottom();
+  }).on('postgres_changes', { event:'INSERT', schema:'public', table:'gig_photos', filter:'gig_id=eq.'+gigId }, payload=>{
+    const p = payload.new;
+    if(ST.photos.some(x=>x.id===p.id)) return;
+    ST.photos=[{ ...p, url: sb.storage.from('gig-photos').getPublicUrl(p.storage_path).data.publicUrl }, ...ST.photos]; render();
+  }).on('postgres_changes', { event:'*', schema:'public', table:'gig_requests', filter:'gig_id=eq.'+gigId }, payload=>{
+    if(payload.eventType==='INSERT'){ if(!ST.requests.some(x=>x.id===payload.new.id)) ST.requests=[...ST.requests, payload.new]; }
+    else if(payload.eventType==='UPDATE'){ ST.requests = ST.requests.map(x=>x.id===payload.new.id?payload.new:x); }
+    render();
+  }).subscribe();
+
+  setInterval(()=>{ if(ST.tab==='lyrics' && ST.live && ST.live.playing) render(); }, 150);
 }
 
 init();
