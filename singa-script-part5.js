@@ -123,6 +123,7 @@ function renderGig(){
     ['add','Add songs','gigAddSongs',true],
     ['edit','Edit','gigEditOpen'],
     ['image','Photos','gigPhotosOpen'],
+    ['forum','Messages','gigMessagesOpen'],
     ['person_add','Add Collaborator','gigAddCollab'],
     ['settings','Settings','openGigSettings'],
     ['share','Share','gigShare'],
@@ -165,6 +166,43 @@ function renderGigPhotos(){
       <span class="icon-btn" data-act="addPhoto">${icon('upload',30)}</span>
     </div>
     <div class="photogrid">${D.photos.slice().reverse().map(p=>`<div class="phototile" style="grid-column:span ${p.span}"><span>photo · ${esc(p.by)}</span></div>`).join('')}</div>
+  </div>`;
+}
+
+// DMs guests send via the Audience Guest Site's "Band" chat button —
+// see loadGigThreads/sendGigDM in singa-script-part1.js and
+// gig_chat_messages in supabase-schema.sql. Master/detail: a thread
+// list, or (ST.gigMsgThread set) one thread's messages + a reply box.
+function renderGigMessages(){
+  const g = gigObj();
+  const thread = ST.gigThreads.find(t=>t.guestId===ST.gigMsgThread);
+  if(!thread){
+    const rows = ST.gigThreads.map(t=>{
+      const last = t.messages[t.messages.length-1];
+      return `<div class="list-row" data-act="openGigThread" data-id="${esc(t.guestId)}"><div><div class="t">${esc(t.name||'Guest')}</div><div class="s">${esc(last.text)}</div></div>${icon('chevron_right',22)}</div>`;
+    }).join('');
+    return `<div class="scr" style="gap:24px">
+      <div class="row" style="align-items:flex-end;gap:14px">
+        <span class="icon-btn" style="margin-bottom:6px" data-act="nav" data-to="gig">${icon('chevron_left',26)}</span>
+        <div style="flex:1"><div style="font-size:13px;font-weight:700">Messages</div><div style="font-size:26px;font-weight:700;line-height:1.25;max-width:420px">${esc(g.title)}</div></div>
+      </div>
+      <div>${ST.gigMsgLoading ? `<div style="color:#8a8a8a">Loading…</div>` : (rows || `<div style="color:#8a8a8a">No direct messages yet — guests can message you privately from the Chat tab on the Audience Guest Site.</div>`)}</div>
+    </div>`;
+  }
+  const msgs = thread.messages.map(m=>{
+    const mine = m.is_owner;
+    return `<div class="row" style="justify-content:${mine?'flex-end':'flex-start'}"><div style="max-width:78%;padding:10px 14px;border-radius:14px;background:${mine?'#1b1b1b':'#f0f0f0'};color:${mine?'#fff':'#1b1b1b'};font-size:15px">${esc(m.text)}</div></div>`;
+  }).join('');
+  return `<div class="scr" style="gap:16px">
+    <div class="row" style="align-items:center;gap:14px">
+      <span class="icon-btn" data-act="closeGigThread">${icon('chevron_left',26)}</span>
+      <div style="font-size:19px;font-weight:700">${esc(thread.name||'Guest')}</div>
+    </div>
+    <div style="flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:10px" id="gigMsgScroll">${msgs}</div>
+    <div class="row" style="gap:8px">
+      <div class="search-field" style="flex:1"><input placeholder="Reply…" value="${esc(ST.gigMsgDraft)}" data-bind="gigMsgDraft" data-key="sendGigReply"></div>
+      <button class="icon-btn" style="width:46px;height:46px;border-radius:50%;background:#1b1b1b;color:#fff" data-act="sendGigReply">${icon('arrow_upward',22)}</button>
+    </div>
   </div>`;
 }
 

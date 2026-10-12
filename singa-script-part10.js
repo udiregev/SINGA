@@ -13,7 +13,8 @@ const Binds = {
   newDate(v){ ST.newItem.date=v; },
   spQuery(v){ ST.spQuery=v; render(); },
   ceName(v){ ST.collabEdit.name=v; },
-  ceEmail(v){ ST.collabEdit.email=v; }
+  ceEmail(v){ ST.collabEdit.email=v; },
+  gigMsgDraft(v){ ST.gigMsgDraft=v; }
 };
 /* ============================================================
    PLAYBACK TICK (simulated — no real audio capture/analysis)

@@ -138,3 +138,119 @@ create policy "song_samples_update" on storage.objects for update
 drop policy if exists "song_samples_delete" on storage.objects;
 create policy "song_samples_delete" on storage.objects for delete
   using (bucket_id = 'song-samples' and auth.uid() is not null);
+
+-- ============================================================
+-- GIG CHAT  (Audience Guest Site chat + DMs to the band)
+-- Guests never log in, so "who sent this" is just a random,
+-- browser-local guest_id (crypto.randomUUID(), kept in
+-- localStorage) plus whatever name they type once when they first
+-- open Chat. There's no server-side identity to check a DM's
+-- recipient against, so the guest-vs-band privacy split on is_dm
+-- rows is enforced client-side (audience.html only ever shows a
+-- guest their own DMs) rather than by RLS — anyone with the
+-- Supabase anon key could in principle query every row directly.
+-- That's the same open-by-design trust model the rest of this
+-- no-login audience experience already uses (e.g. the live
+-- broadcast channel). Rows disappear automatically when their gig
+-- is deleted (on delete cascade).
+-- ============================================================
+create table if not exists public.gig_chat_messages (
+  id text primary key,
+  gig_id text not null references public.gigs(id) on delete cascade,
+  guest_id text not null default '',
+  author_name text not null default '',
+  is_owner boolean not null default false,
+  is_dm boolean not null default false,
+  text text not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists gig_chat_gig_idx on public.gig_chat_messages(gig_id, created_at);
+
+alter table public.gig_chat_messages enable row level security;
+drop policy if exists "gig_chat_select" on public.gig_chat_messages;
+create policy "gig_chat_select" on public.gig_chat_messages for select using (true);
+drop policy if exists "gig_chat_insert" on public.gig_chat_messages;
+create policy "gig_chat_insert" on public.gig_chat_messages for insert
+  with check (exists (select 1 from public.gigs g where g.id = gig_id and g.is_public));
+
+-- ============================================================
+-- GIG PHOTOS  (Audience Guest Site photo wall)
+-- ============================================================
+create table if not exists public.gig_photos (
+  id text primary key,
+  gig_id text not null references public.gigs(id) on delete cascade,
+  guest_id text not null default '',
+  author_name text not null default '',
+  storage_path text not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists gig_photos_gig_idx on public.gig_photos(gig_id, created_at);
+
+alter table public.gig_photos enable row level security;
+drop policy if exists "gig_photos_select" on public.gig_photos;
+create policy "gig_photos_select" on public.gig_photos for select using (true);
+drop policy if exists "gig_photos_insert" on public.gig_photos;
+create policy "gig_photos_insert" on public.gig_photos for insert
+  with check (exists (select 1 from public.gigs g where g.id = gig_id and g.is_public));
+
+insert into storage.buckets (id, name, public)
+values ('gig-photos', 'gig-photos', true)
+on conflict (id) do nothing;
+
+drop policy if exists "gig_photos_storage_read" on storage.objects;
+create policy "gig_photos_storage_read" on storage.objects for select
+  using (bucket_id = 'gig-photos');
+drop policy if exists "gig_photos_storage_write" on storage.objects;
+-- Guests upload with no login, same open-by-design trust model as
+-- above: anyone holding the gig's audience link (from its QR code)
+-- can post a photo.
+create policy "gig_photos_storage_write" on storage.objects for insert
+  with check (bucket_id = 'gig-photos');
+
+-- ============================================================
+-- GIG SONG REQUESTS  ("song voting" tab — guests suggest or vote
+-- for what plays next. votes is a simple counter; voter_ids is the
+-- de-dupe list of guest_ids who've voted, since guests aren't
+-- authenticated so there's no auth.uid() to key a unique-vote
+-- constraint off of.)
+-- ============================================================
+create table if not exists public.gig_requests (
+  id text primary key,
+  gig_id text not null references public.gigs(id) on delete cascade,
+  title text not null default '',
+  sub text not null default '',
+  votes integer not null default 0,
+  voter_ids jsonb not null default '[]'::jsonb,
+  created_at timestamptz not null default now()
+);
+create index if not exists gig_requests_gig_idx on public.gig_requests(gig_id);
+
+alter table public.gig_requests enable row level security;
+drop policy if exists "gig_requests_select" on public.gig_requests;
+create policy "gig_requests_select" on public.gig_requests for select using (true);
+drop policy if exists "gig_requests_insert" on public.gig_requests;
+create policy "gig_requests_insert" on public.gig_requests for insert
+  with check (exists (select 1 from public.gigs g where g.id = gig_id and g.is_public));
+drop policy if exists "gig_requests_update" on public.gig_requests;
+-- Needed so any guest can toggle their own vote (read-modify-write
+-- the shared votes/voter_ids columns) — same no-guest-auth trade-off
+-- as the rest of this table.
+create policy "gig_requests_update" on public.gig_requests for update using (true);
+
+-- ============================================================
+-- REALTIME: add the three audience tables above to the Realtime
+-- publication so audience.html's postgres_changes subscriptions
+-- (new chat messages, new photos, vote updates) actually fire.
+-- Wrapped in existence checks so this file stays safe to re-run.
+-- ============================================================
+do $$ begin
+  if not exists (select 1 from pg_publication_tables where pubname='supabase_realtime' and schemaname='public' and tablename='gig_chat_messages') then
+    alter publication supabase_realtime add table public.gig_chat_messages;
+  end if;
+  if not exists (select 1 from pg_publication_tables where pubname='supabase_realtime' and schemaname='public' and tablename='gig_photos') then
+    alter publication supabase_realtime add table public.gig_photos;
+  end if;
+  if not exists (select 1 from pg_publication_tables where pubname='supabase_realtime' and schemaname='public' and tablename='gig_requests') then
+    alter publication supabase_realtime add table public.gig_requests;
+  end if;
+end $$;
