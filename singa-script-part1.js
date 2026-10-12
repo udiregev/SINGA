@@ -93,6 +93,7 @@ const EMPTY_SONG = { id:'none', title:'Untitled song', sub:'', lyrics:'', chords
 const D = emptyData();
 const ST = {
   screen:'login', back:'home', email:'', password:'', authBusy:false, authMode:'signin', userId:null, nickname:null, editNick:null, authProvider:null,
+  emailVerified:true, verifyModal:false,
   homeQuery:'', searchQuery:'', sort:'recent', sortOpen:false,
   listKind:'songs', listPl:null, listQuery:'',
   songId:'dgbmh', viewBy:null, viewChord:null, instrument:'guitar', menu:false, instMenu:false, chordH:230,
@@ -121,6 +122,11 @@ let toastTimer = null;
 async function applySession(session){
   ST.userId = session.user.id;
   ST.email = session.user.email || ST.email;
+  // Supabase can hand back a session before its email is confirmed (depends
+  // on the project's "Confirm email" setting) — track the real
+  // email_confirmed_at rather than just "a session exists", so canSync()
+  // below can tell the two apart.
+  ST.emailVerified = !!(session.user.email_confirmed_at || session.user.confirmed_at);
   const socialAvatar = (session.user.user_metadata && session.user.user_metadata.avatar_url) || null;
   let row = null;
   try{
@@ -357,6 +363,17 @@ Dream a little dream of me`;
     D.gigs = [...D.gigs, gig];
     await Promise.all([ saveSongRow(song), saveGigRow(gig) ]);
   }catch(e){ console.error('Singa: sample content setup failed', e); }
+}
+// Gate for any action that would write to Supabase (song/gig/playlist
+// saves and deletes, profile sync, gig DM replies, avatar uploads). Denies
+// the action outright and surfaces the "verify your email" popup instead
+// of letting local state change and then failing — or silently no-oping —
+// in the background. Only fires once there IS a session but its email
+// isn't confirmed; a fully logged-out state is handled by the login screen
+// itself, not this guard.
+function canSync(){
+  if(ST.userId && !ST.emailVerified){ ST.verifyModal = true; render(); return false; }
+  return true;
 }
 function syncProfile(){
   if(!ST.userId) return;
