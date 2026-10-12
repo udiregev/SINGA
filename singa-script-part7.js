@@ -35,6 +35,15 @@ function renderNickModal(){
   </div></div>`;
 }
 
+function renderVerifyModal(){
+  return `<div class="modal-backdrop" data-act="closeVerifyModal"><div class="modal" style="max-width:380px;text-align:center;align-items:center;gap:14px" onclick="modalClick(event)">
+    <div class="mhead" style="width:100%"><span style="font-size:21px;font-weight:600">Verify your email</span><span class="icon-btn" data-act="closeVerifyModal">${icon('close',22)}</span></div>
+    <div style="font-size:14px;color:#6f6f6f;line-height:1.5">We sent a confirmation link to <b>${esc(ST.email)}</b>. Verify it before saving songs, gigs, or playlists — until then, nothing you create here will be saved.</div>
+    <button class="btn btn-dark" style="width:100%" data-act="resendVerifyEmail">Resend email</button>
+    <a class="link" data-act="closeVerifyModal">Got it</a>
+  </div></div>`;
+}
+
 function modalClick(e){
   // Let clicks on any actionable element inside the modal (the X button,
   // Save/Create, etc.) bubble up to the document's delegated handler;
@@ -52,6 +61,7 @@ function renderModals(){
   if(ST.newItem) html += renderNewModal();
   if(ST.collabEdit) html += renderCollabEditModal();
   if(ST.editNick!=null) html += renderNickModal();
+  if(ST.verifyModal) html += renderVerifyModal();
   // The chord/markings-step note editor now floats as a modal popup (over
   // the lyrics, not squeezed in below them) instead of being part of the
   // normal in-flow layout.

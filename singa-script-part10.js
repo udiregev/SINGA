@@ -168,6 +168,7 @@ document.getElementById('avatarInput').addEventListener('change', async function
   if(!file) return;
   e.target.value = '';
   if(!ST.userId){ toast('Sign in first'); return; }
+  if(!canSync()) return;
   try{
     const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
     const path = ST.userId + '/avatar.' + ext;

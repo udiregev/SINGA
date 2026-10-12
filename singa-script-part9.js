@@ -72,7 +72,7 @@ const Actions = {
     try{ await sb.auth.signOut(); }catch(e){}
     ST.screen='login'; ST.email=''; ST.password=''; ST.nickname=null; ST.authProvider=null; ST.userId=null; render();
   },
-  pickAvatar(){ document.getElementById('avatarInput').click(); },
+  pickAvatar(){ if(!canSync()) return; document.getElementById('avatarInput').click(); },
   async rebootApp(){
     try{
       if('serviceWorker' in navigator){
@@ -87,8 +87,8 @@ const Actions = {
     location.reload();
   },
   runSearch(){ ST.screen='search'; ST.searchQuery = ST.homeQuery; ST.sortOpen=false; render(); },
-  newItem(d){ ST.newItem = { kind:d.kind, name:'', date:'' }; render(); },
-  newSong(){ newSongDraft(); render(); },
+  newItem(d){ if(!canSync()) return; ST.newItem = { kind:d.kind, name:'', date:'' }; render(); },
+  newSong(){ if(!canSync()) return; newSongDraft(); render(); },
   openPlaylist(d){ ST.screen='list'; ST.listKind='songs'; ST.listPl=d.id; ST.listQuery=''; ST.sortOpen=false; render(); },
   openGig(d){ ST.gigId=d.id; ST.screen='gig'; ST.qrOpen=false; render(); },
   openSongFrom(d){ openSongOrIncomplete(d.id, d.from); render(); },
@@ -100,19 +100,19 @@ const Actions = {
   editNickname(){ ST.editNick = ST.nickname || nicknameFromEmail(ST.email); render(); },
   nickInput(v){ ST.editNick=v; render(); },
   closeEditNick(){ ST.editNick=null; render(); },
-  saveNickname(){ if(ST.editNick && ST.editNick.trim()) ST.nickname = ST.editNick.trim(); ST.editNick=null; syncProfile(); render(); toast('Nickname updated'); },
+  saveNickname(){ if(!canSync()) return; if(ST.editNick && ST.editNick.trim()) ST.nickname = ST.editNick.trim(); ST.editNick=null; syncProfile(); render(); toast('Nickname updated'); },
   openUpgrade(){ ST.upgrade=true; render(); },
   closeUpgrade(){ ST.upgrade=false; render(); },
-  doUpgrade(){ ST.plan='rockstar'; ST.upgrade=false; syncProfile(); render(); toast("You're a RockStar now"); },
-  downgrade(){ ST.plan='free'; syncProfile(); render(); toast('Switched to Free'); },
+  doUpgrade(){ if(!canSync()) return; ST.plan='rockstar'; ST.upgrade=false; syncProfile(); render(); toast("You're a RockStar now"); },
+  downgrade(){ if(!canSync()) return; ST.plan='free'; syncProfile(); render(); toast('Switched to Free'); },
   newCollab(){ ST.collabEdit = { i:null, name:'', email:'', gigs: ST.collabFor ? [ST.collabFor] : [] }; render(); },
   editCollab(d){ const i = +d.id; const c = D.collabs[i]; ST.collabEdit = { i, name:c.name, email:c.email, gigs:[...c.gigs] }; render(); },
   closeCollabEdit(){ ST.collabEdit=null; render(); },
   toggleCeGig(d){ const ce = ST.collabEdit; const on = ce.gigs.includes(d.id); ce.gigs = on ? ce.gigs.filter(x=>x!==d.id) : [...ce.gigs, d.id]; render(); },
   saveCollab(){ const ce = ST.collabEdit; if(!ce.name.trim()) return; const c = { name:ce.name, email:ce.email, gigs:ce.gigs }; if(ce.i==null) D.collabs.push(c); else D.collabs[ce.i]=c; ST.collabEdit=null; render(); toast(ce.i==null?'Invite sent to '+(ce.email||ce.name):'Saved'); },
-  setInstrument(d){ ST.instrument = d.id; syncProfile(); render(); },
-  setStartMode(d){ ST.startMode = d.id; syncProfile(); render(); },
-  toggleNotif(d){ ST.notif[d.id] = !ST.notif[d.id]; syncProfile(); render(); },
+  setInstrument(d){ if(!canSync()) return; ST.instrument = d.id; syncProfile(); render(); },
+  setStartMode(d){ if(!canSync()) return; ST.startMode = d.id; syncProfile(); render(); },
+  toggleNotif(d){ if(!canSync()) return; ST.notif[d.id] = !ST.notif[d.id]; syncProfile(); render(); },
   toggleCollabInGig(d){ const i = +d.id; const cg = D.gigs.find(g=>g.id===ST.collabFor); if(!cg) return; const c = D.collabs[i]; const inGig = c.gigs.includes(cg.id); c.gigs = inGig ? c.gigs.filter(x=>x!==cg.id) : [...c.gigs, cg.id]; render(); toast(inGig ? c.name+' removed from '+cg.title : c.name+' added to '+cg.title); },
 
   setCreateMode(d){ ST.createMode=d.id; ST.phase='idle'; ST.step='lyrics'; ST.editorLine=0; render(); },
@@ -197,6 +197,7 @@ const Actions = {
     ST.ctx='syncpreview'; ST.t = ST.t<tm.total ? ST.t : 0; ST.playing=true; render();
   },
   async startRecord(){
+    if(!canSync()) return;
     // Ask for the mic right now, before showing the 3-2-1 countdown, so the
     // browser's permission prompt appears immediately on tapping Record
     // instead of after the countdown finishes.
@@ -208,7 +209,7 @@ const Actions = {
     pendingMicStream = stream;
     ST.phase='countdown'; ST.cd=3; ST.bars=[]; ST.recT=0; render();
   },
-  startUpload(){ document.getElementById('fileInput').click(); },
+  startUpload(){ if(!canSync()) return; document.getElementById('fileInput').click(); },
   startCloud(){ toast('Importing from cloud storage is coming soon — use Record or Upload for now'); },
   stopRecord(){
     if(ST.phase==='countdown'){
@@ -227,18 +228,19 @@ const Actions = {
 
   openPicker(d){ ST.pick = { kind:d.kind, songId: ST.editId }; render(); },
   closePick(){ ST.pick=null; render(); },
-  togglePickPlaylist(d){ const p = D.playlists.find(x=>x.id===d.id); const sid = ST.pick.songId; const on = p.ids.includes(sid); p.ids = on ? p.ids.filter(i=>i!==sid) : [...p.ids, sid]; render(); queueSavePlaylist(d.id); },
-  togglePickGig(d){ const g = D.gigs.find(x=>x.id===d.id); const sid = ST.pick.songId; const on = g.setlist.includes(sid); g.setlist = on ? g.setlist.filter(i=>i!==sid) : [...g.setlist, sid]; render(); queueSaveGig(d.id); },
+  togglePickPlaylist(d){ if(!canSync()) return; const p = D.playlists.find(x=>x.id===d.id); const sid = ST.pick.songId; const on = p.ids.includes(sid); p.ids = on ? p.ids.filter(i=>i!==sid) : [...p.ids, sid]; render(); queueSavePlaylist(d.id); },
+  togglePickGig(d){ if(!canSync()) return; const g = D.gigs.find(x=>x.id===d.id); const sid = ST.pick.songId; const on = g.setlist.includes(sid); g.setlist = on ? g.setlist.filter(i=>i!==sid) : [...g.setlist, sid]; render(); queueSaveGig(d.id); },
   closeSongPick(){ ST.songPick=null; ST.spQuery=''; render(); },
-  toggleSongPick(d){ const sp = ST.songPick; const isPl = sp.kind==='playlist'; const target = isPl ? D.playlists.find(p=>p.id===sp.id) : D.gigs.find(g=>g.id===sp.id); const ids = isPl?target.ids:target.setlist; const on = ids.includes(d.id); const next = on ? ids.filter(i=>i!==d.id) : [...ids, d.id]; if(isPl) target.ids=next; else target.setlist=next; render(); if(isPl) queueSavePlaylist(sp.id); else queueSaveGig(sp.id); },
-  togglePublic(){ const s = D.songs[ST.editId]; if(!s) return; s.isPublic = !s.isPublic; render(); saveSongRow(s); },
-  togglePlaylistPublic(d){ const p = D.playlists.find(x=>x.id===d.id); if(!p) return; p.isPublic = !p.isPublic; render(); savePlaylistRow(p); },
+  toggleSongPick(d){ if(!canSync()) return; const sp = ST.songPick; const isPl = sp.kind==='playlist'; const target = isPl ? D.playlists.find(p=>p.id===sp.id) : D.gigs.find(g=>g.id===sp.id); const ids = isPl?target.ids:target.setlist; const on = ids.includes(d.id); const next = on ? ids.filter(i=>i!==d.id) : [...ids, d.id]; if(isPl) target.ids=next; else target.setlist=next; render(); if(isPl) queueSavePlaylist(sp.id); else queueSaveGig(sp.id); },
+  togglePublic(){ if(!canSync()) return; const s = D.songs[ST.editId]; if(!s) return; s.isPublic = !s.isPublic; render(); saveSongRow(s); },
+  togglePlaylistPublic(d){ if(!canSync()) return; const p = D.playlists.find(x=>x.id===d.id); if(!p) return; p.isPublic = !p.isPublic; render(); savePlaylistRow(p); },
   viewDone(){ openSongOrIncomplete(ST.editId, 'home'); render(); },
-  continueSong(){ ST.editId = ST.songId; ST.screen='create'; ST.createMode='manual'; ST.step='lyrics'; ST.phase='idle'; ST.editorLine=0; render(); },
+  continueSong(){ if(!canSync()) return; ST.editId = ST.songId; ST.screen='create'; ST.createMode='manual'; ST.step='lyrics'; ST.phase='idle'; ST.editorLine=0; render(); },
 
-  openNew(d){ ST.newItem = { kind:d.id, name:'', date:'' }; render(); },
+  openNew(d){ if(!canSync()) return; ST.newItem = { kind:d.id, name:'', date:'' }; render(); },
   closeNew(){ ST.newItem=null; render(); },
   createNew(){
+    if(!canSync()) return;
     const ni = ST.newItem; if(!ni || !ni.name.trim()) return;
     const withSong = ST.pick ? [ST.pick.songId] : [];
     if(ni.kind==='playlist'){
@@ -262,9 +264,10 @@ const Actions = {
   setInstrumentMenu(d, e){ if(e) e.stopPropagation(); ST.instrument=d.id; ST.menu=false; ST.instMenu=false; render(); },
   menuAddGig(){ ST.menu=false; ST.pick = { kind:'gig', songId: ST.songId }; render(); },
   removeMarkings(){ const s = song(ST.songId); if(!s || s.id==='none') return; s.notes={}; ST.menu=false; render(); toast('Markings removed'); queueSaveSong(s.id); },
-  editSong(){ stopOnsetListening(); ST.editId = ST.songId; ST.screen='create'; ST.createMode='manual'; ST.step='chords'; ST.phase='idle'; ST.menu=false; ST.editorLine=0; render(); },
-  deleteSong(){ stopOnsetListening(); const delId=ST.songId; delete D.songs[delId]; D.order = D.order.filter(x=>x!==delId); const autoPl=D.playlists.find(p=>p.auto); if(autoPl) autoPl.ids=D.order; ST.screen='home'; ST.menu=false; render(); toast('Song deleted'); deleteSongRow(delId); },
+  editSong(){ if(!canSync()) return; stopOnsetListening(); ST.editId = ST.songId; ST.screen='create'; ST.createMode='manual'; ST.step='chords'; ST.phase='idle'; ST.menu=false; ST.editorLine=0; render(); },
+  deleteSong(){ if(!canSync()) return; stopOnsetListening(); const delId=ST.songId; delete D.songs[delId]; D.order = D.order.filter(x=>x!==delId); const autoPl=D.playlists.find(p=>p.auto); if(autoPl) autoPl.ids=D.order; ST.screen='home'; ST.menu=false; render(); toast('Song deleted'); deleteSongRow(delId); },
   copySong(){
+    if(!canSync()) return;
     const src = song(ST.songId);
     const id = 'n'+Date.now();
     const copy = { id, title:src.title, sub:src.sub, lyrics:src.lyrics, chords:{...src.chords}, notes:{...src.notes},
@@ -320,6 +323,7 @@ const Actions = {
   openGigThread(d){ ST.gigMsgThread=d.id; ST.gigMsgDraft=''; render(); },
   closeGigThread(){ ST.gigMsgThread=null; render(); },
   async sendGigReply(){
+    if(!canSync()) return;
     const text = (ST.gigMsgDraft||'').trim(); if(!text || !ST.gigMsgThread) return;
     ST.gigMsgDraft='';
     const g = gigObj(); const guestId = ST.gigMsgThread;
@@ -352,6 +356,7 @@ const Actions = {
   closeGigSettings(){ ST.gigSettings=false; render(); },
   toggleGigSetting(d){ const g = gigObj(); const gs = gigSettings(g); g.settings = { ...gs, [d.id]: !gs[d.id] }; render(); },
   deleteGig(){
+    if(!canSync()) return;
     const delId = gigObj().id;
     D.gigs = D.gigs.filter(g=>g.id!==delId);
     ST.gigSettings=false; ST.screen='home'; render();
@@ -387,10 +392,20 @@ const Actions = {
   gigHeard(){ stopOnsetListening(); ST.gListening=false; ST.playing=true; ST.t=0; render(); },
   editPart(){ toast('Opens Markings for the '+ST.part+' layer'); },
   addPhoto(){ D.photos.push({ id:Date.now(), by: ST.nickname || nicknameFromEmail(ST.email), span: Math.random()>0.7?2:1 }); render(); },
-  saveGigEdit(){ const g = gigObj(); g.setlist = ST.editList; ST.screen='gig'; ST.editList=null; render(); toast('Setlist saved'); saveGigRow(g); },
+  saveGigEdit(){ if(!canSync()) return; const g = gigObj(); g.setlist = ST.editList; ST.screen='gig'; ST.editList=null; render(); toast('Setlist saved'); saveGigRow(g); },
   addToSetlist(){ const el = ST.editList; const next = D.order.find(id=>!el.includes(id)); if(next) { ST.editList=[...el,next]; render(); } else toast('Every song is already in this gig'); },
   editRowUp(d){ const i = +d.id; if(!i) return; const l=[...ST.editList]; [l[i-1],l[i]]=[l[i],l[i-1]]; ST.editList=l; render(); },
   editRowRemove(d){ const i = +d.id; ST.editList = ST.editList.filter((_,j)=>j!==i); render(); },
 
-  toggleDark(){ ST.perfDark = !ST.perfDark; render(); }
+  toggleDark(){ ST.perfDark = !ST.perfDark; render(); },
+
+  closeVerifyModal(){ ST.verifyModal=false; render(); },
+  async resendVerifyEmail(){
+    if(!ST.email){ toast('No email on file'); return; }
+    try{
+      const r = await sb.auth.resend({ type:'signup', email: ST.email });
+      if(r.error) toast(r.error.message);
+      else toast('Verification email sent to '+ST.email);
+    }catch(e){ toast('Could not resend — check your connection'); }
+  }
 };
