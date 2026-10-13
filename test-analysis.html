@@ -156,13 +156,21 @@
     </div>
 
     <div class="panel" id="chordsPanel" style="display:none">
-      <h2>Chord timeline</h2>
-      <div class="sec-caveat">Chroma-based template matching (major/minor triads only, from 16kHz downmixed audio). Reliable on a single clean instrument, much less so with full-band mixes or heavy vocals.</div>
+      <h2>Chord timeline <span id="chordSourceTag" style="font-weight:400;color:var(--sub);font-size:12px;"></span></h2>
+      <div class="sec-caveat" id="chordCaveat">Chroma-based template matching (major/minor triads only, from 16kHz downmixed audio). Reliable on a single clean instrument, much less so with full-band mixes or heavy vocals — if that matters for this clip, try the AI option below instead.</div>
       <div style="max-height:260px;overflow-y:auto">
         <table>
           <thead><tr><th>Start</th><th>End</th><th>Chord</th><th>Confidence</th></tr></thead>
           <tbody id="chordTableBody"></tbody>
         </table>
+      </div>
+      <div style="margin-top:14px;border-top:1px solid var(--line);padding-top:14px">
+        <p class="fieldlabel">Re-analyze with a real AI model (more accurate on vocals + instrument mixes)</p>
+        <p class="hint">Calls a real deep-learning chord recognizer (madmom's DeepChroma + CRF decoder) running on a small server you deploy yourself — this can't run in the browser. Paste your deployed server's base URL (e.g. https://your-app.onrender.com). The audio is sent only to that URL.</p>
+        <div class="row">
+          <input type="text" id="chordServerUrl" placeholder="https://your-chord-server.example.com" style="max-width:320px">
+          <button class="btn ghost" id="aiChordBtn">Analyze chords with AI</button>
+        </div>
       </div>
     </div>
 
@@ -176,7 +184,7 @@
 </div>
 
 <footer><div>
-  Experimental test page for the <a href="https://udiregev.github.io/SINGA/" target="_blank">Singa</a> app. Transcription runs a Whisper model (English-only base size — upgraded from tiny for better accuracy on vocals mixed with instruments) fully in your browser via WebAssembly (first use downloads roughly 75–150MB; nothing is uploaded anywhere). Chord and section detection are plain signal-processing heuristics, not machine learning.
+  Experimental test page for the <a href="https://udiregev.github.io/SINGA/" target="_blank">Singa</a> app. Transcription runs a Whisper model (English-only base size — upgraded from tiny for better accuracy on vocals mixed with instruments) fully in your browser via WebAssembly (first use downloads roughly 75–150MB; nothing is uploaded anywhere). Section detection is a plain signal-processing heuristic, not machine learning. Chord detection defaults to the same kind of heuristic, with an optional real AI model (see the Chord timeline panel) that calls a server you deploy yourself — see the <code>server/</code> folder in this repo.
 </div></footer>
 
 <script type="module">
@@ -188,6 +196,8 @@ const state = {
   audioFileName: null, // real filename (with correct extension) for the loaded blob
   words: [], // {text, start, end}
   chords: [], // {start, end, label, conf}
+  chordSource: 'heuristic', // 'heuristic' (in-browser template matching) or 'ai' (server-side model)
+  energy: [], // {t, rms} — used by section-labeling
   sections: [], // {start, end, label}
   lyricsOnlyLines: null // when running the text-only path
 };
@@ -516,13 +526,19 @@ function guessSections(chords, energy, words, totalDuration){
   const blockLen = 4; // seconds
   const blocks = [];
   for(let t=0; t<totalDuration; t+=blockLen){
+    const actualLen = Math.min(totalDuration,t+blockLen) - t;
     const label = chords.filter(c=>c.start<t+blockLen && c.end>t).map(c=>c.label).join('-') || 'N';
     const blockEnergy = energy.filter(e=>e.t>=t && e.t<t+blockLen);
     const avgE = blockEnergy.length ? blockEnergy.reduce((a,e)=>a+e.rms,0)/blockEnergy.length : 0;
-    const hasWords = words.some(w=>w.start<t+blockLen && w.end>t);
-    blocks.push({ start:t, end:Math.min(totalDuration,t+blockLen), fingerprint:label, energy:avgE, hasWords });
+    // Word density: words per second in this block, not just a yes/no — a
+    // sparsely-sung block (e.g. one held word) reads very differently from
+    // a densely-sung one, and the spec asks for density specifically.
+    const wordsInBlock = words.filter(w=>w.start!=null && w.start<t+blockLen && w.end>t).length;
+    const wordDensity = actualLen>0 ? wordsInBlock/actualLen : 0;
+    blocks.push({ start:t, end:Math.min(totalDuration,t+blockLen), fingerprint:label, energy:avgE, wordDensity });
   }
   const maxE = Math.max(1e-6, ...blocks.map(b=>b.energy));
+  const maxDensity = Math.max(1e-6, ...blocks.map(b=>b.wordDensity));
   const freq = {};
   blocks.forEach(b=>{ freq[b.fingerprint]=(freq[b.fingerprint]||0)+1; });
   const repeated = Object.keys(freq).filter(k=>freq[k]>1 && k!=='N').sort((a,b)=>freq[b]-freq[a]);
@@ -533,7 +549,8 @@ function guessSections(chords, energy, words, totalDuration){
     let label;
     if(b.energy < maxE*0.22) label = (i < blocks.length/3) ? 'Intro' : 'Outro';
     else if(chorusFP && b.fingerprint===chorusFP) label = 'Chorus (repeated section)';
-    else if(!b.hasWords) label = 'Instrumental / solo';
+    else if(b.wordDensity < maxDensity*0.15) label = 'Instrumental / solo';
+    else if(b.wordDensity > maxDensity*0.75) label = 'Verse (dense lyrics)';
     else label = 'Verse';
     if(cur && cur.label===label) cur.end=b.end;
     else { cur = { start:b.start, end:b.end, label }; sections.push(cur); }
@@ -631,6 +648,57 @@ async function transcribeWithOpenAI(blob, apiKey){
   }
 }
 
+// ============================================================
+// AI CHORD RECOGNITION — calls a user-deployed server running a real
+// deep-learning chord recognizer (madmom DeepChroma + CRF decoder), since
+// nothing of that accuracy can run client-side today. See the server/
+// folder in this repo for the code and deploy instructions.
+// ============================================================
+function normalizeChordLabel(label){
+  // Server returns madmom-style labels like "C:maj" / "D:min" / "N".
+  // Normalize to the same bare-root / "m"-suffix style the in-browser
+  // heuristic already uses ("C", "Dm", ...) so both sources render the same.
+  if(!label || label==='N') return 'N';
+  const [root, qual] = label.split(':');
+  return qual==='min' ? root+'m' : root;
+}
+
+async function analyzeChordsWithServer(blob, filename, serverUrl){
+  log('Sending audio to the AI chord server…');
+  const base = serverUrl.replace(/\/+$/,'');
+  const form = new FormData();
+  form.append('file', blob, filename || 'audio.webm');
+  try{
+    const res = await fetch(base+'/analyze-chords', { method:'POST', body: form });
+    if(!res.ok){
+      let detail = '';
+      try{ detail = (await res.json()).error || ''; }catch(_e){ detail = await res.text().catch(()=>''); }
+      throw new Error('HTTP '+res.status+(detail?': '+detail.slice(0,200):''));
+    }
+    const json = await res.json();
+    const chords = (json.chords||[]).map(c=>({ start:c.start, end:c.end, label: normalizeChordLabel(c.label), conf: 1 }));
+    log('AI chord server returned '+chords.length+' chord segments.', 'ok');
+    return chords;
+  }catch(e){
+    log('AI chord analysis failed: '+e.message+' — check the server URL is correct, the server is running, and (if testing against a server on another machine) that it allows cross-origin requests from this page.', 'err');
+    return null;
+  }
+}
+
+$('aiChordBtn').addEventListener('click', async ()=>{
+  const url = $('chordServerUrl').value.trim();
+  if(!url){ alert('Paste your deployed chord server\'s URL first.'); return; }
+  if(!state.audioBlob){ alert('Load audio first.'); return; }
+  $('aiChordBtn').disabled = true;
+  const chords = await analyzeChordsWithServer(state.audioBlob, state.audioFileName, url);
+  $('aiChordBtn').disabled = false;
+  if(chords && chords.length){
+    state.chords = chords;
+    state.chordSource = 'ai';
+    finishAudioAnalysis();
+  }
+});
+
 $('aiFallbackBtn').addEventListener('click', async ()=>{
   const key = $('openaiKey').value.trim();
   if(!key){ alert('Paste an OpenAI API key first.'); return; }
@@ -681,6 +749,8 @@ async function runAudioPipeline(){
   log('Running chord + section analysis on the decoded audio…');
   const { chords, energy } = analyzeChordsAndEnergy(state.pcm16k, 16000);
   state.chords = chords;
+  state.chordSource = 'heuristic';
+  state.energy = energy;
   log('Found '+chords.length+' chord segments.', 'ok');
 
   const overallRms = rms(state.pcm16k);
@@ -707,7 +777,7 @@ async function runAudioPipeline(){
 
 function finishAudioAnalysis(){
   const totalDuration = state.audioBuffer ? state.audioBuffer.duration : (state.pcm16k.length/16000);
-  const sections = guessSections(state.chords, [], state.words, totalDuration);
+  const sections = guessSections(state.chords, state.energy, state.words, totalDuration);
   state.sections = sections;
 
   // Build chord-by-word lookup: whichever chord segment is active at (or
@@ -741,7 +811,7 @@ function finishAudioAnalysis(){
     : '<p class="hint">No transcript to show — try the OpenAI fallback above, or check the chord timeline below on its own.</p>';
 
   renderSections(sections);
-  renderChordTable(state.chords);
+  renderChordTable(state.chords, state.chordSource);
   renderKaraoke(state.words);
 
   $('sectionsPanel').style.display = sections.length ? 'block':'none';
@@ -759,9 +829,14 @@ function renderSections(sections){
       <input value="${escapeHtml(s.label)}" data-sidx="${i}">
     </div>`).join('');
 }
-function renderChordTable(chords){
+function renderChordTable(chords, source){
+  const isAi = source==='ai';
+  $('chordSourceTag').textContent = isAi ? '— AI model (server)' : '— in-browser heuristic';
+  $('chordCaveat').textContent = isAi
+    ? 'From the AI chord server (madmom DeepChroma + CRF decoder) — a real deep-learning model, not the in-browser heuristic. Confidence isn\'t reported per-segment by this model, so that column reads "—".'
+    : 'Chroma-based template matching (major/minor triads only, from 16kHz downmixed audio). Reliable on a single clean instrument, much less so with full-band mixes or heavy vocals — if that matters for this clip, try the AI option below instead.';
   $('chordTableBody').innerHTML = chords.map(c=>`
-    <tr><td>${fmtT(c.start)}</td><td>${fmtT(c.end)}</td><td><span class="chordpill">${escapeHtml(c.label)}</span></td><td>${(c.conf*100).toFixed(0)}%</td></tr>
+    <tr><td>${fmtT(c.start)}</td><td>${fmtT(c.end)}</td><td><span class="chordpill">${escapeHtml(c.label)}</span></td><td>${isAi ? '—' : (c.conf*100).toFixed(0)+'%'}</td></tr>
   `).join('');
 }
 function renderKaraoke(words){
