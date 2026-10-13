@@ -176,7 +176,7 @@
 </div>
 
 <footer><div>
-  Experimental test page for the <a href="https://udiregev.github.io/SINGA/" target="_blank">Singa</a> app. Transcription runs a small Whisper model fully in your browser via WebAssembly (first use downloads ~40–75MB; nothing is uploaded anywhere). Chord and section detection are plain signal-processing heuristics, not machine learning.
+  Experimental test page for the <a href="https://udiregev.github.io/SINGA/" target="_blank">Singa</a> app. Transcription runs a Whisper model (base size — upgraded from tiny for better accuracy on vocals mixed with instruments) fully in your browser via WebAssembly (first use downloads roughly 75–150MB; nothing is uploaded anywhere). Chord and section detection are plain signal-processing heuristics, not machine learning.
 </div></footer>
 
 <script type="module">
@@ -549,7 +549,7 @@ let asrPipelinePromise = null;
 async function getAsrPipeline(onProgress){
   if(!asrPipelinePromise){
     const { pipeline } = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2');
-    asrPipelinePromise = pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny', {
+    asrPipelinePromise = pipeline('automatic-speech-recognition', 'Xenova/whisper-base', {
       progress_callback: (p)=>{
         if(p && p.status==='progress' && typeof p.progress==='number') onProgress(p.progress);
       }
@@ -563,7 +563,7 @@ async function transcribeClientSide(pcm16k){
   // errored out (load failure, CDN unreachable, inference threw) — a real
   // fault. failed=false with an empty words array means the model ran fine
   // but genuinely found no speech to transcribe — not a fault by itself.
-  log('Loading in-browser Whisper model (first time only, ~40–75MB)…');
+  log('Loading in-browser Whisper model — base size (first time only, roughly 75–150MB)…');
   setProgress(0);
   let pipe;
   try{
