@@ -27,23 +27,33 @@ Chord timeline panel that calls whatever URL you deploy this to.
 - `Dockerfile` — builds the whole thing, including `ffmpeg` (to decode
   whatever format gets uploaded) and the two-pass pip install madmom needs.
 
-## Deploying it (Render.com, free/cheapest path)
+## Deploying it on Railway (same account used for the Between app)
 
 1. Push this `server/` folder to its own spot in your GitHub repo (it's
    already there if you got this file from the Singa repo).
-2. On [render.com](https://render.com), "New +" → "Web Service" → connect
-   your GitHub repo → set **Root Directory** to `server` → Render will detect
-   the `Dockerfile` automatically.
-3. Pick an instance size. The free tier works for testing but spins down
-   after inactivity (the first request after a while will be slow — 30-60s —
-   while it wakes back up and loads the model). A paid "Starter" instance
-   avoids that cold start, which matters if this becomes a real feature.
-4. Deploy. Render gives you a URL like `https://singa-chords.onrender.com`.
+2. On [railway.com](https://railway.com), "New Project" → "Deploy from GitHub
+   repo" → pick the `SINGA` repo.
+3. Open the new service's **Settings** tab and set **Root Directory** to
+   `server` — this tells Railway to build only that folder, where it'll find
+   the `Dockerfile` and use it automatically.
+4. Still in Settings, under **Networking → Public Networking**, click
+   **Generate Domain**. Railway doesn't hand out a public web address
+   automatically — you have to ask for one once, and it'll look like
+   `https://singa-chords-production.up.railway.app`.
 5. Paste that URL into the "AI chord analysis" box on `test-analysis.html`
    and click "Analyze chords with AI".
 
-Any other platform that runs a Dockerfile (Railway, Fly.io, a plain VM) works
-the same way — there's nothing Render-specific in the code itself.
+Cost is usage-based (CPU + memory time), not a flat monthly fee — roughly
+$10-20/month to keep a small instance like this running all the time,
+offset by the plan's included monthly credit (check Railway's current
+pricing page for exact numbers, since this changes). An instance that's only
+used occasionally costs less; Railway doesn't force a cold-start sleep the
+way some free tiers do, but you pay for whatever time it's actually running.
+
+## Deploying it elsewhere
+
+Any other platform that runs a Dockerfile (Render, Fly.io, a plain VM) works
+the same way — there's nothing Railway-specific in the code itself.
 
 ## Testing it directly (without the browser page)
 
@@ -51,12 +61,10 @@ the same way — there's nothing Render-specific in the code itself.
 curl -F "file=@/path/to/your/recording.m4a" https://your-deployed-url/analyze-chords
 ```
 
-## Cost note
+## If this becomes a paid feature
 
-This runs real inference per request — not free at any real volume. If this
-becomes a paid feature in Singa (as opposed to this test page), budget for
-either: (a) an always-on small instance (predictable monthly cost, no cold
-starts), or (b) a scale-to-zero platform (cheaper at low volume, but the
-first request after idle time is slow). Either way, metering/paywalling this
-specific endpoint (vs. the free in-browser heuristic) is a reasonable way to
-keep hosting costs tied to actual paying usage.
+This runs real inference per request — not free at any real volume. If
+chord detection ends up gated behind a paid tier in Singa (as opposed to
+this test page), metering or paywalling this specific endpoint — leaving
+the free in-browser heuristic available to everyone — is a reasonable way
+to keep hosting costs tied to actual paying usage.
