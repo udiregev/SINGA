@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Singa — Lyrics File Import Lab</title>
+<style>
+  :root{
+    --bg:#f6f5f2; --panel:#ffffff; --ink:#1b1b1b; --sub:#6f6f6f; --line:#e2e2e2;
+    --accent:#1b1b1b; --accent-ink:#ffffff; --good:#1f7a4d; --warn:#9a6a00; --bad:#b3261e;
+    --chip:#f0efe9;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+  body{padding:0 0 60px;}
+  .wrap{max-width:860px;margin:0 auto;padding:0 18px;}
+  header{padding:28px 18px 18px;}
+  header .wrap{display:flex;flex-direction:column;gap:6px;}
+  h1{font-size:22px;margin:0;font-weight:700;letter-spacing:-0.01em;}
+  .tag{font-size:13px;color:var(--sub);line-height:1.5;max-width:640px;}
+  .badge{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;background:#1b1b1b;color:#fff;padding:3px 8px;border-radius:20px;}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px;margin-top:16px;}
+  .panel h2{font-size:15px;margin:0 0 4px;font-weight:700;}
+  .panel .desc{font-size:12.5px;color:var(--sub);margin:0 0 14px;line-height:1.5;}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
+  .dropzone{border:2px dashed var(--line);border-radius:14px;padding:28px 18px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s;}
+  .dropzone:hover,.dropzone.drag{border-color:var(--ink);background:#fafaf8;}
+  .dropzone p{margin:0;font-size:13px;color:var(--sub);}
+  .dropzone input{display:none;}
+  button.btn{font-size:13px;font-weight:600;padding:9px 16px;border-radius:10px;border:1px solid var(--ink);background:var(--ink);color:#fff;cursor:pointer;}
+  button.btn.ghost{background:#fff;color:var(--ink);}
+  button.btn:disabled{opacity:.4;cursor:default;}
+  input[type=text], textarea{width:100%;font-size:13px;font-family:inherit;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:#fdfdfc;color:var(--ink);}
+  textarea{min-height:160px;resize:vertical;line-height:1.6;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px;}
+  .fieldlabel{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--sub);margin-bottom:6px;display:block;}
+  .hint{font-size:11.5px;color:var(--sub);margin-top:6px;line-height:1.5;}
+  .hint.warn{color:var(--warn);}
+  .hint.bad{color:var(--bad);}
+  .hint.ok{color:var(--good);}
+  .log{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px;background:#111;color:#d7d7d2;border-radius:10px;padding:12px;max-height:180px;overflow-y:auto;white-space:pre-wrap;line-height:1.6;margin-top:12px;}
+  .log .err{color:#ff8a7a;}
+  .log .ok{color:#8fe3a8;}
+  .meta{display:flex;gap:18px;flex-wrap:wrap;font-size:12.5px;color:var(--sub);margin-top:10px;}
+  .meta b{color:var(--ink);}
+  .sec-caveat{font-size:11.5px;background:#fff7e6;border:1px solid #f0d9a0;color:#7a5600;border-radius:10px;padding:10px 12px;margin-bottom:14px;line-height:1.5;}
+  .results{display:none;}
+  .results.show{display:block;}
+  .stat-row{display:flex;gap:20px;flex-wrap:wrap;margin-bottom:14px;}
+  .stat{background:var(--chip);border-radius:10px;padding:8px 14px;font-size:12.5px;}
+  .stat b{display:block;font-size:18px;}
+  .structured{font-size:15px;line-height:2.1;}
+  .label-line{display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#fff;background:#1b1b1b;border-radius:6px;padding:2px 8px;display:inline-block;margin:10px 0 4px;}
+  .lyric-line{display:block;}
+  footer{max-width:860px;margin:30px auto 0;padding:0 18px;font-size:11.5px;color:var(--sub);line-height:1.6;}
+  a{color:var(--ink);}
+</style>
+</head>
+<body>
+
+<header><div class="wrap">
+  <span class="badge">Lab · experimental</span>
+  <h1>Lyrics File Import Lab</h1>
+  <p class="tag">Tests whether Singa can take a real lyrics/chord-sheet file — a .txt or a .pdf — detect what kind of file it is, pull the actual text out of it, and then tell sung lyric lines apart from section labels like "Chorus 2" or "[Bridge]". Runs for real in this browser; the PDF text extraction is a real library (pdf.js), not a mockup.</p>
+</div></header>
+
+<div class="wrap">
+
+  <div class="panel">
+    <h2>1 · Upload a file</h2>
+    <p class="desc">Drop a .txt or .pdf lyrics/chord sheet, or click to choose one.</p>
+    <div class="dropzone" id="dropzone">
+      <p id="dropzoneText">Drag a .txt or .pdf file here, or click to browse</p>
+      <input type="file" id="fileInput" accept=".txt,.md,.pdf,text/plain,application/pdf">
+    </div>
+    <p class="hint" id="fileStatus"></p>
+    <div class="meta" id="fileMeta" style="display:none"></div>
+    <div class="log" id="log" style="display:none"></div>
+  </div>
+
+  <div class="panel results" id="rawPanel">
+    <h2>2 · Extracted text</h2>
+    <p class="desc">Exactly what was pulled out of the file before any lyric/label detection runs. Editable — fix anything that looks wrong, then re-run detection below.</p>
+    <textarea id="rawText" spellcheck="false"></textarea>
+    <div class="row" style="margin-top:10px">
+      <button class="btn" id="detectBtn">Detect lyrics vs. section labels</button>
+    </div>
+  </div>
+
+  <div class="panel results" id="outPanel">
+    <h2>3 · Detected structure</h2>
+    <div class="sec-caveat">Same heuristic the main Analysis Lab uses: a bracketed line like "[Bridge]" always counts as a label; an unbracketed line only counts as one if it's short (≤4 words) and starts with a section keyword (verse, chorus, bridge, intro, outro, solo, etc.), optionally followed by a number ("Chorus 2"). Everything else is treated as a sung lyric line.</p>
+    <div class="stat-row" id="statRow"></div>
+    <div class="structured" id="structuredOut"></div>
+  </div>
+
+</div>
+
+<footer class="wrap">
+  <p>File-type detection: Singa reads the file's extension/MIME type to decide how to handle it — plain text is read directly, PDFs are parsed with <a href="https://mozilla.github.io/pdf.js/" target="_blank" rel="noopener">pdf.js</a> (the same open-source library Firefox uses to render PDFs), reconstructing line breaks from each text chunk's position on the page rather than just concatenating words. A scanned/photographed PDF (no real text layer, just an image of a page) will extract little or nothing — that needs OCR, which this lab does not do.</p>
+</footer>
+
+<script>
+function $(id){ return document.getElementById(id); }
+function escapeHtml(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function log(msg, cls){
+  const el = $('log'); el.style.display='block';
+  const line = document.createElement('div'); if(cls) line.className=cls;
+  line.textContent = msg; el.appendChild(line); el.scrollTop = el.scrollHeight;
+}
+
+// ============================================================
+// FILE-TYPE DETECTION + TEXT EXTRACTION
+// ============================================================
+const dropzone = $('dropzone');
+const fileInput = $('fileInput');
+dropzone.addEventListener('click', ()=>fileInput.click());
+dropzone.addEventListener('dragover', (e)=>{ e.preventDefault(); dropzone.classList.add('drag'); });
+dropzone.addEventListener('dragleave', ()=>dropzone.classList.remove('drag'));
+dropzone.addEventListener('drop', (e)=>{
+  e.preventDefault(); dropzone.classList.remove('drag');
+  const f = e.dataTransfer.files && e.dataTransfer.files[0];
+  if(f) handleFile(f);
+});
+fileInput.addEventListener('change', (e)=>{
+  const f = e.target.files && e.target.files[0];
+  if(f) handleFile(f);
+});
+
+function detectFileKind(file){
+  const name = (file.name||'').toLowerCase();
+  const type = (file.type||'').toLowerCase();
+  if(name.endsWith('.pdf') || type==='application/pdf') return 'pdf';
+  if(name.endsWith('.txt') || name.endsWith('.md') || type.startsWith('text/')) return 'text';
+  // Unknown extension/MIME — sniff the first bytes instead of guessing blind.
+  return 'unknown';
+}
+
+async function sniffByMagicBytes(file){
+  const head = new Uint8Array(await file.slice(0,5).arrayBuffer());
+  const asStr = String.fromCharCode(...head);
+  if(asStr.startsWith('%PDF-')) return 'pdf';
+  return 'text';
+}
+
+async function handleFile(file){
+  $('log').style.display='none'; $('log').innerHTML='';
+  $('rawPanel').classList.remove('show'); $('outPanel').classList.remove('show');
+  $('fileStatus').className='hint'; $('fileStatus').textContent = 'Reading "'+file.name+'"…';
+
+  let kind = detectFileKind(file);
+  if(kind==='unknown'){
+    log('No clear extension or MIME type ("'+(file.type||'none')+'") — sniffing the first bytes instead…');
+    kind = await sniffByMagicBytes(file);
+  }
+  log('Detected file type: '+kind.toUpperCase()+' ("'+file.name+'", '+Math.round(file.size/1024)+' KB)', 'ok');
+
+  $('fileMeta').style.display='flex';
+  $('fileMeta').innerHTML = `<span><b>${escapeHtml(file.name)}</b></span><span>${Math.round(file.size/1024)} KB</span><span>detected as: <b>${kind}</b></span>`;
+
+  try{
+    let text;
+    if(kind==='pdf'){
+      text = await extractPdfText(file);
+    } else {
+      text = await file.text();
+    }
+    $('rawText').value = text;
+    $('rawPanel').classList.add('show');
+    $('fileStatus').className='hint ok';
+    $('fileStatus').textContent = 'Extracted '+text.length+' characters. Review below, then run detection.';
+    if(kind==='pdf' && text.trim().length < 20){
+      log('Almost no text came out of this PDF — it is most likely a scanned image rather than a real text layer. This lab does not do OCR, so a scanned PDF needs to be re-typed or pasted as text instead.', 'err');
+      $('fileStatus').className='hint warn';
+      $('fileStatus').textContent = 'This PDF produced almost no text — it looks scanned/image-based (no OCR here).';
+    }
+  }catch(e){
+    log('Failed to extract text: '+e.message, 'err');
+    $('fileStatus').className='hint bad';
+    $('fileStatus').textContent = 'Could not read that file: '+e.message;
+  }
+}
+
+let pdfjsLib = null;
+async function loadPdfJs(){
+  if(pdfjsLib) return pdfjsLib;
+  log('Loading pdf.js (first time only)…');
+  pdfjsLib = await import('https://cdn.jsdelivr.net/npm/pdfjs-dist@4.7.76/build/pdf.min.mjs');
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.7.76/build/pdf.worker.min.mjs';
+  return pdfjsLib;
+}
+
+async function extractPdfText(file){
+  const lib = await loadPdfJs();
+  const buf = await file.arrayBuffer();
+  const doc = await lib.getDocument({ data: buf }).promise;
+  log('PDF has '+doc.numPages+' page(s). Extracting text…');
+  let fullText = '';
+  for(let p=1; p<=doc.numPages; p++){
+    const page = await doc.getPage(p);
+    const content = await page.getTextContent();
+    // pdf.js hands back text in disconnected chunks with x/y positions, not
+    // ready-made lines — group chunks that share a y (within a small
+    // tolerance, since kerning/rounding can jitter it slightly) into one
+    // line, then order each line left-to-right by x. Without this step
+    // everything on the page collapses onto one run-on line and the
+    // lyric/label detector below (which works line-by-line) can't do its job.
+    const items = content.items.map(it=>({ str: it.str, x: it.transform[4], y: it.transform[5] }));
+    const lines = [];
+    items.forEach(it=>{
+      let line = lines.find(l=>Math.abs(l.y - it.y) < 2.5);
+      if(!line){ line = { y: it.y, parts: [] }; lines.push(line); }
+      line.parts.push(it);
+    });
+    lines.sort((a,b)=>b.y-a.y);
+    lines.forEach(l=>{
+      l.parts.sort((a,b)=>a.x-b.x);
+      fullText += l.parts.map(p=>p.str).join(' ').replace(/\s+/g,' ').trim() + '\n';
+    });
+    fullText += '\n';
+  }
+  return fullText;
+}
+
+// ============================================================
+// LYRICS vs SECTION-LABEL DIFFERENTIATION
+// (identical heuristic to the main Audio & Lyrics Analysis Lab,
+// kept in sync by hand — see test-analysis.html)
+// ============================================================
+const SECTION_WORDS = ['intro','verse','chorus','pre-chorus','prechorus','bridge','outro','hook','refrain',
+  'interlude','breakdown','instrumental','solo','guitar solo','piano solo','drum solo','vamp','tag','coda','ad-lib','spoken','build','drop'];
+function sectionLabelFor(rawLine){
+  const t = (rawLine||'').trim();
+  if(!t) return null;
+  const bracketed = /^[\[(]/.test(t) && /[\])]$/.test(t);
+  const bare = t.replace(/^[\[(]\s*/,'').replace(/\s*[\])]$/,'').trim();
+  if(!bare) return null;
+  if(bracketed) return bare; // explicit [label] always wins, regardless of wording
+  const lower = bare.toLowerCase();
+  const isKeywordLine = SECTION_WORDS.some(w=>{
+    const re = new RegExp('^'+w.replace(/[-/\\^$*+?.()|[\]{}]/g,'\\$&')+'\\s*\\d*\\.?$');
+    return re.test(lower);
+  });
+  if(isKeywordLine && bare.split(/\s+/).length<=4) return bare;
+  return null;
+}
+function splitLyricsAndLabels(text){
+  return (text||'').replace(/\r\n?/g,'\n').split('\n').map(raw=>{
+    const label = sectionLabelFor(raw);
+    return label ? {type:'label', text:label} : {type:'lyric', text:raw.trim()};
+  }).filter(l=>l.type==='label' || l.text.length);
+}
+function renderStructured(lines){
+  let html = '';
+  lines.forEach(line=>{
+    if(line.type==='label'){
+      html += `<span class="label-line">${escapeHtml(line.text)}</span>`;
+    } else {
+      html += `<span class="lyric-line">${escapeHtml(line.text)}</span>`;
+    }
+  });
+  return html;
+}
+
+$('detectBtn').addEventListener('click', ()=>{
+  const text = $('rawText').value;
+  const lines = splitLyricsAndLabels(text);
+  const labelCount = lines.filter(l=>l.type==='label').length;
+  const lyricCount = lines.filter(l=>l.type==='lyric').length;
+  $('statRow').innerHTML = `
+    <div class="stat"><b>${lines.length}</b>lines total</div>
+    <div class="stat"><b>${lyricCount}</b>lyric lines</div>
+    <div class="stat"><b>${labelCount}</b>section labels</div>
+  `;
+  $('structuredOut').innerHTML = renderStructured(lines);
+  $('outPanel').classList.add('show');
+  log('Detection complete: '+lyricCount+' lyric line(s), '+labelCount+' section label(s).', 'ok');
+});
+</script>
+</body>
+</html>
