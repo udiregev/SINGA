@@ -168,7 +168,7 @@
         <p class="fieldlabel">Re-analyze with a real AI model (more accurate on vocals + instrument mixes)</p>
         <p class="hint">Calls a real deep-learning chord recognizer (madmom's DeepChroma + CRF decoder) running on a small server you deploy yourself — this can't run in the browser. Paste your deployed server's base URL (e.g. https://your-app.onrender.com). The audio is sent only to that URL.</p>
         <div class="row">
-          <input type="text" id="chordServerUrl" placeholder="https://your-chord-server.example.com" style="max-width:320px">
+          <input type="text" id="chordServerUrl" placeholder="https://your-chord-server.example.com" value="https://singa-production-e6f3.up.railway.app" style="max-width:320px">
           <button class="btn ghost" id="aiChordBtn">Analyze chords with AI</button>
         </div>
       </div>
@@ -392,7 +392,7 @@ function sectionLabelFor(rawLine){
   if(bracketed) return bare; // explicit [label] always wins, regardless of wording
   const lower = bare.toLowerCase();
   const isKeywordLine = SECTION_WORDS.some(w=>{
-    const re = new RegExp('^'+w.replace(/[-/\\^$*+?.()|[\]{}]/g,'\\$&')+'\\s*\\d*\\.?$');
+    const re = new RegExp('^'+w.replace(/[-\/\\^$*+?.()|[\]{}]/g,'\\$&')+'\\s*\\d*\\.?$');
     return re.test(lower);
   });
   if(isKeywordLine && bare.split(/\s+/).length<=4) return bare;
