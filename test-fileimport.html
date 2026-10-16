@@ -8,7 +8,7 @@
   :root{
     --bg:#f6f5f2; --panel:#ffffff; --ink:#1b1b1b; --sub:#6f6f6f; --line:#e2e2e2;
     --accent:#1b1b1b; --accent-ink:#ffffff; --good:#1f7a4d; --warn:#9a6a00; --bad:#b3261e;
-    --chip:#f0efe9;
+    --chip:#f0efe9; --chord:#8a5cff;
   }
   *{box-sizing:border-box}
   html,body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
@@ -51,6 +51,8 @@
   .structured{font-size:15px;line-height:2.1;}
   .label-line{display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#fff;background:#1b1b1b;border-radius:6px;padding:2px 8px;display:inline-block;margin:10px 0 4px;}
   .lyric-line{display:block;}
+  .chord-line{display:block;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px;font-weight:700;color:var(--chord,#7a4ad1);margin:2px 0;}
+  .ocr-badge{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;background:#eef2ff;color:#3346c7;border-radius:20px;padding:2px 8px;margin-left:6px;}
   footer{max-width:860px;margin:30px auto 0;padding:0 18px;font-size:11.5px;color:var(--sub);line-height:1.6;}
   a{color:var(--ink);}
 </style>
@@ -88,15 +90,19 @@
 
   <div class="panel results" id="outPanel">
     <h2>3 · Detected structure</h2>
-    <div class="sec-caveat">Same heuristic the main Analysis Lab uses: a bracketed line like "[Bridge]" always counts as a label; an unbracketed line only counts as one if it's short (≤4 words) and starts with a section keyword (verse, chorus, bridge, intro, outro, solo, etc.), optionally followed by a number ("Chorus 2"). Everything else is treated as a sung lyric line.</p>
+    <div class="sec-caveat">Same heuristic the main Analysis Lab uses, plus two more categories: a bracketed line like "[Bridge]" always counts as a label; an unbracketed line only counts as one if it's short (≤4 words) and starts with a section keyword (verse, chorus, bridge, intro, outro, solo, etc.), optionally followed by a number ("Chorus 2"). A line made up entirely of chord symbols ("F#m A C#m A") is pulled out as a chord line rather than counted as lyrics. Anything left over gets checked against a list of ~3000 common English words — a line with too few recognizable words (the kind of thing OCR produces when it misreads a chord-diagram grid or tab notation as text) is set aside as noise rather than counted as a lyric. This check only ever matters on an OCR'd page; it's a rough approximation, not a sure thing, so it's worth skimming what got set aside below before trusting the counts.</div>
     <div class="stat-row" id="statRow"></div>
     <div class="structured" id="structuredOut"></div>
+    <details class="results" id="noisePanel" style="margin-top:16px;display:none">
+      <summary style="cursor:pointer;font-size:12.5px;color:var(--sub);font-weight:600">Lines ignored as noise — click to review</summary>
+      <pre class="log" id="noiseOut" style="display:block;margin-top:8px;max-height:220px"></pre>
+    </details>
   </div>
 
 </div>
 
 <footer class="wrap">
-  <p>File-type detection: Singa reads the file's extension/MIME type to decide how to handle it — plain text is read directly, PDFs are parsed with <a href="https://mozilla.github.io/pdf.js/" target="_blank" rel="noopener">pdf.js</a> (the same open-source library Firefox uses to render PDFs), reconstructing line breaks from each text chunk's position on the page rather than just concatenating words. A scanned/photographed PDF (no real text layer, just an image of a page) will extract little or nothing — that needs OCR, which this lab does not do.</p>
+  <p>File-type detection: Singa reads the file's extension/MIME type to decide how to handle it, falling back to sniffing the first bytes when that's missing. Plain text is read directly. PDFs are parsed with <a href="https://mozilla.github.io/pdf.js/" target="_blank" rel="noopener">pdf.js</a> (the same open-source library Firefox uses to render PDFs), reconstructing line breaks from each text chunk's position on the page. Each page is also checked for whether it's really just a full-page photo/scan with an unreliable (or no) text layer underneath — common for chord sheets downloaded from sheet-music sites or scanned from a printed book. When that's detected, Singa re-reads that page with real OCR (<a href="https://github.com/naptha/tesseract.js" target="_blank" rel="noopener">Tesseract.js</a>, running the open-source Tesseract engine entirely in your browser) instead of trusting the page's built-in text, which is usually dramatically more accurate for scanned material.</p>
 </footer>
 
 <script>
@@ -169,9 +175,9 @@ async function handleFile(file){
     $('fileStatus').className='hint ok';
     $('fileStatus').textContent = 'Extracted '+text.length+' characters. Review below, then run detection.';
     if(kind==='pdf' && text.trim().length < 20){
-      log('Almost no text came out of this PDF — it is most likely a scanned image rather than a real text layer. This lab does not do OCR, so a scanned PDF needs to be re-typed or pasted as text instead.', 'err');
+      log('Almost no text came out of this PDF, even after the OCR fallback — the scan may be too low-quality/blurry to read, or the page is blank.', 'err');
       $('fileStatus').className='hint warn';
-      $('fileStatus').textContent = 'This PDF produced almost no text — it looks scanned/image-based (no OCR here).';
+      $('fileStatus').textContent = 'This PDF produced almost no text, even with OCR — the scan may be too low quality to read.';
     }
   }catch(e){
     log('Failed to extract text: '+e.message, 'err');
@@ -189,6 +195,90 @@ async function loadPdfJs(){
   return pdfjsLib;
 }
 
+let tesseractWorkerPromise = null;
+async function getOcrWorker(){
+  if(tesseractWorkerPromise) return tesseractWorkerPromise;
+  tesseractWorkerPromise = (async ()=>{
+    log('Loading OCR engine (Tesseract.js, first time only — this downloads a language model, ~15MB)…');
+    const { default: Tesseract } = await import('https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.esm.min.js');
+    // Pin worker/core paths explicitly rather than trusting tesseract.js's own
+    // browser defaults — as of 7.0.0 those defaults build a "@v7.0.0"-style
+    // CDN URL (an extra, invalid "v"), which 404s. The language-data default
+    // path doesn't have this problem, so it's left alone.
+    return await Tesseract.createWorker('eng', 1, {
+      workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/worker.min.js',
+      corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@7.0.0',
+    });
+  })();
+  return tesseractWorkerPromise;
+}
+
+// A page that's really just a full-page photo/scan paints one (or a few)
+// image(s) that cover almost the entire page — checked via pdf.js's own
+// operator list rather than guessing from text quality, so it works
+// whether or not the page even has a text layer at all. Any embedded text
+// on a page like this is just an invisible search/OCR overlay and its
+// position data can't be trusted to reconstruct real lines.
+async function pageIsFullPageScan(lib, page){
+  const viewport = page.getViewport({ scale: 1 });
+  const pageArea = viewport.width * viewport.height;
+  const opList = await page.getOperatorList();
+  const OPS = lib.OPS;
+  let cur = [1,0,0,1,0,0];
+  const stack = [];
+  let maxFrac = 0;
+  for(let i=0;i<opList.fnArray.length;i++){
+    const fn = opList.fnArray[i];
+    const args = opList.argsArray[i];
+    if(fn===OPS.save){ stack.push(cur.slice()); }
+    else if(fn===OPS.restore){ cur = stack.pop() || cur; }
+    else if(fn===OPS.transform){
+      const [a,b,c,d,e,f] = args;
+      const [a0,b0,c0,d0,e0,f0] = cur;
+      cur = [a*a0+b*c0, a*b0+b*d0, c*a0+d*c0, c*b0+d*d0, e*a0+f*c0+e0, e*b0+f*d0+f0];
+    }
+    else if(fn===OPS.paintImageXObject || fn===OPS.paintJpegXObject || fn===OPS.paintImageMaskXObject){
+      const [a,b,c,d] = cur;
+      maxFrac = Math.max(maxFrac, Math.abs(a*d-b*c)/pageArea);
+    }
+  }
+  return maxFrac > 0.6;
+}
+
+async function ocrPage(page){
+  const viewport = page.getViewport({ scale: 2.5 }); // ~180dpi: enough for OCR, fast enough for a browser
+  const canvas = document.createElement('canvas');
+  canvas.width = viewport.width; canvas.height = viewport.height;
+  const ctx = canvas.getContext('2d');
+  await page.render({ canvasContext: ctx, viewport }).promise;
+  const worker = await getOcrWorker();
+  const { data } = await worker.recognize(canvas);
+  return data.text;
+}
+
+function reconstructTextLayer(content){
+  // pdf.js hands back text in disconnected chunks with x/y positions, not
+  // ready-made lines — group chunks that share a y (within a small
+  // tolerance, since kerning/rounding can jitter it slightly) into one
+  // line, then order each line left-to-right by x. Without this step
+  // everything on the page collapses onto one run-on line and the
+  // lyric/label detector below (which works line-by-line) can't do its job.
+  const items = content.items.map(it=>({ str: it.str, x: it.transform[4], y: it.transform[5] }));
+  const lines = [];
+  items.forEach(it=>{
+    let line = lines.find(l=>Math.abs(l.y - it.y) < 2.5);
+    if(!line){ line = { y: it.y, parts: [] }; lines.push(line); }
+    line.parts.push(it);
+  });
+  lines.sort((a,b)=>b.y-a.y);
+  let text = '';
+  lines.forEach(l=>{
+    l.parts.sort((a,b)=>a.x-b.x);
+    text += l.parts.map(p=>p.str).join(' ').replace(/\s+/g,' ').trim() + '\n';
+  });
+  return text;
+}
+
 async function extractPdfText(file){
   const lib = await loadPdfJs();
   const buf = await file.arrayBuffer();
@@ -197,28 +287,68 @@ async function extractPdfText(file){
   let fullText = '';
   for(let p=1; p<=doc.numPages; p++){
     const page = await doc.getPage(p);
-    const content = await page.getTextContent();
-    // pdf.js hands back text in disconnected chunks with x/y positions, not
-    // ready-made lines — group chunks that share a y (within a small
-    // tolerance, since kerning/rounding can jitter it slightly) into one
-    // line, then order each line left-to-right by x. Without this step
-    // everything on the page collapses onto one run-on line and the
-    // lyric/label detector below (which works line-by-line) can't do its job.
-    const items = content.items.map(it=>({ str: it.str, x: it.transform[4], y: it.transform[5] }));
-    const lines = [];
-    items.forEach(it=>{
-      let line = lines.find(l=>Math.abs(l.y - it.y) < 2.5);
-      if(!line){ line = { y: it.y, parts: [] }; lines.push(line); }
-      line.parts.push(it);
-    });
-    lines.sort((a,b)=>b.y-a.y);
-    lines.forEach(l=>{
-      l.parts.sort((a,b)=>a.x-b.x);
-      fullText += l.parts.map(p=>p.str).join(' ').replace(/\s+/g,' ').trim() + '\n';
-    });
-    fullText += '\n';
+    const isScan = await pageIsFullPageScan(lib, page);
+    if(isScan){
+      log('Page '+p+' is a full-page image with no reliable text layer — re-reading it with OCR instead…', 'ok');
+      fullText += (await ocrPage(page)) + '\n\n';
+    } else {
+      const content = await page.getTextContent();
+      fullText += reconstructTextLayer(content) + '\n';
+    }
   }
   return fullText;
+}
+
+// A small common-English-word list (~3000 words), used only to judge
+// whether a line of OCR'd text is real content or visual noise (chord
+// diagrams, tab grids, and other sheet-music artwork get misread as
+// letters too, but hits in a real word list are far rarer for genuine
+// noise than for even heavily hyphenated real lyrics). Sourced from the
+// public domain Google 10000-English word-frequency list.
+const COMMON_WORDS = new Set(COMMON_WORDS_PLACEHOLDER.split(" "));
+function wordStats(rawLine){
+  const t = (rawLine||'').trim();
+  const tokens = t.split(/\s+/).filter(Boolean);
+  let counted = 0, hits = 0;
+  tokens.forEach(tok=>{
+    // Strip leading/trailing punctuation that's meaningful sheet-music
+    // notation (hyphens for syllables, dashes/underscores for sustained
+    // notes) rather than part of the word itself. Tokens shorter than 3
+    // letters are skipped entirely (not counted either way) — a lot of
+    // state/country/web abbreviations ("mt", "il", "ct"...) are common
+    // enough to sit in a general word-frequency list, which makes 1-2
+    // letter OCR noise fragments match it by pure chance far too often.
+    const stripped = tok.replace(/^[^A-Za-z']+|[^A-Za-z']+$/g,'').toLowerCase();
+    if(stripped.length < 3) return;
+    counted++;
+    if(COMMON_WORDS.has(stripped)) hits++;
+  });
+  // Characters that essentially never appear in sung lyrics or normal
+  // credit-line text, but show up constantly when OCR misreads a chord
+  // diagram's grid or a tab-notation box as if it were text.
+  const nonSpace = t.replace(/\s+/g,'');
+  const junkChars = (t.match(/[\[\]{}()|@©®~^]/g)||[]).length;
+  const junkRatio = nonSpace.length ? junkChars/nonSpace.length : 0;
+  return { counted, hits, junkRatio };
+}
+function isLikelyNoiseLine(rawLine){
+  if(!(rawLine||'').trim()) return false;
+  const { counted, hits, junkRatio } = wordStats(rawLine);
+  if(junkRatio > 0.12) return true;
+  if(counted < 2) return true; // too little evidence either way — default to noise
+  return (hits/counted) < 0.35;
+}
+// A much more lenient version of the same check, used only to decide
+// whether a bracketed "[label]" is a real label or an OCR misread of a
+// diagram fragment that happened to land between two stray bracket
+// characters. Section-label text is usually one or two words — "Bridge",
+// "Chorus 2" — so the body-text rule above (which wants at least 2
+// judgeable words) would wrongly reject every genuine one-word label.
+// Here, a single real dictionary word is enough to call it plausible.
+function isPlausibleBracketLabel(rawLine){
+  const { counted, hits, junkRatio } = wordStats(rawLine);
+  if(junkRatio > 0.12) return false;
+  return counted > 0 && hits > 0;
 }
 
 // ============================================================
@@ -243,37 +373,80 @@ function sectionLabelFor(rawLine){
   if(isKeywordLine && bare.split(/\s+/).length<=4) return bare;
   return null;
 }
+// A line made up entirely of chord symbols (e.g. "F#m A C#m A", often
+// printed as its own row above a lyric line in a chord sheet) is neither
+// a section label nor sung lyrics — pull it out as its own category so it
+// doesn't inflate the lyric-line count or get mangled by word-level logic.
+const CHORD_TOKEN_RE = /^[A-G](#|b)?(maj|min|m|dim|aug|sus2|sus4|add\d{1,2}|maj7|m7|6|7|9|11|13)?(\/[A-G](#|b)?)?$/;
+function chordLineFor(rawLine){
+  const t = (rawLine||'').trim();
+  if(!t) return null;
+  const tokens = t.split(/\s+/).filter(Boolean);
+  if(!tokens.length) return null;
+  const allChords = tokens.every(tok=>CHORD_TOKEN_RE.test(tok));
+  if(allChords) return tokens.join(' ');
+  return null;
+}
 function splitLyricsAndLabels(text){
   return (text||'').replace(/\r\n?/g,'\n').split('\n').map(raw=>{
     const label = sectionLabelFor(raw);
-    return label ? {type:'label', text:label} : {type:'lyric', text:raw.trim()};
-  }).filter(l=>l.type==='label' || l.text.length);
+    if(label){
+      // "[Bridge]" always counts as a label regardless of wording (see
+      // sectionLabelFor above) — but on an OCR'd page, a chord-diagram
+      // fragment that happens to land between a stray pair of brackets
+      // (e.g. a fret marker like "[4fr.]") would too. The keyword-based
+      // match (bare "Chorus", "Bridge", etc., no brackets) doesn't have
+      // this problem and is left exactly as-is — those keywords mostly
+      // aren't common enough words to survive the noise check below.
+      const bracketed = /^[\[(]/.test(raw.trim()) && /[\])]$/.test(raw.trim());
+      if(!bracketed || isPlausibleBracketLabel(label)) return {type:'label', text:label};
+    }
+    const chord = chordLineFor(raw);
+    if(chord) return {type:'chord', text:chord};
+    const trimmed = raw.trim();
+    if(!trimmed.length) return {type:'lyric', text:trimmed};
+    // Only OCR'd pages carry this kind of noise (a real digital lyrics
+    // file doesn't), but it's cheap to check and harmless either way.
+    if(isLikelyNoiseLine(trimmed)) return {type:'noise', text:trimmed};
+    return {type:'lyric', text:trimmed};
+  }).filter(l=>l.type!=='lyric' || l.text.length);
 }
 function renderStructured(lines){
   let html = '';
   lines.forEach(line=>{
     if(line.type==='label'){
       html += `<span class="label-line">${escapeHtml(line.text)}</span>`;
-    } else {
+    } else if(line.type==='chord'){
+      html += `<span class="chord-line">${escapeHtml(line.text)}</span>`;
+    } else if(line.type!=='noise'){
       html += `<span class="lyric-line">${escapeHtml(line.text)}</span>`;
     }
   });
   return html;
+}
+function renderNoise(lines){
+  return lines.filter(l=>l.type==='noise').map(l=>escapeHtml(l.text)).join('\n');
 }
 
 $('detectBtn').addEventListener('click', ()=>{
   const text = $('rawText').value;
   const lines = splitLyricsAndLabels(text);
   const labelCount = lines.filter(l=>l.type==='label').length;
+  const chordCount = lines.filter(l=>l.type==='chord').length;
   const lyricCount = lines.filter(l=>l.type==='lyric').length;
+  const noiseCount = lines.filter(l=>l.type==='noise').length;
   $('statRow').innerHTML = `
     <div class="stat"><b>${lines.length}</b>lines total</div>
     <div class="stat"><b>${lyricCount}</b>lyric lines</div>
     <div class="stat"><b>${labelCount}</b>section labels</div>
+    <div class="stat"><b>${chordCount}</b>chord lines</div>
+    <div class="stat"><b>${noiseCount}</b>ignored as noise</div>
   `;
   $('structuredOut').innerHTML = renderStructured(lines);
+  $('noiseOut').textContent = renderNoise(lines);
+  $('noisePanel').style.display = noiseCount ? 'block' : 'none';
   $('outPanel').classList.add('show');
-  log('Detection complete: '+lyricCount+' lyric line(s), '+labelCount+' section label(s).', 'ok');
+  log('Detection complete: '+lyricCount+' lyric line(s), '+labelCount+' section label(s), '+chordCount+' chord line(s), '+noiseCount+' line(s) ignored as noise.', 'ok');
 });
 </script>
 </body>
