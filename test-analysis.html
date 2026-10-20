@@ -166,7 +166,7 @@
 </div></footer>
 
 <script type="module">
-import { buildSheet, findLyricGaps, acceptGapWords } from './audio-sheet.js';
+import { buildSheet, findLyricGaps, acceptGapWords } from './audio-sheet.js?v=2';
 
 const $ = id=>document.getElementById(id);
 const esc = s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
