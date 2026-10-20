@@ -209,7 +209,15 @@ const Actions = {
     pendingMicStream = stream;
     ST.phase='countdown'; ST.cd=3; ST.bars=[]; ST.recT=0; render();
   },
-  startUpload(){ if(!canSync()) return; document.getElementById('fileInput').click(); },
+  startUpload(){
+    if(!canSync()) return;
+    const fi = document.getElementById('fileInput');
+    // From File takes chord sheets / lyrics (several at once); everywhere
+    // else Upload takes one audio or video take.
+    if(ST.createMode==='file'){ fi.accept='.txt,.md,.pdf,text/plain,application/pdf'; fi.multiple=true; }
+    else { fi.accept='audio/*,video/*'; fi.multiple=false; }
+    fi.click();
+  },
   startCloud(){ toast('Importing from cloud storage is coming soon — use Record or Upload for now'); },
   stopRecord(){
     if(ST.phase==='countdown'){
