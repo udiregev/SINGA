@@ -137,29 +137,12 @@ document.getElementById('fileInput').addEventListener('change', function(e){
   if(files.length > 1){ handleBatchFileUpload(files); return; }
   const file = files[0];
   const s = D.songs[ST.editId];
-  const isTextDoc = file.type==='text/plain' || /\.(txt|md)$/i.test(file.name);
-  const isUnsupportedDoc = !isTextDoc && /\.(pdf|docx?)$/i.test(file.name);
-  if(isUnsupportedDoc){
-    toast("PDF/Word chord sheets aren't supported yet — try a .txt file, or record/upload audio or video instead");
+  if(/\.docx?$/i.test(file.name)){
+    toast("Word files aren't supported — save it as a PDF or .txt and upload that");
     return;
   }
-  if(isTextDoc){
-    const reader = new FileReader();
-    reader.onload = function(){
-      const parsed = parseChordSheetText(String(reader.result||''));
-      if(!parsed.lyrics){ toast("Couldn't find any lyrics in that file"); return; }
-      s.lyrics = parsed.lyrics;
-      if(Object.keys(parsed.chords).length) s.chords = { ...s.chords, ...parsed.chords };
-      if(parsed.title && !s.title.trim()) s.title = parsed.title;
-      if(parsed.sub && !s.sub.trim()) s.sub = parsed.sub;
-      ST.editId = s.id; ST.screen='create'; ST.createMode='manual'; ST.step='lyrics'; ST.phase='idle';
-      render();
-      const got = ['lyrics', Object.keys(parsed.chords).length&&'chords', parsed.title&&'title'].filter(Boolean).join(', ');
-      toast('Imported '+got+' from file — review and continue');
-    };
-    reader.readAsText(file);
-    return;
-  }
+  // a chord sheet / lyrics file goes through Text import 01 (sheet-import.js)
+  if(isSheetFile(file)){ importSheetIntoDraft(s, file); return; }
   processRecordingBlob(s, file);
 });
 

@@ -47,6 +47,19 @@ function buildLines(s, mode, opt){
       }
       return o;
     });
+    // End-of-line chords ("…of me  E7"): stored as li-t0, li-t1… — a chord
+    // played on the held last note, after the last sung word. Shown as a
+    // chord with no word under it at the end of the line.
+    if(!header && !opt.hideChords){
+      for(let k=0; s.chords[li+'-t'+k]; k++){
+        const tid = li+'-t'+k, tc = s.chords[tid];
+        const o = { id:tid, w:'', chord:tc, col:'#333', chordCol:'#9a9a9a', weight:400, cursor:'default', mark:'', markSide:null, selected:false, tail:true };
+        if(mode==='chords'){ o.chordCol='#1b1b1b'; o.cursor='pointer'; o.clickAct='placeChord'; o.clickId=tid; }
+        else if(mode==='view'){ o.chordCol = tc===opt.selChord ? '#f24822' : '#9a9a9a'; o.cursor='pointer'; o.clickAct='setViewChord'; o.clickId=tc; }
+        else if(mode==='play'){ o.chordCol = curLine ? '#8a8a8a' : '#cfcfcf'; }
+        w2.push(o);
+      }
+    }
     const isPlay = mode==='play', on = !header && isPlay && curLine;
     return { li, words:w2, header, padTop: on?10:0, mb: on?10:0, scale: on?1.12:1, op: (!header && isPlay && cw && li<cw.li) ? 0.75:1, cur: on };
   });
@@ -72,7 +85,7 @@ function linesHTML(lines, big){
       const fsz = big ? 'font-size:32px;padding:0 2px' : 'font-size:24px';
       const fszc = big ? 'font-size:15px;font-weight:700' : 'font-size:14px;font-weight:600';
       const markHTML = w.mark ? `<span class="markanchor markanchor-${w.markSide}">${markBubbleHTML(w.mark, w.markSide)}</span>` : '';
-      return `<span class="lword" style="cursor:${w.cursor};border-radius:5px;${bg}" ${act}><span class="lchord" style="${fszc};color:${w.chordCol}">${esc(w.chord)}</span><span class="ltext" style="${fsz};font-weight:${w.weight};color:${w.col}">${esc(w.w)}</span>${markHTML}</span>`;
+      return `<span class="lword" style="cursor:${w.cursor};border-radius:5px;${bg}" ${act}><span class="lchord" style="${fszc};color:${w.chordCol}">${esc(w.chord)}</span><span class="ltext" style="${fsz};font-weight:${w.weight};color:${w.col}">${w.w?esc(w.w):'&nbsp;'}</span>${markHTML}</span>`;
     }).join('');
     return `<div class="lline" style="${style}">${words}</div>`;
   }).join('') + `</div>`;

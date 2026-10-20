@@ -38,13 +38,96 @@ function fillTimestamps(mapping, hypWords, totalDuration){
   return ts;
 }
 
-// The real pipeline: decode the take, transcribe it with an on-device speech
-// model, then either (a) force-align it against lyrics you already typed, or
-// (b) — if you recorded/uploaded with no typed lyrics — use the real
-// transcription AS the lyrics. Runs entirely client-side (Transformers.js +
-// Whisper-tiny.en, loaded from a CDN on first use).
+// Turns an Audio import 01 chord sheet (audio-import.js / audio-sheet.js)
+// into Singa's song shape: "[Capo 4]" / "[Intro: …]" / "[Chorus]" header
+// lines, one lyrics line per sung line, chords keyed "line-word", end-of-line
+// chords "line-tK", "[Instrumental: …]" after a line where the band plays on,
+// and one timestamp per sung word (headers excluded, as timing() expects).
+function audioSheetToSong(songObj, sheet){
+  const lines = [], chords = {}, ts = [];
+  let li = 0;
+  const header = txt=>{ lines.push('['+txt+']'); li++; };
+  if(sheet.capo>0) header('Capo '+sheet.capo);
+  if(sheet.instrumentalIntro && sheet.instrumentalIntro.length) header('Intro: '+sheet.instrumentalIntro.join(' '));
+  (sheet.sections||[]).forEach(sec=>{
+    if(sec.label){ if(lines.length) lines.push(''); header(sec.label); }
+    (sec.lines||[]).forEach(ln=>{
+      const ws = [];
+      (ln.words||[]).forEach(w=>{
+        const t = String(w.text||'').replace(/\s+/g,'');
+        if(!t) return;
+        if(w.chord) chords[li+'-'+ws.length] = w.chord;
+        ws.push(t); ts.push(typeof w.start==='number' ? w.start : null);
+      });
+      if(!ws.length) return;
+      // a sung line that happens to look like a header ("(oh) … (oh)") would
+      // be skipped by timing(), so don't let it bracket itself
+      if(isHeaderLine(ws)){ ws[0] = ws[0].replace(/^[\[(]+/,'') || ws[0]; }
+      (ln.tailChords||[]).forEach((c,k)=>{ chords[li+'-t'+k] = c; });
+      lines.push(ws.join(' ')); li++;
+      if(ln.instrumentalAfter && ln.instrumentalAfter.length) header('Instrumental: '+ln.instrumentalAfter.join(' '));
+    });
+  });
+  // fill any missing word time from its neighbours so the list stays complete
+  for(let i=0;i<ts.length;i++) if(ts[i]==null) ts[i] = i>0 ? ts[i-1] : 0;
+  songObj.lyrics = lines.join('\n').trim();
+  songObj.chords = chords;
+  songObj.wordTimestamps = ts;
+}
+
+let audioImportMod = null;
+// "From Recording" — the Audio import 01 flow (the same engine as
+// test-analysis.html): chords from the AI chord server, lyrics from Whisper
+// (small.en) in a Web Worker, a second listen where chords play but no words
+// came back, then the full chord sheet (key, capo, chord on the word where it
+// changes, end-of-line chords, lines and sections).
+async function processRecordingFromScratch(songObj, blob){
+  ST.phase='processing'; ST.procPct=3; ST.procNote='Listening back to your take…'; render();
+  let res;
+  try{
+    if(!audioImportMod) audioImportMod = await import('./audio-import.js?v=1');
+    res = await audioImportMod.analyzeAudio(blob, {
+      fileName: blob.name || 'recording.webm',
+      onProgress: ({pct,note})=>{ ST.procPct=pct; ST.procNote=note; render(); }
+    });
+  }catch(err){
+    console.error('Singa: audio import failed', err);
+    ST.phase='idle'; ST.procPct=0; ST.procNote=''; render();
+    toast("Couldn't analyse that audio: "+(err && err.message || err));
+    return;
+  }
+  const nWords = (res.sheet.sections||[]).reduce((n,sec)=>n+sec.lines.reduce((m,l)=>m+l.words.length,0),0);
+  if(!nWords){
+    ST.phase='idle'; ST.procPct=0; ST.procNote=''; render();
+    toast(res.lyricsError ? "Couldn't hear the lyrics: "+res.lyricsError : "No sung words came through — try a take with clearer vocals");
+    return;
+  }
+  audioSheetToSong(songObj, res.sheet);
+  if(!songObj.title.trim()){
+    const fromFile = (blob.name||'').replace(/\.[^.]+$/,'').replace(/[_]+/g,' ').trim();
+    songObj.title = res.id3Title || fromFile || '';
+  }
+  songObj.audioDurationSec = res.durationSec;
+  songObj.synced = true;
+  ST.procPct=97; ST.procNote='Saving a short sample…'; render();
+  try{
+    const first = songObj.wordTimestamps.length ? songObj.wordTimestamps[0] : 0;
+    await uploadSampleClip(songObj, res.pcm16k, first);
+  }catch(e){ console.error('Singa: sample clip upload failed', e); }
+  if(res.chordSource==='fallback') toast("The chord server didn't answer, so the chords are a rough guess — check them");
+  else if(res.unheard && res.unheard.length) toast(res.unheard.length+' spot'+(res.unheard.length>1?'s':'')+' had chords but no clear words — check those lines');
+  ST.procPct=100; ST.procNote='Done'; render();
+  finishSong();
+  render();
+}
+
+// Recording / upload. In the "From Recording" flow (or with no lyrics typed
+// yet) the take goes through Audio import 01 above.
+// With lyrics already typed (the manual flow's Sync step) the take is
+// transcribed and force-aligned against those lyrics, word for word.
 async function processRecordingBlob(songObj, blob){
   const hadManualLyrics = !!(songObj.lyrics && songObj.lyrics.trim());
+  if(!hadManualLyrics || ST.createMode==='recording') return processRecordingFromScratch(songObj, blob);
   ST.phase='processing'; ST.procPct=5; ST.procNote='Listening back to your take…'; render();
   try{
     const { float32, durationSec } = await decodeToFloat32Mono16k(blob);
@@ -61,31 +144,16 @@ async function processRecordingBlob(songObj, blob){
       norm: normWord(c.text),
       start: (c.timestamp && typeof c.timestamp[0]==='number') ? c.timestamp[0] : 0,
     })).filter(w=>w.norm);
-
-    if(hadManualLyrics){
-      const refWords = [];
-      // Structural labels ("[Verse 2]") are never sung, so they're excluded
-      // here too — keeps this index-for-index aligned with timing()'s word
-      // list, which skips them the same way.
-      parseLyrics(songObj.lyrics).forEach(ws=>{ if(!isHeaderLine(ws)) ws.forEach(w=>refWords.push(normWord(w))); });
-      const mapping = alignSequences(refWords, hypWords.map(w=>w.norm));
-      songObj.wordTimestamps = fillTimestamps(mapping, hypWords, durationSec);
-    } else {
-      const WORDS_PER_LINE = 7;
-      const rawWords = hypWords.map(w=>w.text).filter(Boolean);
-      if(rawWords.length){
-        const lines = [];
-        for(let i=0;i<rawWords.length;i+=WORDS_PER_LINE) lines.push(rawWords.slice(i,i+WORDS_PER_LINE).join(' '));
-        songObj.lyrics = lines.join('\n');
-        songObj.wordTimestamps = hypWords.map(w=>w.start);
-      }
-    }
+    const refWords = [];
+    // Structural labels ("[Verse 2]") are never sung, so they're excluded
+    // here too — keeps this index-for-index aligned with timing()'s word
+    // list, which skips them the same way.
+    parseLyrics(songObj.lyrics).forEach(ws=>{ if(!isHeaderLine(ws)) ws.forEach(w=>refWords.push(normWord(w))); });
+    const mapping = alignSequences(refWords, hypWords.map(w=>w.norm));
+    songObj.wordTimestamps = fillTimestamps(mapping, hypWords, durationSec);
     songObj.audioDurationSec = durationSec;
     songObj.synced = true;
-    // Keep only a short ~5s preview clip — from where the singing actually
-    // starts (the first recognized word), not the raw start of the take —
-    // instead of the full recording, which is no longer needed once it's
-    // been analysed above.
+    // Keep only a short ~5s preview clip from where the singing starts.
     try{
       const startSec = hypWords.length ? hypWords[0].start : 0;
       await uploadSampleClip(songObj, float32, startSec);

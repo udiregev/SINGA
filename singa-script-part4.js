@@ -167,7 +167,7 @@ function renderCreate(){
           <button class="btn-outline" style="width:170px;height:150px;border-radius:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px" data-act="startUpload">${icon('upload',36)}<span style="font-size:15px;font-weight:600">Upload</span></button>
           <button class="btn-outline" style="width:170px;height:150px;border-radius:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px" data-act="startCloud">${icon('cloud',36)}<span style="font-size:15px;font-weight:600">Link Cloud</span></button>
         </div>
-        <div style="font-size:13px;color:#6f6f6f">Audio or video of you performing the song.</div>
+        <div style="font-size:13px;color:#6f6f6f;text-align:center;max-width:420px;line-height:1.5">A chord sheet or lyrics file — .txt or .pdf (scanned PDFs work too). Singa reads the title, the lyrics and the chords above each word. Pick several files to add several songs at once.</div>
         <div style="font-size:12px;color:#8a8a8a">You hereby confirm that you have permission to reproduce these lyrics</div>
       </div>`;
     } else {

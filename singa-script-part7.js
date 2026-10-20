@@ -242,6 +242,74 @@ function parseChordSheetText(text){
   }
   return { lyrics: lyricLines.join('\n').trim(), chords: chordMap, title, sub };
 }
+/* ============================================================
+   "FROM FILE" — the Text import 01 engine (sheet-import.js, the same code
+   as test-chordsheet.html): .txt/.md and .pdf (with OCR for scanned
+   pages), chords placed over the word they're written above, end-of-line
+   chords kept, page numbers dropped, lyric lines split across a page break
+   re-joined to their chords, and title + artist read from the header.
+   ============================================================ */
+function isSheetFile(file){
+  return /\.(txt|md|pdf)$/i.test(file.name||'') || /^text\//.test(file.type||'') || file.type==='application/pdf';
+}
+let sheetImportMod = null;
+async function readSheetFile(file, onLog){
+  if(!sheetImportMod) sheetImportMod = await import('./sheet-import.js?v=1');
+  return sheetImportMod.importSheetFile(file, { onLog });
+}
+// Turns the engine's blocks into Singa's song shape: one lyrics line per
+// sung line, section names as "[Verse 1]" header lines, chords keyed by
+// "line-word", and end-of-line chords as "line-t0", "line-t1"…
+function applySheetToSong(songObj, res, overwriteTitle){
+  const lines = [], chords = {};
+  let li = 0;
+  (res.blocks||[]).forEach(b=>{
+    if(b.type==='label'){ if(lines.length) lines.push(''); lines.push('['+b.text+']'); li++; return; }
+    if(b.type==='standalone-chords'){ lines.push('['+b.text+']'); li++; return; }
+    const ws = b.words.map(w=>String(w.text).replace(/\s+/g,'')).filter(Boolean);
+    if(!ws.length) return;
+    const tail = (b.tail||[]).slice();
+    Object.keys(b.chordMap||{}).map(Number).sort((a,b)=>a-b).forEach(idx=>{
+      const list = [].concat(b.chordMap[idx]);
+      chords[li+'-'+idx] = list.shift();
+      // a second chord written over the same word goes on the next word if
+      // that has none, or after the line if it's the last word
+      list.forEach(c=>{
+        if(idx+1<ws.length && !(b.chordMap||{})[idx+1] && !chords[li+'-'+(idx+1)]) chords[li+'-'+(idx+1)] = c;
+        else if(idx===ws.length-1) tail.unshift(c);
+        else chords[li+'-'+idx] += ' '+c;
+      });
+    });
+    tail.forEach((c,k)=>{ chords[li+'-t'+k] = c; });
+    lines.push(ws.join(' ')); li++;
+  });
+  songObj.lyrics = lines.join('\n').trim();
+  songObj.chords = chords;
+  if(res.title && (overwriteTitle || !songObj.title.trim())) songObj.title = res.title;
+  if(res.artist && (overwriteTitle || !songObj.sub.trim())) songObj.sub = res.artist;
+}
+async function importSheetIntoDraft(s, file){
+  ST.phase='processing'; ST.procPct=10; ST.procNote='Reading '+file.name+'…'; render();
+  let res;
+  try{
+    res = await readSheetFile(file, msg=>{ ST.procPct=Math.min(90, ST.procPct+8); ST.procNote=msg; render(); });
+  }catch(e){
+    console.error('Singa: file import failed', e);
+    ST.phase='idle'; ST.procPct=0; ST.procNote=''; render();
+    toast("Couldn't read that file: "+(e && e.message || e));
+    return;
+  }
+  ST.phase='idle'; ST.procPct=0; ST.procNote='';
+  applySheetToSong(s, res, false);
+  if(!s.lyrics.trim()){ render(); toast("Couldn't find any lyrics in that file"); return; }
+  const nChords = Object.keys(s.chords).length;
+  ST.editId = s.id; ST.screen='create'; ST.createMode='manual'; ST.step = nChords ? 'chords' : 'lyrics'; ST.editorLine=0;
+  render();
+  queueSaveSong(s.id);
+  const extra = [res.junkCount ? res.junkCount+' page number line'+(res.junkCount>1?'s':'')+' left out' : '', res.usedOcr ? 'read with OCR' : ''].filter(Boolean).join(', ');
+  toast('Imported lyrics'+(nChords?' and '+nChords+' chords':'')+' — review and continue'+(extra?' ('+extra+')':''));
+}
+
 // Batch "From File" import: each selected file becomes its own song, saved
 // straight into the library rather than routed through the Create flow one
 // at a time. Text/chord-sheet files get their lyrics/chords/title parsed
@@ -250,20 +318,17 @@ function parseChordSheetText(text){
 // the song's own (incomplete-song) screen, same as any other unsynced song.
 async function handleBatchFileUpload(files){
   let added = 0, skipped = 0;
+  const total = files.length;
   for(const file of files){
-    const isTextDoc = file.type==='text/plain' || /\.(txt|md)$/i.test(file.name);
-    const isUnsupportedDoc = !isTextDoc && /\.(pdf|docx?)$/i.test(file.name);
-    if(isUnsupportedDoc){ skipped++; continue; }
+    if(/\.docx?$/i.test(file.name)){ skipped++; continue; }
     const baseName = file.name.replace(/\.[^.]+$/, '').trim() || 'Untitled song';
     const id = 'n'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
     const songObj = { id, title:baseName, sub:'', lyrics:'', chords:{}, notes:{}, synced:false, isPublic:false, plays:0, added:Date.now(), mine:true };
-    if(isTextDoc){
+    if(isSheetFile(file)){
+      toast('Reading '+(added+skipped+1)+' of '+total+': '+file.name+'…');
       try{
-        const parsed = parseChordSheetText(await file.text());
-        if(parsed.lyrics) songObj.lyrics = parsed.lyrics;
-        if(Object.keys(parsed.chords).length) songObj.chords = parsed.chords;
-        if(parsed.title) songObj.title = parsed.title;
-        if(parsed.sub) songObj.sub = parsed.sub;
+        const res = await readSheetFile(file);
+        applySheetToSong(songObj, res, true);
       }catch(e){ console.error('Singa: batch file read failed', e); }
     }
     D.songs[id] = songObj; D.order = [id, ...D.order]; added++;
@@ -291,9 +356,11 @@ function newSongDraft(){
 function finishSong(){
   const id = ST.editId, s = D.songs[id];
   const patch = { synced:true };
-  if(!s.lyrics.trim()) patch.lyrics = EX_LYRICS;
-  if(!s.title.trim()) patch.title = "Don't Go Breaking My Heart";
-  if(!Object.keys(s.chords).length || ST.autoChords) patch.chords = autoChordsFor(patch.lyrics || s.lyrics);
+  // No made-up content: an empty title becomes "Untitled song", and empty
+  // lyrics stay empty (the song then opens as incomplete) rather than being
+  // replaced by a demo song.
+  if(!s.title.trim()) patch.title = 'Untitled song';
+  if(s.lyrics.trim() && (!Object.keys(s.chords).length || ST.autoChords)) patch.chords = autoChordsFor(s.lyrics);
   Object.assign(s, patch);
   ST.phase='idle'; ST.procPct=0; ST.procNote=''; ST.screen='done'; ST.autoChords=false; ST.songId=id;
   saveSongRow(s);
