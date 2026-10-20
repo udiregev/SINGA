@@ -47,9 +47,12 @@
   .body-structured{font-size:17px;line-height:1.5;}
   .section-label{display:block;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--sub);margin:22px 0 6px;}
   .section-label:first-child{margin-top:0;}
-  .couplet{display:block;position:relative;padding-top:20px;margin-bottom:16px;}
-  .word{position:relative;margin-right:7px;color:var(--lyric);font-weight:400;}
-  .word .chord{position:absolute;top:-20px;left:0;font-size:14px;font-weight:700;color:var(--chord);white-space:nowrap;}
+  .couplet{display:block;margin-bottom:14px;}
+  .word{display:inline-flex;flex-direction:column;vertical-align:bottom;color:var(--lyric);font-weight:400;white-space:nowrap;}
+  .word .chord{align-self:flex-start;font-size:14px;font-weight:700;color:var(--chord);white-space:nowrap;margin-right:6px;user-select:none;-webkit-user-select:none;}
+  .word .chord:empty{visibility:hidden;}
+  .word .chord:empty::before{content:"\00a0";}
+  .artistline{font-size:13px;color:var(--sub);margin:-10px 0 18px;}
   .standalone-chords{display:block;font-weight:700;color:var(--chord);margin-bottom:16px;letter-spacing:.02em;}
   details.rawbox{margin-top:16px;}
   details.rawbox summary{cursor:pointer;font-size:12.5px;color:var(--sub);font-weight:600;}
@@ -86,6 +89,7 @@
   <div class="sheet" id="sheet">
     <div class="sheet-card">
       <input type="text" class="titlefield" id="titleField" placeholder="Song title">
+      <p class="artistline" id="artistOut" style="display:none"></p>
       <div class="body-structured" id="bodyOut"></div>
     </div>
     <details class="rawbox">
@@ -205,7 +209,7 @@ function plainTextToWordLines(text){
   return (text||'').replace(/\r\n?/g,'\n').split('\n').map(rawLine=>{
     const words = [];
     const re = /\S+/g; let m;
-    while((m = re.exec(rawLine))) words.push({ text:m[0], x:m.index });
+    while((m = re.exec(rawLine))) words.push({ text:m[0], x:m.index, xEnd:m.index+m[0].length });
     return { text: rawLine, words };
   });
 }
@@ -278,8 +282,8 @@ function reconstructWordLines(content){
       const re = /\S+/g; let m;
       const len = it.str.length || 1;
       while((m = re.exec(it.str))){
-        const frac = m.index/len;
-        words.push({ text: m[0], x: it.x + (it.width||0)*frac });
+        const frac = m.index/len, fracEnd=(m.index+m[0].length)/len;
+        words.push({ text: m[0], x: it.x + (it.width||0)*frac, xEnd: it.x + (it.width||0)*fracEnd });
       }
     });
     return { text: words.map(w=>w.text).join(' '), words };
@@ -299,7 +303,7 @@ async function ocrPageWordLines(page){
   // least as reliably as ones with a real embedded text layer.
   const lines = [];
   (data.lines||[]).forEach(l=>{
-    const words = (l.words||[]).map(w=>({ text: (w.text||'').trim(), x: w.bbox ? w.bbox.x0 : 0 })).filter(w=>w.text);
+    const words = (l.words||[]).map(w=>({ text: (w.text||'').trim(), x: w.bbox ? w.bbox.x0 : 0, xEnd: w.bbox ? w.bbox.x1 : 0 })).filter(w=>w.text);
     if(words.length) lines.push({ text: words.map(w=>w.text).join(' '), words });
   });
   if(lines.length) return lines;
@@ -326,9 +330,29 @@ async function extractPdfWordLines(file){
       const content = await page.getTextContent();
       lines = lines.concat(reconstructWordLines(content));
     }
-    lines.push({ text:'', words:[] }); // page break
+    lines.push({ text:'', words:[], pageBreak:true });
   }
-  return { lines, usedOcr };
+  return { lines: removePageFurniture(lines), usedOcr };
+}
+
+// Printed / exported sheets carry text that isn't part of the song: page
+// numbers ("Page 1/2", "1 of 3", "- 2 -"), web addresses and
+// similar page furniture. Drop those, so they
+// neither show up as lyrics nor sit between a chord line and its lyric.
+const PAGE_JUNK = [
+  /^page\s*\d+(\s*(\/|of)\s*\d+)?$/i,
+  /^\d+\s*(\/|of)\s*\d+$/i,
+  /^[-–]?\s*\d{1,3}\s*[-–]?$/,
+  /^(https?:\/\/|www\.)\S+$/i,
+  /^\S+\.(com|net|org|co\.uk|io)(\/\S*)?$/i
+];
+function isPageJunk(text){ const t=(text||'').trim(); return !!t && PAGE_JUNK.some(re=>re.test(t)); }
+function removePageFurniture(lines){
+  // Only explicit page furniture is removed. (Dropping "any line repeated
+  // at the top or bottom of every page" was tried and is unsafe: a song's
+  // own repeated line can land at a page edge, as "Dream a little dream of
+  // me" does on both pages of the Mamas & Papas sheet.)
+  return lines.map(l=> (!l.pageBreak && isPageJunk(l.text)) ? { ...l, junk:true } : l);
 }
 
 // ============================================================
@@ -407,6 +431,8 @@ function isChordLine(rawLine){
 function classifyWordLines(wordLines, applyOcrNoiseFilter){
   return wordLines.map(line=>{
     const raw = line.text;
+    if(line.pageBreak) return { type:'pagebreak', text:'', words:[] };
+    if(line.junk || isPageJunk(raw)) return { type:'junk', text:raw.trim(), words:[] };
     const label = sectionLabelFor(raw);
     if(label){
       const bracketed = /^[\[(]/.test(raw.trim()) && /[\])]$/.test(raw.trim());
@@ -434,21 +460,46 @@ function nearestWordIndex(targetX, words){
   });
   return best;
 }
+// Which lyric word a chord belongs to: the word it sits over (the last word
+// starting at or before the chord, with a little slack), so a chord above
+// the middle of a long word stays on that word. A chord that sits past the
+// end of the lyric line (common at line ends: "...of me  C  E7") is kept as a
+// trailing chord after the last word instead of being dropped.
+function mapChordsToWords(chordWords, words){
+  const chordMap = {}, tail = [];
+  if(!words.length) return { chordMap, tail:chordWords.map(c=>c.text) };
+  const lens = words.map(w=>Math.max(1,w.text.length));
+  const spans = words.map((w,i)=> (w.xEnd!=null && w.xEnd>w.x) ? (w.xEnd-w.x) : null);
+  const known = spans.map((sp,i)=> sp!=null ? sp/lens[i] : null).filter(v=>v!=null);
+  const charW = known.length ? known.reduce((a,b)=>a+b,0)/known.length : 1;
+  const last = words[words.length-1];
+  const lastEnd = last.xEnd!=null && last.xEnd>last.x ? last.xEnd : last.x + charW*last.text.length;
+  chordWords.forEach(cw=>{
+    if(cw.x >= lastEnd + charW*0.5){ tail.push(cw.text); return; }
+    let idx = 0;
+    words.forEach((w,i)=>{ if(w.x <= cw.x + charW*0.6) idx=i; });
+    // a chord written in the gap after a word belongs to the word that follows
+    const w=words[idx], wEnd = (w.xEnd!=null && w.xEnd>w.x) ? w.xEnd : w.x + charW*w.text.length;
+    if(cw.x >= wEnd - charW*0.2 && idx+1<words.length) idx++;
+    (chordMap[idx] = chordMap[idx] || []).push(cw.text);
+  });
+  return { chordMap, tail };
+}
 function buildSheetBlocks(classified){
   const blocks = [];
   for(let i=0;i<classified.length;i++){
     const line = classified[i];
     if(line.type==='label'){ blocks.push({ type:'label', text:line.text }); continue; }
     if(line.type==='chord'){
-      const next = classified[i+1];
+      // the lyric under a chord line can be pushed onto the next page, or have
+      // a page number/footer in between — look past those
+      let j=i+1;
+      while(j<classified.length && (classified[j].type==='pagebreak' || classified[j].type==='junk')) j++;
+      const next = classified[j];
       if(next && next.type==='lyric' && next.words.length){
-        const chordMap = {};
-        line.words.forEach(cw=>{
-          const idx = nearestWordIndex(cw.x, next.words);
-          if(idx>=0 && !(idx in chordMap)) chordMap[idx] = cw.text;
-        });
-        blocks.push({ type:'couplet', words: next.words, chordMap });
-        i++; // consumed the paired lyric line
+        const { chordMap, tail } = mapChordsToWords(line.words, next.words);
+        blocks.push({ type:'couplet', words: next.words, chordMap, tail });
+        i=j; // consumed the paired lyric line
       } else {
         blocks.push({ type:'standalone-chords', text: line.text });
       }
@@ -469,6 +520,23 @@ function titleFromFilename(name){
   const base = (name||'song').replace(/\.[^.]+$/, '');
   const spaced = base.replace(/[_-]+/g,' ').trim();
   return spaced.replace(/\w\S*/g, w => w.charAt(0).toUpperCase()+w.slice(1).toLowerCase()) || 'Untitled';
+}
+// Sheets usually open with a few header lines before the music starts:
+// the title, often "Chords by <artist>", sometimes the title again in a
+// decorative style. Everything above the first chord line or section label
+// is treated as that header — not as lyrics.
+function extractHeader(classified, fileName){
+  const firstMusic = classified.findIndex(l=>l.type==='chord' || l.type==='label');
+  if(firstMusic<=0) return null;
+  const head = classified.slice(0, firstMusic).map((l,i)=>({l,i})).filter(x=>x.l.type==='lyric');
+  if(!head.length || head.length>5) return null;
+  let title='', artist='';
+  head.forEach(({l})=>{
+    const m = /^(?:chords|lyrics|tabs?)?\s*(?:and\s+(?:chords|lyrics)\s+)?by\s+(.+)$/i.exec(l.text);
+    if(m && !artist) artist=m[1].trim();
+    else if(!title) title=l.text;
+  });
+  return { title: title || titleFromFilename(fileName), artist, consumed: new Set(head.map(x=>x.i)) };
 }
 function extractTitle(classified, fileName){
   for(const line of classified){
@@ -491,9 +559,11 @@ function renderBlocks(blocks){
     // couplet
     const inner = b.words.map((w,i)=>{
       const ch = b.chordMap[i];
-      return `<span class="word">${ch?`<span class="chord">${escapeHtml(ch)}</span>`:''}${escapeHtml(w.text)}</span>`;
+      const label = Array.isArray(ch) ? ch.join(' ') : (ch||'');
+      return `<span class="word"><span class="chord">${escapeHtml(label)}</span><span class="w">${escapeHtml(w.text)}</span></span>`;
     }).join(' ');
-    return `<span class="couplet">${inner}</span>`;
+    const tail = (b.tail||[]).map(c=>`<span class="word"><span class="chord">${escapeHtml(c)}</span><span class="w">&nbsp;</span></span>`).join(' ');
+    return `<span class="couplet">${inner}${tail?' '+tail:''}</span>`;
   }).join('');
 }
 
@@ -506,15 +576,21 @@ $('buildBtn').addEventListener('click', ()=>{
   logEl.innerHTML=''; logEl.style.display='none';
 
   const classified = classifyWordLines(state.wordLines, state.usedOcr===true);
-  const { title, consumedIndex } = extractTitle(classified, state.fileName);
-  const body = consumedIndex>=0 ? classified.filter((_,i)=>i!==consumedIndex) : classified;
+  const header = extractHeader(classified, state.fileName);
+  let title, artist='', body;
+  if(header){ title=header.title; artist=header.artist; body=classified.filter((_,i)=>!header.consumed.has(i)); }
+  else { const t=extractTitle(classified, state.fileName); title=t.title; body = t.consumedIndex>=0 ? classified.filter((_,i)=>i!==t.consumedIndex) : classified; }
   const blocks = buildSheetBlocks(body);
 
   $('titleField').value = title;
+  $('artistOut').textContent = artist ? 'by '+artist : '';
+  $('artistOut').style.display = artist ? '' : 'none';
   $('bodyOut').innerHTML = blocks.length ? renderBlocks(blocks) : '<p class="hint">No lyric content was detected in this file.</p>';
   $('rawOut').textContent = state.rawText;
   $('sheet').classList.add('show');
 
+  const junkCount = classified.filter(l=>l.type==='junk').length;
+  if(junkCount) log(junkCount+' line(s) looked like page numbers or web addresses and were left out.', 'ok');
   const noiseCount = classified.filter(l=>l.type==='noise').length;
   if(noiseCount) log(noiseCount+' line(s) from the file looked like OCR misreads (chord-diagram artwork, etc.) and were left out.', 'ok');
   log('Built: '+blocks.filter(b=>b.type==='couplet').length+' lyric line(s), '+blocks.filter(b=>b.type==='label').length+' section label(s).', 'ok');

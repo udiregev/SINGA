@@ -198,7 +198,7 @@ export function splitLines(words, { maxWords=12, minWords=2, longPause=0.9 }={})
 //    it anticipates). Chords that change where nobody is singing become
 //    instrumental chord lines between the lyric lines.
 // ------------------------------------------------------------
-export function placeChords(lines, segs, { anticipate=0.45 }={}){
+export function placeChords(lines, segs, { anticipate=0.45, maxBreath=4.0 }={}){
   const flat=[]; lines.forEach((ln,li)=>ln.forEach((w,wi)=>flat.push({w,li,wi})));
   const placed = lines.map(ln=>ln.map(()=>null));
   const instrumental=[]; // {afterLine, chords:[]}
@@ -248,7 +248,21 @@ export function placeChords(lines, segs, { anticipate=0.45 }={}){
       last=key;
     });
   });
-  return { placed, instrumental };
+  // A chord that changes in the short breath between two sung lines is
+  // played on the held last note of the line before, so it belongs at the
+  // END of that line (which is how printed sheets show it), not on a row of
+  // its own. Only a real instrumental break, longer than a breath, keeps
+  // its own chord row.
+  const tails = lines.map(()=>[]);
+  for(let k=instrumental.length-1;k>=0;k--){
+    const slot=instrumental[k], li=slot.afterLine;
+    if(li<0) continue;
+    const prevEnd = lines[li][lines[li].length-1].end;
+    const next = lines[li+1];
+    const gapLen = (next ? next[0].start : Infinity) - prevEnd;
+    if(gapLen <= maxBreath){ tails[li]=slot.chords; instrumental.splice(k,1); }
+  }
+  return { placed, instrumental, tails };
 }
 
 // ------------------------------------------------------------
@@ -426,7 +440,7 @@ export function buildSheet(rawChords, rawWords, opts={}){
   const capo = opts.capo ?? chooseCapo(segs, tonic);
   const words = cleanWords(rawWords);
   const lines = splitLines(words);
-  const { placed, instrumental } = placeChords(lines, segs);
+  const { placed, instrumental, tails } = placeChords(lines, segs);
   const show = (s)=> chordName({ ...s.c, root:s.c.root-capo }, tonic-capo);
   const names = harmonizeRepeats(placed.map(r=>r.map(s=>s?show(s):null)), lines.map(normLine));
   const sections = labelSections(lines, {}, names.map(r=>r.filter(Boolean)));
@@ -440,6 +454,7 @@ export function buildSheet(rawChords, rawWords, opts={}){
       lines: sec.lineIdx.map(li=>({
         start: lines[li][0].start,
         words: lines[li].map((w,wi)=>({ text:w.text, start:w.start, end:w.end, chord: names[li][wi] })),
+        tailChords: tails[li].map(show),
         instrumentalAfter: (instrumental.find(x=>x.afterLine===li)?.chords||[]).map(show),
         instrumentalSpan: spanOf(instrumental.find(x=>x.afterLine===li))
       }))

@@ -166,7 +166,7 @@
 </div></footer>
 
 <script type="module">
-import { buildSheet, findLyricGaps, acceptGapWords } from './audio-sheet.js?v=2';
+import { buildSheet, findLyricGaps, acceptGapWords } from './audio-sheet.js?v=3';
 
 const $ = id=>document.getElementById(id);
 const esc = s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -326,7 +326,7 @@ function transcribe(pcm, model, onProgress, chunked=true){
     worker.onmessage=(e)=>{
       const m=e.data;
       if(m.type==='progress') onProgress('downloading model '+Math.round(m.progress||0)+'%');
-      else if(m.type==='status') { onProgress('listening… (about a minute per 3 minutes of song)'); }
+      else if(m.type==='status') { onProgress('listening… (this takes a few minutes for a full song)'); }
       else if(m.type==='done') resolve(m);
       else if(m.type==='error') reject(new Error(m.message));
     };
@@ -407,7 +407,9 @@ function render(capo){
   sheet.sections.forEach(sec=>{
     html += `<span class="section-label">${esc(sec.label)}</span>`;
     sec.lines.forEach(ln=>{
-      html += `<span class="line">` + ln.words.map(w=>`<span class="word"><span class="chord">${w.chord?esc(w.chord):''}</span><span class="w">${esc(w.text)}</span></span>`).join(' ') + `</span>`;
+      // chords that change on the held last note go at the end of the line, above a blank
+      const tail = (ln.tailChords||[]).map(c=>`<span class="word"><span class="chord">${esc(c)}</span><span class="w">&nbsp;</span></span>`).join(' ');
+      html += `<span class="line">` + ln.words.map(w=>`<span class="word"><span class="chord">${w.chord?esc(w.chord):''}</span><span class="w">${esc(w.text)}</span></span>`).join(' ') + (tail?' '+tail:'') + `</span>`;
       if(ln.instrumentalAfter.length) html += `<div class="instr">${chips(ln.instrumentalAfter, ln.instrumentalSpan)}</div>`;
     });
   });
