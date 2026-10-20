@@ -57,11 +57,14 @@
   .body{font-size:16px;line-height:1.45;}
   .section-label{display:block;font-size:13px;font-weight:700;color:var(--ink);margin:22px 0 8px;}
   .section-label:first-child{margin-top:0;}
-  .line{display:block;position:relative;padding-top:19px;margin-bottom:10px;}
-  .word{position:relative;color:var(--lyric);white-space:nowrap;}
-  .word .chord{position:absolute;top:-19px;left:0;font-size:13px;font-weight:700;color:var(--chord);background:var(--chip);border-radius:4px;padding:0 4px;line-height:17px;}
-  .instr{display:flex;gap:6px;flex-wrap:wrap;margin:2px 0 12px;}
-  .instr .chord{font-size:13px;font-weight:700;background:var(--chip);border-radius:4px;padding:0 6px;line-height:19px;}
+  .line{display:block;margin-bottom:10px;}
+  .word{display:inline-flex;flex-direction:column;vertical-align:bottom;color:var(--lyric);white-space:nowrap;}
+  .word .chord{align-self:flex-start;font-size:13px;font-weight:700;color:var(--chord);background:var(--chip);border-radius:4px;padding:0 4px;line-height:17px;margin-bottom:2px;margin-right:4px;user-select:none;-webkit-user-select:none;}
+  .word .chord:empty{visibility:hidden;}
+  .word .chord:empty::before{content:"\00a0";}
+  .instr{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:2px 0 12px;}
+  .instr .chord{font-size:13px;font-weight:700;background:var(--chip);border-radius:4px;padding:0 6px;line-height:19px;user-select:none;-webkit-user-select:none;}
+  .instr .nolyr{font-size:11.5px;color:var(--sub);font-style:italic;}
   details.more{margin-top:14px;}
   details.more summary{cursor:pointer;font-size:12.5px;color:var(--sub);font-weight:600;}
   table{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px;}
@@ -120,6 +123,7 @@
       <li id="st-decode"><span class="dot"></span><span>Read the audio <span class="detail"></span></span></li>
       <li id="st-chords"><span class="dot"></span><span>Recognise chords (AI model) <span class="detail"></span></span></li>
       <li id="st-lyrics"><span class="dot"></span><span>Transcribe lyrics <span class="detail"></span></span></li>
+      <li id="st-second"><span class="dot"></span><span>Second listen where no lyrics were heard <span class="detail"></span></span></li>
       <li id="st-sheet"><span class="dot"></span><span>Lay out the chord sheet <span class="detail"></span></span></li>
     </ul>
   </div>
@@ -162,7 +166,7 @@
 </div></footer>
 
 <script type="module">
-import { buildSheet } from './audio-sheet.js';
+import { buildSheet, findLyricGaps, acceptGapWords } from './audio-sheet.js';
 
 const $ = id=>document.getElementById(id);
 const esc = s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -300,20 +304,22 @@ import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers
 env.allowLocalModels = false;
 let pipe=null, loaded=null;
 self.onmessage = async (e)=>{
-  const { pcm, model } = e.data;
+  const { pcm, model, chunked } = e.data;
   try{
     if(!pipe || loaded!==model){
       pipe = await pipeline('automatic-speech-recognition', model, { progress_callback: p=>{ if(p && p.status==='progress') self.postMessage({type:'progress', file:p.file, progress:p.progress}); } });
       loaded = model;
     }
     self.postMessage({type:'status', text:'transcribing'});
-    const out = await pipe(pcm, { return_timestamps:'word', chunk_length_s:30, stride_length_s:5 });
+    const opts = { return_timestamps:'word' };
+    if(chunked){ opts.chunk_length_s=30; opts.stride_length_s=5; }
+    const out = await pipe(pcm, opts);
     const words = (out.chunks||[]).map(c=>({ text:c.text, start:c.timestamp[0], end:c.timestamp[1] }));
     self.postMessage({type:'done', words, text: out.text});
   }catch(err){ self.postMessage({type:'error', message:String(err && err.message || err)}); }
 };`;
 let worker=null;
-function transcribe(pcm, model, onProgress){
+function transcribe(pcm, model, onProgress, chunked=true){
   return new Promise((resolve,reject)=>{
     if(!worker) worker=new Worker(URL.createObjectURL(new Blob([WORKER_SRC],{type:'text/javascript'})),{type:'module'});
     const t0=performance.now();
@@ -325,14 +331,14 @@ function transcribe(pcm, model, onProgress){
       else if(m.type==='error') reject(new Error(m.message));
     };
     worker.onerror=(e)=>reject(new Error(e.message||'worker failed'));
-    worker.postMessage({ pcm, model });
+    worker.postMessage({ pcm, model, chunked });
   });
 }
 
 // ---------------- main ----------------
 $('buildBtn').addEventListener('click', async ()=>{
   $('buildBtn').disabled=true; $('sheet').classList.remove('show');
-  $('steps').style.display='flex'; ['decode','chords','lyrics','sheet'].forEach(s=>step(s,'',''));
+  $('steps').style.display='flex'; ['decode','chords','lyrics','second','sheet'].forEach(s=>step(s,'',''));
   step('decode','done',fmtT(state.duration));
 
   step('chords','run','sending to the AI server…');
@@ -340,11 +346,38 @@ $('buildBtn').addEventListener('click', async ()=>{
     .catch(err=>{ state.rawChords=chordsInBrowser(state.pcm16k); state.chordSource='fallback'; step('chords','fail','AI server failed ('+err.message+') — used the rough in-browser guess instead'); });
 
   step('lyrics','run','starting…');
+  state.secondText='';
   const lyricsP = transcribe(state.pcm16k, $('whisperModel').value, d=>step('lyrics','run',d))
     .then(r=>{ state.rawWords=r.words; state.rawText=r.text; step('lyrics','done', r.words.length+' words'); })
     .catch(err=>{ state.rawWords=[]; state.rawText=''; step('lyrics','fail', err.message); });
 
   await Promise.all([chordsP, lyricsP]);
+
+  // Second listen: re-run Whisper on just the stretches where chords were
+  // playing but no words came back. Starting the clip right where the music
+  // is, instead of after a long instrumental lead-in, is often enough for it
+  // to catch the singing it missed the first time.
+  state.unheard=[];
+  const gaps = (state.rawWords && state.rawWords.length) ? findLyricGaps(state.rawWords, state.rawChords) : [];
+  if(!gaps.length){ step('second','done', state.rawWords && state.rawWords.length ? 'nothing missing' : 'skipped (no transcript)'); }
+  else{
+    let found=0;
+    for(let i=0;i<gaps.length;i++){
+      const g=gaps[i];
+      step('second','run','clip '+(i+1)+' of '+gaps.length+' ('+fmtT(g.start)+'–'+fmtT(g.end)+')');
+      const clipStart=Math.max(0,g.start-0.5), clipEnd=Math.min(state.duration,g.end+0.5);
+      const clip=state.pcm16k.slice(Math.round(clipStart*16000), Math.round(clipEnd*16000));
+      try{
+        const r=await transcribe(clip, $('whisperModel').value, ()=>{}, false);
+        const shifted=(r.words||[]).map(w=>({ text:w.text, start:w.start==null?null:w.start+clipStart, end:w.end==null?null:w.end+clipStart }));
+        const keep=acceptGapWords(shifted, g, clipStart);
+        if(keep.length){ state.rawWords=state.rawWords.concat(keep); found+=keep.length; state.secondText=(state.secondText||'')+fmtT(g.start)+'  '+keep.map(w=>w.text).join(' ')+'\n'; }
+        else state.unheard.push(g);
+      }catch(_e){ state.unheard.push(g); }
+    }
+    step('second','done', found ? 'found '+found+' more words in '+(gaps.length-state.unheard.length)+' of '+gaps.length+' gaps' : 'still no lyrics heard in '+gaps.length+' gap'+(gaps.length>1?'s':''));
+  }
+
   step('sheet','run','');
   try{
     render(null);
@@ -367,45 +400,32 @@ function render(capo){
   }
   $('shapesOut').textContent = sheet.capo ? 'play '+sheet.shapesKey+' shapes' : '';
 
+  const unheard = (span)=> span && (state.unheard||[]).some(g=> g.start < span[1] && g.end > span[0]);
+  const chips = (list, span)=> list.map(c=>`<span class="chord">${esc(c)}</span>`).join('') + (unheard(span) ? '<span class="nolyr">no lyrics heard here, even on a second listen</span>' : '');
   let html='';
-  if(sheet.instrumentalIntro.length) html += `<span class="section-label">Intro</span><div class="instr">${sheet.instrumentalIntro.map(c=>`<span class="chord">${esc(c)}</span>`).join('')}</div>`;
+  if(sheet.instrumentalIntro.length) html += `<span class="section-label">Intro</span><div class="instr">${chips(sheet.instrumentalIntro, sheet.instrumentalIntroSpan)}</div>`;
   sheet.sections.forEach(sec=>{
     html += `<span class="section-label">${esc(sec.label)}</span>`;
     sec.lines.forEach(ln=>{
-      html += `<span class="line">` + ln.words.map(w=>`<span class="word">${w.chord?`<span class="chord">${esc(w.chord)}</span>`:''}${esc(w.text)}</span>`).join(' ') + `</span>`;
-      if(ln.instrumentalAfter.length) html += `<div class="instr">${ln.instrumentalAfter.map(c=>`<span class="chord">${esc(c)}</span>`).join('')}</div>`;
+      html += `<span class="line">` + ln.words.map(w=>`<span class="word"><span class="chord">${w.chord?esc(w.chord):''}</span><span class="w">${esc(w.text)}</span></span>`).join(' ') + `</span>`;
+      if(ln.instrumentalAfter.length) html += `<div class="instr">${chips(ln.instrumentalAfter, ln.instrumentalSpan)}</div>`;
     });
   });
   if(!sheet.sections.length) html += '<p class="hint">No lyrics were transcribed, so only the chords are shown below.</p>';
   $('bodyOut').innerHTML = html;
-  fixChordOverlaps();
 
   $('chordTable').innerHTML = sheet.chordTimeline.map(c=>`<tr><td>${fmtT(c.start)}</td><td>${fmtT(c.end)}</td><td>${esc(c.concert)}</td><td>${esc(c.shown)}</td></tr>`).join('');
-  $('rawOut').textContent = state.rawText || '(no transcript)';
+  $('rawOut').textContent = (state.rawText || '(no transcript)') + ((state.secondText||'') ? '\n\n[second listen]\n'+state.secondText : '');
 
   const notes=[];
   if(state.chordSource==='fallback') notes.push('<b>The AI chord server could not be reached</b>, so these chords are a rough in-browser guess and will be much less accurate.');
-  notes.push('Lyrics are transcribed by AI and can mishear words or miss lines, especially at the very start of a song or under loud instruments. Click the title to edit it.');
+  notes.push('Lyrics are transcribed by AI and can mishear words. Where chords were playing but no words came back, the page listens to that stretch a second time; anything still not heard is marked. Click the title to edit it.');
   notes.push('The AI model hears major and minor chords only. A major chord on the 3rd, 6th or 7th note of the key is shown as a 7th chord (for example B7 in G), because that is almost always how it is used. Where repeated lines were heard with a major chord one time and its relative minor another time (G vs Em), the more common one is used for all repeats.');
   notes.push('Section names (Verse, Chorus, Pre-chorus, Bridge) are worked out from which lyrics repeat and where the chords change.');
   $('caveats').innerHTML = notes.join('<br><br>');
   $('sheet').classList.add('show');
 }
 
-// Two chords on neighbouring short words can collide; nudge a chord right
-// until it clears the one before it on the same line.
-function fixChordOverlaps(){
-  document.querySelectorAll('#bodyOut .line').forEach(line=>{
-    let lastRight=-Infinity;
-    line.querySelectorAll('.chord').forEach(ch=>{
-      ch.style.left='0px';
-      const r=ch.getBoundingClientRect();
-      if(r.left < lastRight+4){ ch.style.left=(lastRight+4-r.left)+'px'; }
-      lastRight = ch.getBoundingClientRect().right;
-    });
-  });
-}
-window.addEventListener('resize', fixChordOverlaps);
 
 function fmtT(t){ if(t==null||isNaN(t)) return '–'; const m=Math.floor(t/60), s=Math.floor(t%60); return m+':'+String(s).padStart(2,'0'); }
 </script>

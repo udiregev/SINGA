@@ -305,6 +305,20 @@ export function labelSections(lines, { repeatSim=0.5, minDistance=15, blockGap=2
         if(fresh.size>=2){ merged.splice(gi,1,{rep:false,lineIdx:head},{rep:false,pre:true,lineIdx:tail}); break; }
       }
     }
+    // A pre-chorus that comes back each time is "repeated" too, so it can be
+    // glued onto the front of the chorus. Split it off the same way: the
+    // first 1–3 lines of a repeated block that use 2+ chords the rest of the
+    // block never uses.
+    for(let gi=merged.length-1;gi>=0;gi--){
+      const g=merged[gi];
+      if(!g.rep || g.lineIdx.length<4) continue;
+      for(let k=Math.min(3,g.lineIdx.length-3);k>=1;k--){
+        const head=g.lineIdx.slice(0,k), rest=g.lineIdx.slice(k);
+        const rs=new Set(rest.flatMap(i=>lineChords[i]||[]).filter(Boolean));
+        const fresh=new Set(head.flatMap(i=>lineChords[i]||[]).filter(c=>c && !rs.has(c)));
+        if(fresh.size>=2){ merged.splice(gi,1,{rep:false,pre:true,lineIdx:head},{rep:true,lineIdx:rest}); break; }
+      }
+    }
   }
   let verseN=0, chorusN=0;
   const out = merged.map((g,gi)=>{
@@ -363,6 +377,46 @@ export function harmonizeRepeats(lineChordNames, lineTexts, { sim=0.6 }={}){
 }
 
 // ------------------------------------------------------------
+// 8. Second listen. Whisper often hears nothing when singing starts after
+//    an instrumental lead-in (it decides the whole opening is "[music]"),
+//    and it can drop a line at the joins between its 30-second chunks.
+//    Find stretches where chords are playing but no words came back, so
+//    the page can re-run Whisper on just that short clip — starting it
+//    right where the music starts makes it lock onto the voice.
+// ------------------------------------------------------------
+export function findLyricGaps(rawWords, rawChords, { minGap=4, maxClip=28, minChordCover=0.6 }={}){
+  const ws = cleanWords(rawWords);
+  const chords = (rawChords||[]).filter(c=>parseChord(c.label)).map(c=>({start:+c.start,end:+c.end}));
+  if(!chords.length) return [];
+  const begin=chords[0].start, end=chords[chords.length-1].end;
+  const cover=(a,b)=>{ let t=0; chords.forEach(c=>{ const x=Math.max(a,c.start), y=Math.min(b,c.end); if(y>x) t+=y-x; }); return t/Math.max(1e-6,b-a); };
+  const gaps=[]; let prev=begin;
+  ws.forEach(w=>{ if(w.start-prev>=minGap) gaps.push([prev,w.start]); prev=Math.max(prev,w.end); });
+  if(end-prev>=minGap) gaps.push([prev,end]);
+  const out=[];
+  gaps.filter(([a,b])=>cover(a,b)>=minChordCover).forEach(([a,b])=>{
+    for(let x=a; x<b-1; x+=maxClip-2) out.push({ start:x, end:Math.min(b,x+maxClip) });
+  });
+  return out;
+}
+// Words Whisper returns for one gap clip (timestamps already shifted to song
+// time). Keeps only real words inside the gap, rejects Whisper's well-known
+// "hallucinations" on instrumental audio, and clamps a first word Whisper
+// pinned to the very start of the clip (it can't have been sung before the
+// gap began).
+const HALLUCINATION = /thank(s| you) for (watching|listening)|please subscribe|subtitles by|amara\.org|^\s*you\s*$/i;
+export function acceptGapWords(words, gap, clipStart=gap.start){
+  const ws=(words||[]).map(w=>({ text:String(w.text||'').trim(), start:w.start, end:w.end==null?w.start:w.end }))
+    .filter(w=>w.text && w.start!=null && !/^[♪\s]+$/.test(w.text) && !/^\[.*\]$/.test(w.text) && !/^\(.*\)$/.test(w.text));
+  const text=ws.map(w=>w.text).join(' ');
+  if(ws.length<2 || HALLUCINATION.test(text)) return [];
+  return ws.filter(w=>w.start>=Math.min(gap.start,clipStart)-0.1 && w.start<gap.end+0.2).map(w=>{
+    if(w.start<gap.start){ const len=Math.max(0.25,w.end-w.start); w={ ...w, start:gap.start, end:Math.max(w.end, gap.start+Math.min(len,0.6)) }; }
+    return w;
+  });
+}
+
+// ------------------------------------------------------------
 // Whole pipeline
 // ------------------------------------------------------------
 export function buildSheet(rawChords, rawWords, opts={}){
@@ -376,6 +430,7 @@ export function buildSheet(rawChords, rawWords, opts={}){
   const show = (s)=> chordName({ ...s.c, root:s.c.root-capo }, tonic-capo);
   const names = harmonizeRepeats(placed.map(r=>r.map(s=>s?show(s):null)), lines.map(normLine));
   const sections = labelSections(lines, {}, names.map(r=>r.filter(Boolean)));
+  const spanOf = slot => slot && slot.chords.length ? [slot.chords[0].start, slot.chords[slot.chords.length-1].end] : null;
   return {
     key: chordName({root:tonic,minor:false,seventh:false}, tonic),
     capo,
@@ -385,10 +440,12 @@ export function buildSheet(rawChords, rawWords, opts={}){
       lines: sec.lineIdx.map(li=>({
         start: lines[li][0].start,
         words: lines[li].map((w,wi)=>({ text:w.text, start:w.start, end:w.end, chord: names[li][wi] })),
-        instrumentalAfter: (instrumental.find(x=>x.afterLine===li)?.chords||[]).map(show)
+        instrumentalAfter: (instrumental.find(x=>x.afterLine===li)?.chords||[]).map(show),
+        instrumentalSpan: spanOf(instrumental.find(x=>x.afterLine===li))
       }))
     })),
     instrumentalIntro: (instrumental.find(x=>x.afterLine===-1)?.chords||[]).map(show),
+    instrumentalIntroSpan: spanOf(instrumental.find(x=>x.afterLine===-1)),
     chordTimeline: segs.map(s=>({ start:s.start, end:s.end, concert: chordName(s.c, tonic), shown: show(s) }))
   };
 }
