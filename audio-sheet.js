@@ -148,6 +148,20 @@ export function cleanWords(words){
     .map((w,idx)=>({ idx, text:String(w.text||'').trim(), start:w.start, end:w.end==null?w.start:w.end }))
     .filter(w=>w.text && w.start!=null && !/^\[.*\]?$/.test(w.text) && !/^_?[A-Z_]+\]$/.test(w.text) && !/^[♪\s]+$/.test(w.text) && !/^\(.*\)$/.test(w.text));
   ws.forEach(w=>{ if(!(w.end>=w.start)) w.end = w.start; if(w.end-w.start>1.6) w.end = w.start+1.6; });
+  // Whisper also writes sound descriptions that can be split over several
+  // "words" — "(audience" + "applauding)", "[BLANK" + "_AUDIO]" — and stray
+  // brackets. Drop anything inside (...) or [...] and tokens with no letters.
+  let inParen=false, inBracket=false;
+  const kept0=[];
+  ws.forEach(w=>{
+    const t=w.text;
+    const opensP=/^\(/.test(t), closesP=/\)[.,!?]*$/.test(t), opensB=/^\[/.test(t), closesB=/\][.,!?]*$/.test(t);
+    const skip = inParen || inBracket || opensP || opensB || !/[A-Za-z0-9]/.test(t);
+    if(opensP && !closesP) inParen=true; else if(inParen && closesP) inParen=false;
+    if(opensB && !closesB) inBracket=true; else if(inBracket && closesB) inBracket=false;
+    if(!skip) kept0.push(w);
+  });
+  ws.length=0; ws.push(...kept0);
   ws.sort((a,b)=> a.start-b.start || a.idx-b.idx);
   const norm = t=>t.toLowerCase().replace(/[^a-z0-9']/g,'');
   const kept=[];
@@ -260,7 +274,17 @@ export function placeChords(lines, segs, { anticipate=0.45, maxBreath=4.0 }={}){
     const prevEnd = lines[li][lines[li].length-1].end;
     const next = lines[li+1];
     const gapLen = (next ? next[0].start : Infinity) - prevEnd;
-    if(gapLen <= maxBreath){ tails[li]=slot.chords; instrumental.splice(k,1); }
+    if(gapLen <= maxBreath){
+      // ...except the last change just before the next line, which is the
+      // downbeat that line starts on: it goes on the next line's first word
+      const chords=slot.chords.slice();
+      const lastC=chords[chords.length-1];
+      if(next && lastC && next[0].start - lastC.start <= 1.6){
+        if(!placed[li+1][0]){ placed[li+1][0]=lastC; chords.pop(); }
+        else if(placed[li+1][0]===lastC) chords.pop(); // already shown there
+      }
+      tails[li]=chords; instrumental.splice(k,1);
+    }
   }
   return { placed, instrumental, tails };
 }
