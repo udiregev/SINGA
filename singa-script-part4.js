@@ -23,7 +23,8 @@ function renderChordWheel(){
   const roots = LETTERS.map((r,i)=>`<div style="flex:none;width:100px;height:72px;display:flex;align-items:center;justify-content:center;font-size:${i===ST.rootIdx?44:26}px;font-weight:700;color:${i===ST.rootIdx?'#1b1b1b':'#a8a8a8'};cursor:pointer;scroll-snap-align:center" data-act="pickRoot" data-id="${i}">${r}</div>`).join('');
   const letter = LETTERS[ST.rootIdx];
   const variants = [letter, ACC[letter]].flatMap(rt => SUFFIXES.map(q=>chordTileHTML(rt, q))).join('');
-  const recentTiles = ST.recentChords.map(ch=>{ const p = splitChordStr(ch); return chordTileHTML(p.root, p.q, ch); }).join('');
+  const used = usedChords(D.songs[ST.editId]);
+  const recentTiles = used.map(ch=>{ const p = splitChordStr(ch); return chordTileHTML(p.root, p.q, ch); }).join('');
   return `<div style="display:flex;flex-direction:column;align-items:center;gap:10px;margin-top:10px">
     <div style="display:flex;flex-direction:column;align-items:center;gap:12px">
       <div style="position:relative;width:300px;height:72px">
@@ -34,8 +35,8 @@ function renderChordWheel(){
       </div>
       <div id="chordVariants" style="opacity:1;transition:opacity .4s ease;display:flex;flex-direction:column;gap:12px;width:300px">
         ${chipRowHTML('chordVariantRow', variants)}
-        ${ST.recentChords.length ? `<div style="display:flex;align-items:center;gap:10px;margin-top:6px">
-          <span style="font-size:12px;color:#8a8a8a;font-weight:700;letter-spacing:.04em;text-transform:uppercase;flex:none">recent</span>
+        ${used.length ? `<div style="display:flex;align-items:center;gap:10px;margin-top:6px">
+          <span style="font-size:12px;color:#8a8a8a;font-weight:700;letter-spacing:.04em;text-transform:uppercase;flex:none">used</span>
           ${chipRowHTML('recentChordRow', recentTiles)}
         </div>` : ''}
       </div>
@@ -48,8 +49,7 @@ function renderNoteEditor(d){
   const [li, wi] = ST.selWord.split('-').map(Number);
   const ws = parseLyrics(d.lyrics)[li] || [];
   const w = ws[wi] || '';
-  const side = wi <= (ws.length-1)/2 ? 'left' : 'right';
-  const placement = side==='left' ? 'Shown to the left of this line' : 'Shown to the right of this line';
+  const placement = 'Shown above this word';
   return `<div class="modal-backdrop" data-act="closeNoteEditor" style="align-items:flex-start;padding-top:120px">
     <div class="modal" style="max-width:380px" onclick="modalClick(event)">
       <div class="mhead"><span style="font-size:15px;font-weight:700;color:#2f8fe0">Mark on "${esc(w)}"</span><span class="icon-btn" data-act="closeNoteEditor">${icon('close',22)}</span></div>
@@ -81,13 +81,16 @@ function renderSongBody(d){
       ${ST.step==='chords' ? renderChordWheel() : ''}
       ${ST.step==='markings' ? `<div style="font-size:13px;color:#6f6f6f;margin-top:14px">Tap a word to add a mark.</div>` : ''}
     </div>
-    <div id="editorLyricsScroll" style="opacity:${opacity};flex:none;width:100%;max-height:260px;overflow-y:auto;margin-top:18px;display:flex;flex-direction:column;align-items:center">
+    <div id="editorLyricsScroll" class="${ST.step==='sync'?'':'sheet-edit'}" style="opacity:${opacity};${ST.step==='sync'?'flex:none;max-height:260px;':'flex:1;min-height:200px;'}width:100%;overflow-y:auto;margin-top:18px;display:flex;flex-direction:column;align-items:center">
       ${linesHTML(lines)}
     </div>
-    <div style="flex:1"></div>
+    ${ST.step==='sync' ? '<div style="flex:1"></div>' : ''}
     ${ST.phase==='countdown' ? `<div style="position:absolute;top:60px;left:0;right:0">${countdownBlock()}</div>` : ''}
     ${ST.phase==='processing' ? `<div style="position:absolute;top:60px;left:0;right:0">${processingBlock()}</div>` : ''}
-    ${(ST.step==='chords'||ST.step==='markings') ? `<div style="flex:none;display:flex;flex-direction:column;align-items:center;gap:10px;padding-top:12px;border-top:1px solid #f0f0f0;width:100%;margin-top:14px">
+    ${(ST.step==='chords'||ST.step==='markings') && ST.editing ? `<div style="flex:none;display:flex;justify-content:center;padding-top:12px;border-top:1px solid #f0f0f0;width:100%;margin-top:14px">
+        <button class="btn btn-dark" style="width:220px" data-act="editDone">Done</button>
+      </div>` : ''}
+    ${(ST.step==='chords'||ST.step==='markings') && !ST.editing ? `<div style="flex:none;display:flex;flex-direction:column;align-items:center;gap:10px;padding-top:12px;border-top:1px solid #f0f0f0;width:100%;margin-top:14px">
         <div class="row" style="gap:12px">
           <button class="btn btn-outline" style="width:170px" data-act="abortCreate">Abort</button>
           <button class="btn btn-dark" style="width:170px" data-act="createNextStep">Next</button>
@@ -120,8 +123,44 @@ function renderSimilarModal(){
   </div>`;
 }
 
+function renderEdit(d){
+  const parts = [['chords','Chords'],['markings','Markings'],['lyrics','Lyrics'],['sync','Retake']];
+  const body = ST.step==='lyrics' ? renderManualLyrics(d) : renderSongBody(d);
+  return `<div class="scr center edit-mode" style="padding-top:16px">
+    <div style="width:100%;display:flex;align-items:center;gap:12px;max-width:760px">
+      <span class="icon-btn" title="Save and close" data-act="editDone">${icon('chevron_left',26)}</span>
+      <div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:800;letter-spacing:.08em;color:#2f8fe0">EDITING</div><div style="font-size:18px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(d.title||'Untitled song')}</div></div>
+      <button class="btn btn-dark btn-sm" data-act="editDone">Done</button>
+    </div>
+    <div class="seg" style="margin-top:14px">${parts.map(([k,l])=>`<button class="${k===ST.step?'on':''}" data-act="goCreateStep" data-id="${k}">${l}</button>`).join('')}</div>
+    ${body}
+  </div>`;
+}
+// After a recording or file has been captured: look it over, then Accept or Edit.
+function renderReview(){
+  const d = D.songs[ST.editId] || EMPTY_SONG;
+  const lines = buildLines(d, 'view', {});
+  const nChords = Object.keys(d.chords||{}).length;
+  return `<div class="scr center" style="padding-top:16px">
+    <div style="width:100%;max-width:760px;display:flex;flex-direction:column;flex:1;min-height:0;gap:12px">
+      <div class="row" style="gap:12px">
+        <span class="icon-btn" title="Decide later" data-act="reviewLater">${icon('chevron_left',26)}</span>
+        <div style="font-size:12px;font-weight:800;letter-spacing:.08em;color:#2f8fe0">REVIEW YOUR NEW SONG</div>
+      </div>
+      <input class="ipt" style="height:56px;font-size:20px;font-weight:700" placeholder="Title" value="${esc(d.title)}" data-bind="draftTitle">
+      <input class="ipt" style="height:48px" placeholder="Artist / version" value="${esc(d.sub)}" data-bind="draftSub">
+      <div style="font-size:13px;color:#6f6f6f">${parseLyrics(d.lyrics).filter(ws=>!isHeaderLine(ws)).length} lines · ${nChords} chords${d.synced?' · synced to the recording':''}</div>
+      <div style="flex:1;min-height:200px;overflow:auto;border:1px solid var(--b2);border-radius:14px;padding:18px 20px 40px">${linesHTML(lines)}</div>
+      <div class="row" style="gap:12px;justify-content:center;padding:6px 0 4px">
+        <button class="btn btn-outline" style="width:170px" data-act="reviewEdit">Edit</button>
+        <button class="btn btn-dark" style="width:170px" data-act="reviewAccept">Accept</button>
+      </div>
+    </div>
+  </div>`;
+}
 function renderCreate(){
   const d = D.songs[ST.editId] || { id:'x', title:'', sub:'', lyrics:'', chords:{}, notes:{} };
+  if(ST.editing) return renderEdit(d);
   const phaseIdle = ST.phase==='idle';
   const modeLocked = !phaseIdle || (ST.createMode==='manual' && ST.step!=='lyrics');
   const modeSegShown = !modeLocked;
