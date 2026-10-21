@@ -62,6 +62,7 @@ function renderModals(){
   if(ST.collabEdit) html += renderCollabEditModal();
   if(ST.editNick!=null) html += renderNickModal();
   if(ST.verifyModal) html += renderVerifyModal();
+  if(ST.accountOpen) html += renderAccountPanel();
   // The chord/markings-step note editor now floats as a modal popup (over
   // the lyrics, not squeezed in below them) instead of being part of the
   // normal in-flow layout.
@@ -72,7 +73,10 @@ function renderModals(){
    RENDER DISPATCH
    ============================================================ */
 const DARK_MODE_SCREENS = ['gig','song','practice','gigplayer'];
-let _prevRenderScreen = null;
+// Screens that fit the window (the lyrics scroll inside them) instead of
+// growing the whole page — on desktop the song used to scroll off the page.
+const FIXED_SCREENS = ['song','practice','gigplayer','create','review'];
+let _prevRenderScreen = null, _prevModalKey = '';
 function render(){
   // A render triggered by the 100ms playback/recording/sampling tick
   // redraws the current screen's markup from scratch every time. Without
@@ -84,6 +88,9 @@ function render(){
   _prevRenderScreen = ST.screen;
   const darkAllowed = DARK_MODE_SCREENS.includes(ST.screen);
   document.body.classList.toggle('dark-invert', ST.perfDark && darkAllowed);
+  document.body.classList.toggle('fixed-screen', FIXED_SCREENS.includes(ST.screen));
+  if(ST.screen!=='gig') ST.gigMenuOpen = false;
+  if(ST.screen==='account'){ ST.screen = ST.back && ST.back!=='account' ? ST.back : 'home'; ST.accountOpen = true; }
   document.getElementById('darkToggle').style.display = darkAllowed ? 'flex' : 'none';
   document.getElementById('darkPill').style.background = ST.perfDark ? '#1b1b1b' : '#fff';
   document.getElementById('darkDot').style.left = (ST.perfDark?20:2)+'px';
@@ -94,9 +101,10 @@ function render(){
     case 'home': html = renderHome(); break;
     case 'list': html = renderList(); break;
     case 'search': html = renderSearch(); break;
-    case 'account': html = renderAccount(); break;
+    case 'account': html = renderHome(); break;
     case 'collab': html = renderCollab(); break;
     case 'create': html = renderCreate(); break;
+    case 'review': html = renderReview(); break;
     case 'done': html = renderDone(); break;
     case 'incomplete': html = renderIncomplete(); break;
     case 'song': html = renderSong(); break;
@@ -109,8 +117,16 @@ function render(){
     default: html = renderHome();
   }
   document.getElementById('screen').innerHTML = html;
+  const _sp = document.querySelector('#modalLayer .sidepanel'), _spTop = _sp ? _sp.scrollTop : 0;
   document.getElementById('modalLayer').innerHTML = renderModals();
-  document.getElementById('toastBox').innerHTML = ST.toast ? `<div class="toast">${esc(ST.toast)}</div>` : '';
+  const _sp2 = document.querySelector('#modalLayer .sidepanel'); if(_sp2 && _spTop) _sp2.scrollTop = _spTop;
+  // Modals and the toast are redrawn on every 100ms tick during playback and
+  // recording; only play their entrance animation when they first appear,
+  // otherwise it restarts every tick and flickers.
+  const modalKey = [ST.gigSettings,ST.upgrade,!!(ST.pick||ST.songPick),!!ST.newItem,!!ST.collabEdit,ST.editNick!=null,ST.verifyModal,ST.accountOpen,ST.selWord].join('|');
+  if(modalKey===_prevModalKey) document.querySelectorAll('#modalLayer .modal-backdrop, #modalLayer .modal, #modalLayer .sidepanel, #modalLayer .sidepanel-backdrop').forEach(el=>{ el.style.animation='none'; });
+  _prevModalKey = modalKey;
+  document.getElementById('toastBox').innerHTML = ST.toast ? `<div class="toast" style="${animStyle('toast', ST.toast, 'toastUp', 350) || 'animation:none'}">${esc(ST.toast)}</div>` : '';
   if(sameScreen){
     const scrEl = document.querySelector('#screen .scr');
     if(scrEl) scrEl.style.animation = 'none';
@@ -288,26 +304,81 @@ function applySheetToSong(songObj, res, overwriteTitle){
   if(res.title && (overwriteTitle || !songObj.title.trim())) songObj.title = res.title;
   if(res.artist && (overwriteTitle || !songObj.sub.trim())) songObj.sub = res.artist;
 }
+/* ============================================================
+   BACKGROUND IMPORTS
+   Capturing a song from a recording or a file runs as a "job". While it
+   runs on the Create screen you can choose "Continue in the background":
+   the job keeps going, you're free to use the app, and the finished song
+   lands in your library marked REVIEW.
+   ============================================================ */
+function newJob(songId, label, bg){
+  const j = { id:'j'+Date.now()+Math.random().toString(36).slice(2,6), songId, label, pct:0, note:'', bg:!!bg };
+  ST.jobs = [...ST.jobs, j];
+  if(!bg){ ST.fgJob = j.id; ST.phase='processing'; ST.procPct=0; ST.procNote=''; }
+  return j;
+}
+function jobProgress(j, pct, note){
+  j.pct = pct; if(note) j.note = note;
+  if(ST.fgJob===j.id){ ST.procPct = pct; ST.procNote = j.note; render(); return; }
+  const bar = document.getElementById('jobbar-'+j.id); if(bar) bar.style.width = Math.round(pct)+'%';
+  const nt = document.getElementById('jobnote-'+j.id); if(nt) nt.textContent = j.note;
+}
+function endJob(j){
+  ST.jobs = ST.jobs.filter(x=>x.id!==j.id);
+  const wasFg = ST.fgJob===j.id;
+  if(wasFg){ ST.fgJob=null; ST.phase='idle'; ST.procPct=0; ST.procNote=''; }
+  return wasFg;
+}
+// A captured song is ready: open the review screen if you're still watching,
+// otherwise mark it for review and let you know.
+function jobFinished(j, songObj){
+  const wasFg = endJob(j);
+  if(!D.order.includes(songObj.id)){ D.order = [songObj.id, ...D.order]; }
+  const autoPl = (D.playlists||[]).find(p=>p.auto); if(autoPl) autoPl.ids = D.order;
+  if(!songObj.title.trim()) songObj.title = 'Untitled song';
+  if(wasFg){
+    songObj.needsReview = true;
+    ST.editId = songObj.id; ST.screen = 'review';
+    render();
+  } else {
+    songObj.needsReview = true;
+    addSongToTarget(songObj.id, j.target);
+    render();
+    toast('“'+songObj.title+'” is ready — open it to review');
+  }
+  saveSongRow(songObj);
+}
+function jobFailed(j, msg){
+  const wasFg = endJob(j);
+  const s = D.songs[j.songId]; if(s && !s.lyrics && !D.order.includes(s.id)) delete D.songs[s.id];
+  render();
+  toast(msg);
+  return wasFg;
+}
+// "Add songs" from a gig or playlist remembers where the new song should go.
+function addSongToTarget(songId, target){
+  if(!target || !songId) return;
+  if(target.kind==='playlist'){ const p = D.playlists.find(x=>x.id===target.id); if(p && !p.auto && !p.ids.includes(songId)){ p.ids = [...p.ids, songId]; queueSavePlaylist(p.id); } }
+  else if(target.kind==='gig'){ const g = D.gigs.find(x=>x.id===target.id); if(g && !g.setlist.includes(songId)){ g.setlist = [...g.setlist, songId]; queueSaveGig(g.id); } }
+  else if(target.kind==='gigedit'){ if(ST.editList && !ST.editList.includes(songId)) ST.editList = [...ST.editList, songId]; }
+}
 async function importSheetIntoDraft(s, file){
-  ST.phase='processing'; ST.procPct=10; ST.procNote='Reading '+file.name+'…'; render();
+  const j = newJob(s.id, file.name, false);
+  jobProgress(j, 10, 'Reading '+file.name+'…');
   let res;
   try{
-    res = await readSheetFile(file, msg=>{ ST.procPct=Math.min(90, ST.procPct+8); ST.procNote=msg; render(); });
+    res = await readSheetFile(file, msg=>jobProgress(j, Math.min(90, j.pct+8), msg));
   }catch(e){
     console.error('Singa: file import failed', e);
-    ST.phase='idle'; ST.procPct=0; ST.procNote=''; render();
-    toast("Couldn't read that file: "+(e && e.message || e));
+    jobFailed(j, "Couldn't read that file: "+(e && e.message || e));
     return;
   }
-  ST.phase='idle'; ST.procPct=0; ST.procNote='';
   applySheetToSong(s, res, false);
-  if(!s.lyrics.trim()){ render(); toast("Couldn't find any lyrics in that file"); return; }
-  const nChords = Object.keys(s.chords).length;
-  ST.editId = s.id; ST.screen='create'; ST.createMode='manual'; ST.step = nChords ? 'chords' : 'lyrics'; ST.editorLine=0;
-  render();
-  queueSaveSong(s.id);
+  if(!s.lyrics.trim()){ jobFailed(j, "Couldn't find any lyrics in that file"); return; }
+  s.synced = false;
+  jobFinished(j, s);
   const extra = [res.junkCount ? res.junkCount+' page number line'+(res.junkCount>1?'s':'')+' left out' : '', res.usedOcr ? 'read with OCR' : ''].filter(Boolean).join(', ');
-  toast('Imported lyrics'+(nChords?' and '+nChords+' chords':'')+' — review and continue'+(extra?' ('+extra+')':''));
+  if(extra) toast('Imported ('+extra+')');
 }
 
 // Batch "From File" import: each selected file becomes its own song, saved
@@ -319,6 +390,8 @@ async function importSheetIntoDraft(s, file){
 async function handleBatchFileUpload(files){
   let added = 0, skipped = 0;
   const total = files.length;
+  const target = ST.addTarget; ST.addTarget = null;
+  if(ST.screen==='create') exitCreate();
   for(const file of files){
     if(/\.docx?$/i.test(file.name)){ skipped++; continue; }
     const baseName = file.name.replace(/\.[^.]+$/, '').trim() || 'Untitled song';
@@ -329,19 +402,22 @@ async function handleBatchFileUpload(files){
       try{
         const res = await readSheetFile(file);
         applySheetToSong(songObj, res, true);
+        songObj.needsReview = !!songObj.lyrics.trim();
       }catch(e){ console.error('Singa: batch file read failed', e); }
     }
     D.songs[id] = songObj; D.order = [id, ...D.order]; added++;
+    addSongToTarget(id, target);
     saveSongRow(songObj);
   }
   const autoPl = (D.playlists||[]).find(p=>p.auto); if(autoPl) autoPl.ids = D.order;
   render();
-  if(added) toast(`Added ${added} song${added===1?'':'s'}${skipped?` (skipped ${skipped} unsupported)`:''} — open each to sync it`);
+  if(added) toast(`Added ${added} song${added===1?'':'s'}${skipped?` (skipped ${skipped} unsupported)`:''} — open each to review it`);
   else toast('No supported files in that selection');
 }
 function openSongOrIncomplete(id, from){
   stopOnsetListening();
   const s = song(id);
+  if(s.needsReview && !ST.jobs.some(j=>j.songId===id)){ ST.editId = id; ST.screen='review'; ST.back = from || 'home'; return; }
   const ok = s.lyrics && s.lyrics.trim();
   ST.songId = id; ST.viewBy=null; ST.viewChord=null; ST.menu=false; ST.instMenu=false; ST.ctx='view'; ST.t=0; ST.playing=false; ST.vcd=0; ST.listening=false; ST.sortOpen=false;
   ST.screen = ok ? 'song' : 'incomplete';
@@ -353,17 +429,44 @@ function newSongDraft(){
   D.order = [id, ...D.order];
   ST.editId = id; ST.screen='create'; ST.createMode='manual'; ST.step='lyrics'; ST.phase='idle'; ST.selWord=null; ST.similar=false; ST.menu=false; ST.sortOpen=false; ST.editorLine=0;
 }
+// Leaving Create (back chevron or the Singa logo): a running capture keeps
+// going in the background; an untouched empty draft is thrown away.
+function exitCreate(){
+  if(ST.phase==='processing'){
+    if(ST.fgJob){ Actions.continueInBackground(); return; }
+    toast('Finishing the sync — one moment'); return;
+  }
+  if(ST.phase==='countdown' || ST.phase==='recording') Actions.abortRecord();
+  if(ST.phase==='practicing'){ ST.phase='idle'; ST.recT=0; }
+  stopOnsetListening();
+  const s = D.songs[ST.editId];
+  if(s && !s.synced && !s.lyrics.trim() && !s.title.trim()){
+    delete D.songs[s.id]; D.order = D.order.filter(x=>x!==s.id);
+    const autoPl = (D.playlists||[]).find(p=>p.auto); if(autoPl) autoPl.ids = D.order;
+  } else if(s) queueSaveSong(s.id);
+  ST.addTarget=null; ST.selWord=null; ST.screen='home'; render();
+}
+// Saves a song as done: title fallback, into the library (and the gig or
+// playlist you were adding to), written to the database.
+function finalizeSong(s){
+  if(!s.title.trim()) s.title = 'Untitled song';
+  s.needsReview = false;
+  if(!D.order.includes(s.id)) D.order = [s.id, ...D.order];
+  const autoPl = (D.playlists||[]).find(p=>p.auto); if(autoPl) autoPl.ids = D.order;
+  addSongToTarget(s.id, ST.addTarget); ST.addTarget = null;
+  saveSongRow(s);
+}
+// End of a recorded take in the manual flow (or an edit's Retake).
 function finishSong(){
   const id = ST.editId, s = D.songs[id];
-  const patch = { synced:true };
-  // No made-up content: an empty title becomes "Untitled song", and empty
-  // lyrics stay empty (the song then opens as incomplete) rather than being
-  // replaced by a demo song.
-  if(!s.title.trim()) patch.title = 'Untitled song';
-  if(s.lyrics.trim() && (!Object.keys(s.chords).length || ST.autoChords)) patch.chords = autoChordsFor(s.lyrics);
-  Object.assign(s, patch);
-  ST.phase='idle'; ST.procPct=0; ST.procNote=''; ST.screen='done'; ST.autoChords=false; ST.songId=id;
-  saveSongRow(s);
+  s.synced = true;
+  // No made-up content: empty lyrics stay empty rather than a demo song.
+  // Pattern chords only when you explicitly chose "detect chords" (Skip).
+  if(s.lyrics.trim() && ST.autoChords && !Object.keys(s.chords).length) s.chords = autoChordsFor(s.lyrics);
+  ST.phase='idle'; ST.procPct=0; ST.procNote=''; ST.autoChords=false; ST.songId=id;
+  if(ST.editing){ saveSongRow(s); ST.step='chords'; toast('New take synced'); return; }
+  finalizeSong(s);
+  ST.screen='done';
 }
 
 /* ============================================================
