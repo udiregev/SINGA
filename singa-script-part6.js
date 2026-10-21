@@ -53,13 +53,14 @@ function renderGigPlayer(){
   const tm = timing(s);
   const ci = curWord(tm, ST.t);
   const seq = chordSeq(s);
-  const chord = chordAt(s,tm,Math.max(ci,0)) || (seq[0]||{}).ch;
-  const next = (seq.find(x=>x.k>ci && x.ch!==chord)||{}).ch;
+  const lc = liveChord(s, tm, ST.t);
+  const chord = lc.chord, next = lc.next;
   const hasInst = ST.instrument!=='none';
   const gigShowChords = hasInst || isCollab;
   const dia = diagram(chord, next || (seq[0]||{}).ch, isCollab ? (ST.part==='Keys'?'piano':'guitar') : ST.instrument);
+  if(gStarted) dia.progress = lc.progress;
   const gigHasLyrics = !!(s.lyrics && s.lyrics.trim());
-  const lines = gigHasLyrics ? buildLines(s, gStarted?'play':'view', { t: gStarted?ST.t:null, selChord: chord, hideChords: !isCollab && !hasInst }) : [];
+  const lines = gigHasLyrics ? buildLines(s, gStarted?'play':'view', { t: gStarted?ST.t:null, hideChords: !isCollab && !hasInst }) : [];
 
   const qRow = (id, kind) => {
     const x = song(id), isCur = kind==='cur';
@@ -84,9 +85,9 @@ function renderGigPlayer(){
   gq.up.forEach(id=> queueHTML += qRow(id,'up'));
   if(gq.played.length){ queueHTML += `<div style="font-size:11px;font-weight:800;letter-spacing:.08em;color:#9a9a9a;padding:22px 0 6px">PLAYED</div>`; gq.played.forEach(id=> queueHTML += qRow(id,'played')); }
 
-  const guestCount = 23 + ' guests';
+  const guestCount = ST.guestCount + (ST.guestCount===1?' guest':' guests');
   const chordScale = Math.max(0.55, Math.min(1.9, ST.chordH/230));
-  const hint = !gigHasLyrics ? 'Tap another song to continue' : (ST.playing ? 'Tap the song in the list to pause' : (gStarted ? 'Paused · tap the song to resume' : (ST.startMode==='countdown' ? 'Tap a song in the list to start · 3-2-1 countdown' : 'Tap a song in the list to start listening')));
+  const hint = !gigHasLyrics ? 'No lyrics for this song — tap another song to continue' : (ST.playing ? 'Playing' : (gStarted ? 'Paused' : (ST.startMode==='countdown' ? 'Starts with a 3-2-1 countdown' : 'Starts when you start singing')));
 
   return `<div class="gigplayer-grid">
     <div class="gigplayer-side">
@@ -103,6 +104,11 @@ function renderGigPlayer(){
         <div style="font-size:26px;font-weight:700;letter-spacing:-0.01em">${esc(s.title||'Untitled song')}</div>
         <div style="font-size:14px;color:#6f6f6f;margin-top:4px">${esc(s.sub)}</div>
         ${s.by?`<div class="row" style="gap:6px;font-size:13px;margin-top:8px">${icon('account_circle',18)}added by ${esc(s.by)}</div>`:''}
+        ${gigHasLyrics ? `<div class="row" style="gap:12px;margin-top:14px">
+          ${ST.gListening
+            ? `<div class="row" style="gap:10px;cursor:pointer" data-act="gigHeard"><span class="icon-btn playbtn" style="background:#f24822">${icon('mic',28)}</span><div><div style="font-size:15px;font-weight:600">Listening… starts the moment you sing</div><div style="font-size:12px;color:#8a8a8a;margin-top:2px">Tap to start it now</div></div></div>`
+            : `<button class="icon-btn playbtn" title="${ST.playing?'Pause':'Start'}" data-act="startGig" data-id="${esc(curId)}">${icon(ST.playing?'pause':'play_arrow',34)}</button><span style="font-size:13px;color:#8a8a8a">${hint}</span>`}
+        </div>` : ''}
       </div>
       ${gigHasLyrics ? `
         ${gigShowChords ? `<div style="height:${Math.round(ST.chordH)}px;display:flex;align-items:center;justify-content:center;overflow:hidden">
@@ -120,13 +126,9 @@ function renderGigPlayer(){
           ${icon('edit_note',24)}<div style="flex:1;font-size:12px;color:#6f6f6f;line-height:1.4"><span style="font-weight:700;color:#1b1b1b">You're a collaborator on this gig.</span> Your own chords and notes are layered on the owner's track. Only you see them.</div>
           <button class="btn btn-outline btn-sm" data-act="editPart">Edit my part</button>
         </div>` : ''}
-      <div style="min-height:64px;display:flex;align-items:center;justify-content:center;padding-top:8px">
-        ${ST.gListening ? `<div class="row" style="gap:12px;cursor:pointer" data-act="gigHeard">${icon('mic',30)}<div><div style="font-size:16px;font-weight:600">Listening… playback starts the moment you sing</div><div style="font-size:12px;color:#8a8a8a;margin-top:3px">Tap here to start it manually instead</div></div></div>`
-        : `<div style="font-size:13px;color:#8a8a8a;display:flex;align-items:center;gap:6px">${icon('touch_app',18)}${hint}</div>`}
-      </div>
     </div>
   </div>
-  ${ST.vcd>0?`<div class="modal-backdrop" style="background:rgba(255,255,255,.75);font-size:180px;font-weight:800">${Math.max(1,Math.ceil(ST.vcd))}</div>`:''}`;
+  ${ST.vcd>0?`<div class="modal-backdrop" style="background:rgba(255,255,255,.75);font-size:180px;font-weight:800;animation:none">${Math.max(1,Math.ceil(ST.vcd))}</div>`:''}`;
 }
 /* ============================================================
    MODALS: Upgrade / Picker / New / Collaborator editor
@@ -155,11 +157,18 @@ function renderPickerModal(){
   if(sp){
     const isPl = sp.kind==='playlist';
     const target = isPl ? D.playlists.find(p=>p.id===sp.id) : D.gigs.find(g=>g.id===sp.id);
-    const ids = target ? (isPl?target.ids:target.setlist) : [];
+    const ids = sp.kind==='gigedit' ? (ST.editList||[]) : (target ? (isPl?target.ids:target.setlist) : []);
     const q = (ST.spQuery||'').trim().toLowerCase();
-    heading = 'Add songs'; sub = target?target.title:''; hasSearch=true; query = ST.spQuery||'';
-    rows = D.order.filter(id=>{ const x=song(id); return !q || ((x.title||'')+' '+(x.sub||'')).toLowerCase().includes(q); })
+    heading = 'Add songs'; sub = sp.kind==='all' ? 'New songs go into your library' : (target?target.title:''); hasSearch = sp.kind!=='all'; query = ST.spQuery||'';
+    const createOpts = `<div style="display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 10px">
+      <button class="btn btn-dark btn-sm" style="flex:1 1 120px;display:flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap" data-act="addNewSong" data-id="manual">${icon('edit',18)}Create new</button>
+      <button class="btn btn-outline btn-sm" style="flex:1 1 120px;display:flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap" data-act="addNewSong" data-id="recording">${icon('mic',18)}From recording</button>
+      <button class="btn btn-outline btn-sm" style="flex:1 1 120px;display:flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap" data-act="addNewSong" data-id="file">${icon('description',18)}From file</button>
+    </div>${sp.kind==='all'?'':`<div style="font-size:12px;font-weight:700;letter-spacing:.06em;color:#8a8a8a;text-transform:uppercase;margin-top:6px">Or pick from your songs</div>`}`;
+    sub = sub; closeAct = 'closeSongPick';
+    rows = sp.kind==='all' ? '' : D.order.filter(id=>{ const x=song(id); return !q || ((x.title||'')+' '+(x.sub||'')).toLowerCase().includes(q); })
       .map(id=>{ const x=song(id), on=ids.includes(id); return `<div class="row" style="gap:14px;padding:12px 0;border-bottom:1px solid #f0f0f0;cursor:pointer" data-act="toggleSongPick" data-id="${id}"><span style="width:22px;height:22px;flex:none;border-radius:6px;border:1.5px solid var(--fg);background:${on?'#1b1b1b':'#fff'};color:#fff;display:flex;align-items:center;justify-content:center">${on?icon('check',16):''}</span><div style="min-width:0"><div style="font-size:15px;font-weight:600">${esc(x.title||'Untitled song')}</div><div style="font-size:12px;color:#8a8a8a;margin-top:2px">${esc(x.sub||(x.synced?'':'Draft'))}</div></div></div>`; }).join('');
+    rows = createOpts + rows;
     closeAct = 'closeSongPick';
   } else if(pick){
     const isPl = pick.kind==='playlist', sid = pick.songId;
