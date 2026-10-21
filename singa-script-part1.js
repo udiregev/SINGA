@@ -107,7 +107,10 @@ const ST = {
   plan:'free', upgrade:false, collabFor:null, editList:null, qrOpen:false, qrDataUrl:null,
   collabEdit:null, newItem:null, pick:null, songPick:null, spQuery:'',
   notif:{req:true,photos:true,chat:false},
-  perfDark:false, toast:null, sampling:false, sampleLeft:0, part:'Keys', avatarUrl:null
+  perfDark:false, toast:null, sampling:false, sampleLeft:0, part:'Keys', avatarUrl:null,
+  // side panels, background imports, edit mode, "add song to…" target
+  accountOpen:false, gigMenuOpen:false, gigMenuCollapsed:false, guestCount:0,
+  jobs:[], fgJob:null, editing:false, addTarget:null
 };
 let toastTimer = null;
 
@@ -127,7 +130,6 @@ async function applySession(session){
   // email_confirmed_at rather than just "a session exists", so canSync()
   // below can tell the two apart.
   ST.emailVerified = !!(session.user.email_confirmed_at || session.user.confirmed_at);
-  const socialAvatar = (session.user.user_metadata && session.user.user_metadata.avatar_url) || null;
   let row = null;
   try{
     const res = await sb.from('profiles').select('*').eq('id', ST.userId).maybeSingle();
@@ -139,11 +141,9 @@ async function applySession(session){
     ST.plan = row.plan || ST.plan;
     if(row.notif) ST.notif = row.notif;
     ST.startMode = row.start_mode || ST.startMode;
-    ST.avatarUrl = row.avatar_url || socialAvatar;
     await loadUserData();
   } else {
     ST.nickname = ST.nickname || nicknameFromEmail(ST.email);
-    ST.avatarUrl = socialAvatar;
     syncProfile();
     await seedSampleContent();
   }
@@ -229,8 +229,15 @@ function joinGigChannel(gigId){
   if(!gigId || (_liveChannelGigId===gigId && _liveChannel)) return;
   leaveGigChannel();
   _liveChannel = sb.channel('gig-live-'+gigId, { config: { broadcast: { self: false } } });
-  _liveChannel.subscribe();
-  _liveChannelGigId = gigId;
+  const ch = _liveChannel;
+  ch.on('presence', { event:'sync' }, ()=>{
+    if(_liveChannel!==ch) return;
+    let n = 0; const st = ch.presenceState();
+    Object.keys(st).forEach(k=>{ if((st[k]||[]).some(p=>p && p.role==='guest')) n++; });
+    if(n!==ST.guestCount){ ST.guestCount = n; render(); }
+  });
+  ch.subscribe();
+  _liveChannelGigId = gigId; ST.guestCount = 0;
 }
 function leaveGigChannel(){
   if(_liveChannel){ try{ sb.removeChannel(_liveChannel); }catch(e){} _liveChannel=null; _liveChannelGigId=null; }
@@ -380,8 +387,8 @@ function syncProfile(){
   try{
     sb.from('profiles').upsert({
       id: ST.userId, email: ST.email, nickname: ST.nickname, instrument: ST.instrument,
-      plan: ST.plan, notif: ST.notif, start_mode: ST.startMode, avatar_url: ST.avatarUrl, updated_at: new Date().toISOString()
-    }).then(function(){}).catch(function(){});
+      plan: ST.plan, notif: ST.notif, start_mode: ST.startMode, updated_at: new Date().toISOString()
+    }).then(function(r){ if(r && r.error) console.error('Singa: profile save failed', r.error); }).catch(function(e){ console.error('Singa: profile save failed', e); });
   }catch(e){}
 }
 async function restoreSession(){
@@ -434,6 +441,15 @@ function timing(s){
 function curWord(tm,t){ let i=-1; for(let k=0;k<tm.words.length;k++){ if(tm.words[k].t<=t) i=k; else break; } return i; }
 function chordAt(s,tm,i){ let c=null; for(let k=0;k<=i&&k<tm.words.length;k++){ const w=tm.words[k]; const ch=s.chords[w.li+'-'+w.wi]; if(ch) c=ch; } return c; }
 function chordSeq(s){ const tm=timing(s); const seq=[]; tm.words.forEach((w,k)=>{ const ch=s.chords[w.li+'-'+w.wi]; if(ch) seq.push({k,ch}); }); return seq; }
+function liveChord(s, tm, t){
+  const seq = chordSeq(s), ci = curWord(tm, t);
+  let cur = null; seq.forEach(x=>{ if(x.k<=ci) cur = x; });
+  const chord = cur ? cur.ch : (seq[0]||{}).ch;
+  const nxt = seq.find(x=>x.k>ci && x.ch!==chord);
+  const t0 = cur ? tm.words[cur.k].t : 0, t1 = nxt ? tm.words[nxt.k].t : null;
+  const progress = t1!=null && t1>t0 ? Math.max(0, Math.min(1, (t-t0)/(t1-t0))) : null;
+  return { chord, next: nxt ? nxt.ch : null, progress, ci };
+}
 function fmtTime(x){ return Math.floor(x/60)+':'+String(Math.floor(x%60)).padStart(2,'0'); }
 
 function parseChord(ch){ const m=/^([A-G][#b]?)(.*)$/.exec(ch||''); if(!m) return null; const r=ROOTS.indexOf(m[1]); return { r: r>=0?r:ALT[m[1]], q:m[2] }; }
@@ -499,5 +515,8 @@ function diagramHTML(dia, dotColor){
     dia.black.forEach(k=> inner += `<div style="position:absolute;top:0;left:${k.left}px;width:14px;height:56px;background:${k.on?dotColor:'#1b1b1b'};border-radius:0 0 3px 3px;border:1px solid #1b1b1b"></div>`);
     inner += `</div>`;
   }
-  return `<div class="diagram-row"><div style="display:flex;align-items:center;gap:26px">${inner}<div class="diaName">${esc(dia.name)}</div><div class="diaNext">» ${esc(dia.next)}</div></div></div>`;
+  const nameAnim = animStyle('diaName', dia.name, 'chordPop', 450);
+  const nextAnim = animStyle('diaNext', dia.next, 'nextIn', 450);
+  const bar = dia.progress!=null ? `<div class="nextbar"><div style="width:${Math.round(dia.progress*100)}%"></div></div>` : '';
+  return `<div class="diagram-row"><div style="display:flex;align-items:center;gap:26px">${inner}<div class="diaName" style="${nameAnim}">${esc(dia.name)}</div><div class="diaNextWrap"><div class="diaNext" style="${nextAnim}">» ${esc(dia.next)}</div>${bar}</div></div></div>`;
 }
