@@ -65,6 +65,50 @@ const Actions = {
       if(res.error) toast(res.error.message);
     }).catch(function(){ toast('Sign-in failed — check your connection and try again'); });
   },
+  // Singa wordmark → Home (a running import carries on in the background)
+  goHome(){
+    if(ST.screen==='login') return;
+    if(ST.screen==='create'){ exitCreate(); return; }
+    stopOnsetListening(); ST.screen='home'; ST.menu=false; ST.accountOpen=false; ST.gigMenuOpen=false; ST.sortOpen=false; render();
+  },
+  openAccount(){ ST.accountOpen=true; ST.menu=false; render(); },
+  closeAccount(){ ST.accountOpen=false; render(); },
+  toggleGigMenu(){
+    if(window.matchMedia && window.matchMedia('(max-width: 759px)').matches) ST.gigMenuOpen = !ST.gigMenuOpen;
+    else ST.gigMenuCollapsed = !ST.gigMenuCollapsed;
+    render();
+  },
+  continueInBackground(){
+    const j = ST.jobs.find(x=>x.id===ST.fgJob); if(!j) return;
+    j.bg = true; j.target = ST.addTarget; ST.addTarget = null;
+    ST.fgJob = null; ST.phase='idle'; ST.procPct=0; ST.procNote='';
+    ST.screen='home'; render();
+    toast("Working on it in the background — it'll appear in your songs");
+  },
+  reviewAccept(){
+    const s = D.songs[ST.editId]; if(!s) return;
+    finalizeSong(s); ST.songId = s.id; ST.screen='done'; render();
+  },
+  reviewEdit(){
+    const s = D.songs[ST.editId]; if(!s) return;
+    ST.editing=true; ST.screen='create'; ST.createMode='manual'; ST.step='chords'; ST.phase='idle'; ST.selWord=null; ST.editorLine=0; render();
+  },
+  reviewLater(){ ST.screen='home'; render(); },
+  editDone(){
+    const s = D.songs[ST.editId];
+    ST.editing=false; ST.selWord=null; ST.phase='idle';
+    if(s){ finalizeSong(s); openSongOrIncomplete(s.id, 'home'); }
+    else ST.screen='home';
+    render();
+  },
+  addNewSong(d){
+    // from the "Add songs" picker of a gig / playlist: remember where it goes
+    const sp = ST.songPick;
+    ST.addTarget = sp && sp.kind!=='all' ? { kind: sp.kind, id: sp.id } : null;
+    ST.songPick=null; ST.spQuery='';
+    newSongDraft(); ST.createMode = d.id || 'manual'; render();
+  },
+  gigEditAddSongs(){ ST.songPick = { kind:'gigedit', id: gigObj().id }; render(); },
   nav(d){ stopOnsetListening(); if(ST.screen==='search' && d.to!=='search'){ ST.searchQuery=''; ST.homeQuery=''; } ST.screen=d.to; ST.menu=false; ST.qrOpen=false; ST.sortOpen=false; render(); },
   back(d){ stopOnsetListening(); ST.screen = d.to && d.to!==ST.screen ? d.to : 'home'; ST.menu=false; render(); },
   async signOut(){
@@ -72,7 +116,6 @@ const Actions = {
     try{ await sb.auth.signOut(); }catch(e){}
     ST.screen='login'; ST.email=''; ST.password=''; ST.nickname=null; ST.authProvider=null; ST.userId=null; render();
   },
-  pickAvatar(){ if(!canSync()) return; document.getElementById('avatarInput').click(); },
   async rebootApp(){
     try{
       if('serviceWorker' in navigator){
@@ -88,12 +131,12 @@ const Actions = {
   },
   runSearch(){ ST.screen='search'; ST.searchQuery = ST.homeQuery; ST.sortOpen=false; render(); },
   newItem(d){ if(!canSync()) return; ST.newItem = { kind:d.kind, name:'', date:'' }; render(); },
-  newSong(){ if(!canSync()) return; newSongDraft(); render(); },
+  newSong(){ if(!canSync()) return; ST.addTarget=null; newSongDraft(); render(); },
   openPlaylist(d){ ST.screen='list'; ST.listKind='songs'; ST.listPl=d.id; ST.listQuery=''; ST.sortOpen=false; render(); },
   openGig(d){ ST.gigId=d.id; ST.screen='gig'; ST.qrOpen=false; render(); },
   openSongFrom(d){ openSongOrIncomplete(d.id, d.from); render(); },
   openList(d){ ST.screen='list'; ST.listKind=d.kind; ST.listPl=null; ST.listQuery=''; ST.sortOpen=false; render(); },
-  listAdd(){ if(ST.listKind==='playlists') Actions.newItem({kind:'playlist'}); else if(ST.listKind==='gigs') Actions.newItem({kind:'gig'}); else { const curPl = ST.listPl ? D.playlists.find(p=>p.id===ST.listPl) : null; if(curPl && !curPl.auto) { ST.songPick = { kind:'playlist', id:curPl.id }; render(); } else { newSongDraft(); render(); } } },
+  listAdd(){ if(ST.listKind==='playlists') Actions.newItem({kind:'playlist'}); else if(ST.listKind==='gigs') Actions.newItem({kind:'gig'}); else { const curPl = ST.listPl ? D.playlists.find(p=>p.id===ST.listPl) : null; ST.songPick = (curPl && !curPl.auto) ? { kind:'playlist', id:curPl.id } : { kind:'all' }; render(); } },
   toggleSort(){ ST.sortOpen = !ST.sortOpen; render(); },
   setSort(d){ ST.sort = d.id; ST.sortOpen=false; render(); },
 
@@ -121,13 +164,7 @@ const Actions = {
     if(s && !s.synced){ delete D.songs[ST.editId]; D.order = D.order.filter(x=>x!==ST.editId); }
     stopOnsetListening(); ST.phase='idle'; ST.selWord=null; ST.screen='home'; render();
   },
-  createBack(){
-    if(ST.phase!=='idle'){ ST.phase='idle'; render(); return; }
-    withModeSegTransition(()=>{
-      const order=['lyrics','chords','markings','sync'], i=order.indexOf(ST.step);
-      if(ST.createMode==='manual' && i>0){ ST.step=order[i-1]; ST.selWord=null; ST.editorLine=0; } else ST.screen='home';
-    });
-  },
+  createBack(){ if(ST.editing){ Actions.editDone(); return; } exitCreate(); },
   goCreateStep(d){
     const s = D.songs[ST.editId]; const hasLyrics = !!(s && s.lyrics.trim());
     if(ST.phase!=='idle') return;
@@ -215,7 +252,7 @@ const Actions = {
     // From File takes chord sheets / lyrics (several at once); everywhere
     // else Upload takes one audio or video take.
     if(ST.createMode==='file'){ fi.accept='.txt,.md,.pdf,text/plain,application/pdf'; fi.multiple=true; }
-    else { fi.accept='audio/*,video/*'; fi.multiple=false; }
+    else { fi.accept='audio/*,video/*'; fi.multiple = ST.createMode==='recording' && !ST.editing; }
     fi.click();
   },
   startCloud(){ toast('Importing from cloud storage is coming soon — use Record or Upload for now'); },
@@ -239,7 +276,9 @@ const Actions = {
   togglePickPlaylist(d){ if(!canSync()) return; const p = D.playlists.find(x=>x.id===d.id); const sid = ST.pick.songId; const on = p.ids.includes(sid); p.ids = on ? p.ids.filter(i=>i!==sid) : [...p.ids, sid]; render(); queueSavePlaylist(d.id); },
   togglePickGig(d){ if(!canSync()) return; const g = D.gigs.find(x=>x.id===d.id); const sid = ST.pick.songId; const on = g.setlist.includes(sid); g.setlist = on ? g.setlist.filter(i=>i!==sid) : [...g.setlist, sid]; render(); queueSaveGig(d.id); },
   closeSongPick(){ ST.songPick=null; ST.spQuery=''; render(); },
-  toggleSongPick(d){ if(!canSync()) return; const sp = ST.songPick; const isPl = sp.kind==='playlist'; const target = isPl ? D.playlists.find(p=>p.id===sp.id) : D.gigs.find(g=>g.id===sp.id); const ids = isPl?target.ids:target.setlist; const on = ids.includes(d.id); const next = on ? ids.filter(i=>i!==d.id) : [...ids, d.id]; if(isPl) target.ids=next; else target.setlist=next; render(); if(isPl) queueSavePlaylist(sp.id); else queueSaveGig(sp.id); },
+  toggleSongPick(d){ if(!canSync()) return; const sp = ST.songPick;
+    if(sp.kind==='gigedit'){ const l = ST.editList||[]; ST.editList = l.includes(d.id) ? l.filter(i=>i!==d.id) : [...l, d.id]; render(); return; }
+    const isPl = sp.kind==='playlist'; const target = isPl ? D.playlists.find(p=>p.id===sp.id) : D.gigs.find(g=>g.id===sp.id); const ids = isPl?target.ids:target.setlist; const on = ids.includes(d.id); const next = on ? ids.filter(i=>i!==d.id) : [...ids, d.id]; if(isPl) target.ids=next; else target.setlist=next; render(); if(isPl) queueSavePlaylist(sp.id); else queueSaveGig(sp.id); },
   togglePublic(){ if(!canSync()) return; const s = D.songs[ST.editId]; if(!s) return; s.isPublic = !s.isPublic; render(); saveSongRow(s); },
   togglePlaylistPublic(d){ if(!canSync()) return; const p = D.playlists.find(x=>x.id===d.id); if(!p) return; p.isPublic = !p.isPublic; render(); savePlaylistRow(p); },
   viewDone(){ openSongOrIncomplete(ST.editId, 'home'); render(); },
@@ -272,7 +311,7 @@ const Actions = {
   setInstrumentMenu(d, e){ if(e) e.stopPropagation(); ST.instrument=d.id; ST.menu=false; ST.instMenu=false; render(); },
   menuAddGig(){ ST.menu=false; ST.pick = { kind:'gig', songId: ST.songId }; render(); },
   removeMarkings(){ const s = song(ST.songId); if(!s || s.id==='none') return; s.notes={}; ST.menu=false; render(); toast('Markings removed'); queueSaveSong(s.id); },
-  editSong(){ if(!canSync()) return; stopOnsetListening(); ST.editId = ST.songId; ST.screen='create'; ST.createMode='manual'; ST.step='chords'; ST.phase='idle'; ST.menu=false; ST.editorLine=0; render(); },
+  editSong(){ if(!canSync()) return; stopOnsetListening(); ST.editId = ST.songId; ST.editing=true; ST.addTarget=null; ST.screen='create'; ST.createMode='manual'; ST.step='chords'; ST.phase='idle'; ST.menu=false; ST.selWord=null; ST.editorLine=0; render(); },
   deleteSong(){ if(!canSync()) return; stopOnsetListening(); const delId=ST.songId; delete D.songs[delId]; D.order = D.order.filter(x=>x!==delId); const autoPl=D.playlists.find(p=>p.auto); if(autoPl) autoPl.ids=D.order; ST.screen='home'; ST.menu=false; render(); toast('Song deleted'); deleteSongRow(delId); },
   copySong(){
     if(!canSync()) return;
@@ -319,7 +358,7 @@ const Actions = {
   toggleGuide(){ ST.guide = !ST.guide; render(); },
   setGuideInst(d){ ST.guideInst=d.id; ST.guide=true; render(); },
 
-  gigAddSongs(){ ST.songPick = { kind:'gig', id: gigObj().id }; render(); },
+  gigAddSongs(){ ST.gigMenuOpen=false; ST.songPick = { kind:'gig', id: gigObj().id }; render(); },
   gigEditOpen(){ ST.screen='gigedit'; ST.editList = [...gigObj().setlist]; render(); },
   gigPhotosOpen(){ ST.screen='gigphotos'; render(); },
   async gigMessagesOpen(){
