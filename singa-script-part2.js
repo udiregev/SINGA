@@ -33,17 +33,18 @@ function buildLines(s, mode, opt){
       if(header){
         // Never interactive, never chorded/marked.
       } else if(mode==='chords'){
-        o.col='#a3a3a3'; o.chordCol='#1b1b1b'; o.cursor='pointer'; o.clickAct='placeChord'; o.clickId=id;
+        o.col='#1b1b1b'; o.chordCol='#1b1b1b'; o.cursor='pointer'; o.clickAct='placeChord'; o.clickId=id; o.chip=true;
       } else if(mode==='markings'){
         o.cursor='pointer'; o.clickAct='pickMarkWord'; o.clickId=id;
       } else if(mode==='view'){
-        o.chordCol = ch && ch===opt.selChord ? '#f24822' : '#9a9a9a';
+        o.chordCol = '#9a9a9a';
         if(ch){ o.cursor='pointer'; o.clickAct='setViewChord'; o.clickId=ch; }
       } else if(mode==='play'){
         const past = cw && li<cw.li;
         o.weight=700;
         o.col = curLine ? (gi<=ci?'#1b1b1b':'#b8b8b8') : (past?'#d2d2d2':'#a8a8a8');
         o.chordCol = gi===curChordK ? '#f24822' : (curLine?'#8a8a8a':'#cfcfcf');
+        if(gi===curChordK && ch) o.chordAnim = animStyle('lyrChord', id, 'chordPop', 450);
       }
       return o;
     });
@@ -54,8 +55,8 @@ function buildLines(s, mode, opt){
       for(let k=0; s.chords[li+'-t'+k]; k++){
         const tid = li+'-t'+k, tc = s.chords[tid];
         const o = { id:tid, w:'', chord:tc, col:'#333', chordCol:'#9a9a9a', weight:400, cursor:'default', mark:'', markSide:null, selected:false, tail:true };
-        if(mode==='chords'){ o.chordCol='#1b1b1b'; o.cursor='pointer'; o.clickAct='placeChord'; o.clickId=tid; }
-        else if(mode==='view'){ o.chordCol = tc===opt.selChord ? '#f24822' : '#9a9a9a'; o.cursor='pointer'; o.clickAct='setViewChord'; o.clickId=tc; }
+        if(mode==='chords'){ o.chordCol='#1b1b1b'; o.cursor='pointer'; o.clickAct='placeChord'; o.clickId=tid; o.chip=true; }
+        else if(mode==='view'){ o.chordCol = '#9a9a9a'; o.cursor='pointer'; o.clickAct='setViewChord'; o.clickId=tc; }
         else if(mode==='play'){ o.chordCol = curLine ? '#8a8a8a' : '#cfcfcf'; }
         w2.push(o);
       }
@@ -64,28 +65,43 @@ function buildLines(s, mode, opt){
     return { li, words:w2, header, padTop: on?10:0, mb: on?10:0, scale: on?1.12:1, op: (!header && isPlay && cw && li<cw.li) ? 0.75:1, cur: on };
   });
 }
-function markBubbleHTML(mark, side){
-  const arrow = side==='left'
-    ? `<svg width="34" height="14" viewBox="0 0 34 14" fill="none" stroke="#2f8fe0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 7h27"></path><path d="M22 2l6.5 5-6.5 5"></path></svg>`
-    : `<svg width="34" height="14" viewBox="0 0 34 14" fill="none" stroke="#2f8fe0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M32.5 7h-27"></path><path d="M12 2l-6.5 5 6.5 5"></path></svg>`;
-  return side==='left'
-    ? `<span class="markbubble"><span class="mtext">${esc(mark)}</span>${arrow}</span>`
-    : `<span class="markbubble">${arrow}<span class="mtext">${esc(mark)}</span></span>`;
+// A short-lived CSS animation that survives the app's 100ms full re-renders:
+// remembers when `val` last changed for `key`, and while the animation is
+// still running hands back the same animation with a negative delay, so each
+// fresh copy of the element picks up exactly where the last one was.
+const _anim = {};
+function animStyle(key, val, name, ms){
+  const now = Date.now(), a = _anim[key];
+  if(!a || a.val!==val){ _anim[key] = { val, at: now }; }
+  const el = now - _anim[key].at;
+  return el < ms ? `animation:${name} ${ms}ms cubic-bezier(.2,.8,.2,1) both;animation-delay:-${el}ms;` : '';
+}
+// Marks sit in a small row ABOVE the word they belong to (handwritten, blue,
+// with an arrow down to the word) so they never cover lyrics or chords.
+function markRowHTML(mark, side){
+  // marks on the right half of a line grow leftwards so they stay on screen
+  if(!mark) return `<span class="lmark"></span>`;
+  return side==='right'
+    ? `<span class="lmark"><span class="mk mk-r"><span class="mtext">${esc(mark)}</span><span class="msi" style="font-size:15px">south_east</span></span></span>`
+    : `<span class="lmark"><span class="mk"><span class="msi" style="font-size:15px">south_west</span><span class="mtext">${esc(mark)}</span></span></span>`;
+}
+function headerLineHTML(l){
+  const raw = l.words.map(w=>w.w).join(' ').replace(/^[\[(]\s*/,'').replace(/\s*[\])]$/,'');
+  const m = /^([^:]{1,30}):\s*(.+)$/.exec(raw);
+  return `<div class="lline lheader"><span class="hl">${esc(m?m[1]:raw)}</span>${m?`<span class="hc">${esc(m[2])}</span>`:''}</div>`;
 }
 function linesHTML(lines, big){
   return `<div class="lyrics-wrap">` + lines.map(l=>{
-    if(l.header){
-      const text = l.words.map(w=>w.w).join(' ');
-      return `<div class="lline lheader">${esc(text)}</div>`;
-    }
+    if(l.header) return headerLineHTML(l);
     const style = `margin-top:${l.padTop}px;margin-bottom:${l.mb}px;transform:scale(${l.scale});transform-origin:left center;opacity:${l.op}`;
+    const hasMark = l.words.some(w=>w.mark);
     const words = l.words.map(w=>{
       const act = w.clickAct ? `data-act="${w.clickAct}" data-id="${esc(w.clickId)}"` : '';
       const bg = w.selected ? 'background:#e5f0fc' : '';
       const fsz = big ? 'font-size:32px;padding:0 2px' : 'font-size:24px';
       const fszc = big ? 'font-size:15px;font-weight:700' : 'font-size:14px;font-weight:600';
-      const markHTML = w.mark ? `<span class="markanchor markanchor-${w.markSide}">${markBubbleHTML(w.mark, w.markSide)}</span>` : '';
-      return `<span class="lword" style="cursor:${w.cursor};border-radius:5px;${bg}" ${act}><span class="lchord" style="${fszc};color:${w.chordCol}">${esc(w.chord)}</span><span class="ltext" style="${fsz};font-weight:${w.weight};color:${w.col}">${w.w?esc(w.w):'&nbsp;'}</span>${markHTML}</span>`;
+      const chordCls = w.chip ? 'lchord chip' : 'lchord';
+      return `<span class="lword${w.chip?' editable':''}" style="cursor:${w.cursor};border-radius:5px;${bg}" ${act}>${hasMark?markRowHTML(w.mark, w.markSide):''}<span class="${chordCls}" style="${fszc};color:${w.chordCol};${w.chordAnim||''}">${esc(w.chord)}</span><span class="ltext" style="${fsz};font-weight:${w.weight};color:${w.col}">${w.w?esc(w.w):'&nbsp;'}</span></span>`;
     }).join('');
     return `<div class="lline" style="${style}">${words}</div>`;
   }).join('') + `</div>`;
@@ -133,8 +149,22 @@ function gigRowHome(g){
   const sub = g.date ? (g.date+' · '+songCount) : songCount;
   return `<div class="list-row" data-act="openGig" data-id="${g.id}"><div style="min-width:0"><div class="t" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(g.title)}</div><div class="s">${esc(sub)}</div></div>${g.id==='nye'?'<span style="font-size:11px;font-weight:700;letter-spacing:.06em;color:#f24822">LIVE</span>':''}</div>`;
 }
+function jobsHTML(){
+  if(!ST.jobs.length) return '';
+  return `<div class="jobs">${ST.jobs.map(j=>{
+    const s = D.songs[j.songId] || {};
+    return `<div class="job"><div class="row" style="justify-content:space-between;gap:10px"><span style="font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(s.title || j.label || 'New song')}</span><span style="font-size:11px;font-weight:800;letter-spacing:.06em;color:#2f8fe0">${j.bg?'ADDING':'OPEN'}</span></div>
+      <div class="jobbar"><div id="jobbar-${j.id}" style="width:${Math.round(j.pct)}%"></div></div>
+      <div id="jobnote-${j.id}" style="font-size:12px;color:#8a8a8a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(j.note||'Waiting…')}</div></div>`;
+  }).join('')}</div>`;
+}
+function songBadge(s){
+  if(ST.jobs.some(j=>j.songId===s.id)) return ['ADDING…','#2f8fe0'];
+  if(s.needsReview) return ['REVIEW','#2f8fe0'];
+  return s.synced ? ['SYNCED','#1b1b1b'] : ['NO TAKE','#b0b0b0'];
+}
 function songRowHome(s){
-  return `<div class="list-row" data-act="openSongFrom" data-id="${s.id}" data-from="home" style="border-bottom:1px solid var(--b2)"><div><div class="t">${esc(s.title||'Untitled song')}</div><div class="s">${esc(s.sub || (s.synced?'':'Draft'))}</div></div></div>`;
+  return `<div class="list-row" data-act="openSongFrom" data-id="${s.id}" data-from="home" style="border-bottom:1px solid var(--b2)"><div><div class="t">${esc(s.title||'Untitled song')}</div><div class="s">${esc(s.sub || (s.synced?'':'Draft'))}</div></div>${(()=>{ const b=songBadge(s); return b[0]==='SYNCED'||b[0]==='NO TAKE' ? '' : `<span style="font-size:11px;font-weight:800;letter-spacing:.05em;color:${b[1]}">${b[0]}</span>`; })()}</div>`;
 }
 
 function renderHome(){
@@ -148,7 +178,7 @@ function renderHome(){
         <button class="icon-btn" style="width:36px;height:36px" data-act="runSearch">${icon('search',22)}</button>
       </div>
       <div style="flex:1"></div>
-      <button class="icon-btn" title="Account" data-act="nav" data-to="account" style="width:48px;height:48px;border-radius:50%;border:1.5px solid var(--fg);background:#fff">${icon('person',24)}</button>
+      <button class="icon-btn" title="Account & settings" data-act="openAccount" style="width:48px;height:48px;border-radius:50%;border:1.5px solid var(--fg);background:#fff">${icon('person',24)}</button>
     </div>
     <div class="home-grid">
       <div style="display:flex;flex-direction:column;gap:48px">
@@ -164,13 +194,10 @@ function renderHome(){
         </div>
       </div>
       <div style="display:flex;flex-direction:column;gap:48px">
-        <div class="row" style="flex-direction:column;gap:12px;padding:16px 0;cursor:pointer" data-act="newSong">
-          <div style="width:84px;height:84px;border-radius:50%;background:var(--fg);color:#fff;display:flex;align-items:center;justify-content:center">${icon('add',40)}</div>
-          <div style="font-size:17px;font-weight:600">Add a Song</div>
-        </div>
         <div>
-          <div style="font-size:26px;font-weight:700;margin-bottom:8px">Recent Songs</div>
-          ${recent}
+          <div class="row" style="justify-content:space-between;margin-bottom:8px"><span style="font-size:26px;font-weight:700">Songs</span><span class="icon-btn" title="Add a song" data-act="newSong">${icon('add',24)}</span></div>
+          ${jobsHTML()}
+          ${recent || '<div style="padding:14px 0;color:#8a8a8a;font-size:14px">No songs yet — tap + to add one.</div>'}
           <a class="link" style="display:inline-block;margin-top:14px;text-decoration:underline" data-act="openList" data-kind="songs">All Songs</a>
         </div>
       </div>
@@ -210,8 +237,8 @@ function renderList(){
     rows = sortRows(rows);
     title = curPl ? curPl.title : 'Songs';
     titleBadge = srcBadge(curPl);
-    rowsHtml = rows.map(r=>songRowList(r.id, r.synced?'SYNCED':'NO TAKE', r.synced?'#1b1b1b':'#b0b0b0', 'list')).join('');
-    empty = !rows.length;
+    rowsHtml = `<div class="list-row addrow" data-act="listAdd"><div class="t">${icon('add_circle',22)}Add song</div></div>` + rows.map(r=>{ const b=songBadge(r); return songRowList(r.id, b[0], b[1], 'list'); }).join('');
+    empty = false;
   } else if(ST.listKind==='playlists'){
     let rows = D.playlists.slice();
     const q = ST.listQuery.trim().toLowerCase();
@@ -232,7 +259,7 @@ function renderList(){
     <div class="row" style="gap:14px;position:relative;z-index:2;margin-bottom:24px">
       <span class="icon-btn" data-act="nav" data-to="home">${icon('chevron_left',26)}</span>
       <span style="font-size:28px;font-weight:700;display:flex;align-items:center;gap:8px">${esc(title)}${titleBadge}</span>
-      <span class="icon-btn" title="Add" data-act="listAdd" style="margin-left:36px">${icon('add',24)}</span>
+      ${ST.listKind==='songs' ? '' : `<span class="icon-btn" title="${ST.listKind==='playlists'?'New playlist':'New gig'}" data-act="listAdd" style="margin-left:36px">${icon('add',24)}</span>`}
       ${curPl && curPl.mine && !curPl.auto ? `<a class="link" style="margin-left:18px;color:${curPl.isPublic?'#1b1b1b':'#9a9a9a'}" data-act="togglePlaylistPublic" data-id="${esc(curPl.id)}">${curPl.isPublic?'Shared':'Make shared'}</a>` : ''}
       <div style="flex:1"></div>
       ${sortDropdown()}
