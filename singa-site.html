@@ -84,8 +84,9 @@ textarea.ipt{height:auto;padding:16px 18px;line-height:1.5;resize:none}
 .search-field{height:48px;border:1.5px solid var(--fg);border-radius:12px;display:flex;align-items:center;padding:0 6px 0 16px;gap:6px;min-width:0}
 .search-field input{flex:1;min-width:0;border:0;outline:none;font-size:15px;background:transparent;height:100%}
 
-.toast-box{position:fixed;left:50%;bottom:36px;transform:translateX(-50%);z-index:200}
-.toast{animation:singaToast .35s cubic-bezier(.2,.8,.2,1) both;background:var(--fg);color:#fff;padding:12px 20px;border-radius:10px;font-size:14px;font-weight:600;white-space:nowrap}
+.toast-box{position:fixed;left:16px;right:16px;bottom:36px;z-index:200;display:flex;justify-content:center;pointer-events:none}
+@keyframes toastUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+.toast{animation:toastUp .35s cubic-bezier(.2,.8,.2,1) both;background:var(--fg);color:#fff;padding:12px 20px;border-radius:10px;font-size:14px;font-weight:600;width:max-content;max-width:calc(100vw - 32px);text-align:center}
 
 .modal-backdrop{position:fixed;inset:0;background:rgba(255,255,255,.82);animation:singaFade .25s ease both;display:flex;align-items:center;justify-content:center;z-index:100;padding:24px}
 .modal{width:100%;max-width:460px;border:1.5px solid var(--fg);border-radius:14px;background:#fff;padding:24px;display:flex;flex-direction:column;gap:12px;box-shadow:0 20px 60px rgba(0,0,0,.12);animation:singaPop .32s cubic-bezier(.2,.8,.2,1) both;max-height:88vh;overflow:auto}
@@ -151,6 +152,70 @@ textarea.ipt{height:auto;padding:16px 18px;line-height:1.5;resize:none}
 @media(min-width:760px){.account-avatar-col{display:flex}}
 
 ::placeholder{color:#a0a0a0}
+
+/* ---- fit-to-window screens (song viewer, players, create): content scrolls inside ---- */
+body.fixed-screen #appRoot{height:100vh;height:100dvh;min-height:0;overflow:hidden}
+body.fixed-screen #screen{min-height:0;overflow:hidden}
+
+/* ---- chord / marking animation + look ---- */
+@keyframes chordPop{0%{transform:scale(.6);opacity:0}60%{transform:scale(1.18);opacity:1}100%{transform:scale(1);opacity:1}}
+@keyframes nextIn{from{transform:translateX(14px);opacity:0}to{transform:none;opacity:1}}
+.lword .lchord{display:inline-block;transform-origin:left bottom}
+.diaName{display:inline-block;transform-origin:center}
+.diaNextWrap{display:flex;flex-direction:column;gap:6px;min-width:60px}
+.nextbar{height:4px;border-radius:2px;background:#ececec;overflow:hidden}
+.nextbar>div{height:100%;background:var(--accent);border-radius:2px}
+.lmark{position:relative;height:24px;display:block}
+.lmark .mk.mk-r{left:auto;right:0}
+.lmark .mk{position:absolute;left:0;bottom:0;display:flex;align-items:flex-end;gap:1px;white-space:nowrap;color:var(--chordblue);pointer-events:none}
+.lmark .mtext{font-family:Caveat,cursive;font-size:22px;line-height:1}
+.lline.lheader{display:flex;gap:10px;align-items:baseline;opacity:.6;font-style:normal;font-size:13px;font-weight:700;letter-spacing:.03em;text-transform:none;color:var(--m2)}
+.lline.lheader .hl{text-transform:uppercase;letter-spacing:.06em}
+.lline.lheader .hc{font-weight:700;color:#1b1b1b;letter-spacing:.02em}
+/* chords step: the test-sheet look — dark chord chips over the words */
+.lword .lchord.chip{align-self:flex-start;height:auto;min-height:20px;line-height:18px;border-radius:5px;padding:0 5px;margin-bottom:3px;background:#f0efe9;font-size:13px !important;font-weight:700 !important}
+.lword .lchord.chip:empty{background:transparent}
+.lword.editable{padding:0 2px;border-radius:6px;transition:background .15s}
+.lword.editable:hover{background:#f6f5f2}
+.sheet-edit .lyrics-wrap{gap:14px}
+.playbtn{width:56px;height:56px;border-radius:50%;background:#1b1b1b;color:#fff;flex:none}
+
+/* ---- side panels ---- */
+@keyframes slideInR{from{transform:translateX(100%)}to{transform:none}}
+@keyframes slideInL{from{transform:translateX(-100%)}to{transform:none}}
+.sidepanel-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.18);z-index:110;animation:singaFade .2s ease both}
+.sidepanel{position:fixed;top:0;right:0;bottom:0;width:min(420px,92vw);background:#fff;z-index:111;box-shadow:-12px 0 40px rgba(0,0,0,.12);padding:22px 24px 40px;overflow:auto;display:flex;flex-direction:column;gap:22px;animation:slideInR .28s cubic-bezier(.2,.8,.2,1) both}
+.ap-sec{display:flex;flex-direction:column;border-top:1px solid var(--b2);padding-top:14px}
+.ap-h{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#8a8a8a;margin-bottom:6px}
+
+/* ---- gig screen: collapsible left menu ---- */
+.gig-layout{flex-direction:row;gap:28px;align-items:flex-start}
+.gig-main{flex:1;min-width:0;display:flex;flex-direction:column}
+.gigmenu{flex:none;width:200px;display:flex;flex-direction:column;gap:2px;border-right:1px solid var(--b2);padding-right:12px;position:sticky;top:0;transition:width .25s}
+.gigmenu.collapsed{width:56px}
+.gigmenu-item{display:flex;align-items:center;gap:12px;height:44px;padding:0 10px;border-radius:10px;border:0;background:none;color:var(--fg);font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap;overflow:hidden;text-align:left}
+.gigmenu-item:hover{background:#f4f4f2;color:var(--fg)}
+.gigmenu.collapsed .lbl{display:none}
+.gigmenu-toggle{color:#8a8a8a;margin-bottom:6px}
+.gigmenu-mobilebtn{display:none}
+.gigmenu-backdrop{display:none}
+@media(max-width:759px){
+  .gig-layout{flex-direction:column}
+  .gigmenu{position:fixed;top:0;left:0;bottom:0;width:250px !important;background:#fff;z-index:111;padding:22px 14px;border-right:0;box-shadow:12px 0 40px rgba(0,0,0,.12);transform:translateX(-105%);transition:transform .28s cubic-bezier(.2,.8,.2,1)}
+  .gigmenu.open{transform:none}
+  .gigmenu .lbl{display:inline !important}
+  .gigmenu-toggle{display:none}
+  .gigmenu-mobilebtn{display:flex}
+  .gigmenu-backdrop.open{display:block;position:fixed;inset:0;background:rgba(0,0,0,.18);z-index:110}
+}
+
+/* ---- background imports on Home ---- */
+.jobs{display:flex;flex-direction:column;gap:10px;margin:4px 0 12px}
+.job{border:1px solid var(--b2);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:6px}
+.jobbar{height:5px;border-radius:3px;background:#ececec;overflow:hidden}
+.jobbar>div{height:100%;background:var(--chordblue);border-radius:3px;transition:width .4s}
+.addrow .t{color:var(--fg);gap:8px}
+#topbar .wordmark{left:50%;right:auto;transform:translateX(-50%);pointer-events:auto;cursor:pointer}
 </style>
 </head>
 <body>
@@ -160,7 +225,7 @@ textarea.ipt{height:auto;padding:16px 18px;line-height:1.5;resize:none}
       <span class="pill" id="darkPill"><span class="dot" id="darkDot"></span></span>
       <span class="msi" style="font-size:20px">light_mode</span>
     </span>
-    <span class="wordmark">Singa</span>
+    <span class="wordmark" data-act="goHome" title="Home">Singa</span>
   </div>
   <div id="screen"></div>
 </div>
