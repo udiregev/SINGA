@@ -134,7 +134,13 @@ document.getElementById('fileInput').addEventListener('change', function(e){
   // the library as its own unsynced song (no detour through the Create
   // flow for each) — opening one later prompts for a sync track the normal
   // "incomplete song" way.
-  if(files.length > 1){ handleBatchFileUpload(files); return; }
+  if(files.length > 1){
+    const docs = files.filter(f=>/\.(txt|md|pdf|docx?)$/i.test(f.name) || /^text\//.test(f.type) || f.type==='application/pdf');
+    const takes = files.filter(f=>!docs.includes(f));
+    if(docs.length) handleBatchFileUpload(docs);
+    if(takes.length) queueAudioFiles(takes);
+    return;
+  }
   const file = files[0];
   const s = D.songs[ST.editId];
   if(/\.docx?$/i.test(file.name)){

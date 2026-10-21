@@ -81,26 +81,25 @@ let audioImportMod = null;
 // (small.en) in a Web Worker, a second listen where chords play but no words
 // came back, then the full chord sheet (key, capo, chord on the word where it
 // changes, end-of-line chords, lines and sections).
-async function processRecordingFromScratch(songObj, blob){
-  ST.phase='processing'; ST.procPct=3; ST.procNote='Listening back to your take…'; render();
+async function processRecordingFromScratch(songObj, blob, job){
+  const j = job || newJob(songObj.id, blob.name || 'Recording', false);
+  jobProgress(j, 3, 'Listening back to your take…');
   let res;
   try{
     if(!audioImportMod) audioImportMod = await import('./audio-import.js?v=1');
     res = await audioImportMod.analyzeAudio(blob, {
       fileName: blob.name || 'recording.webm',
-      onProgress: ({pct,note})=>{ ST.procPct=pct; ST.procNote=note; render(); }
+      onProgress: ({pct,note})=>jobProgress(j, pct, note)
     });
   }catch(err){
     console.error('Singa: audio import failed', err);
-    ST.phase='idle'; ST.procPct=0; ST.procNote=''; render();
-    toast("Couldn't analyse that audio: "+(err && err.message || err));
-    return;
+    jobFailed(j, "Couldn't analyse that audio: "+(err && err.message || err));
+    return false;
   }
   const nWords = (res.sheet.sections||[]).reduce((n,sec)=>n+sec.lines.reduce((m,l)=>m+l.words.length,0),0);
   if(!nWords){
-    ST.phase='idle'; ST.procPct=0; ST.procNote=''; render();
-    toast(res.lyricsError ? "Couldn't hear the lyrics: "+res.lyricsError : "No sung words came through — try a take with clearer vocals");
-    return;
+    jobFailed(j, res.lyricsError ? "Couldn't hear the lyrics: "+res.lyricsError : "No sung words came through — try a take with clearer vocals");
+    return false;
   }
   audioSheetToSong(songObj, res.sheet);
   if(!songObj.title.trim()){
@@ -109,16 +108,33 @@ async function processRecordingFromScratch(songObj, blob){
   }
   songObj.audioDurationSec = res.durationSec;
   songObj.synced = true;
-  ST.procPct=97; ST.procNote='Saving a short sample…'; render();
+  jobProgress(j, 97, 'Saving a short sample…');
   try{
     const first = songObj.wordTimestamps.length ? songObj.wordTimestamps[0] : 0;
     await uploadSampleClip(songObj, res.pcm16k, first);
   }catch(e){ console.error('Singa: sample clip upload failed', e); }
+  jobFinished(j, songObj);
   if(res.chordSource==='fallback') toast("The chord server didn't answer, so the chords are a rough guess — check them");
   else if(res.unheard && res.unheard.length) toast(res.unheard.length+' spot'+(res.unheard.length>1?'s':'')+' had chords but no clear words — check those lines');
-  ST.procPct=100; ST.procNote='Done'; render();
-  finishSong();
+  return true;
+}
+
+// Several recordings picked at once: each becomes its own song, analysed one
+// after another in the background (the lyrics model runs one take at a time).
+let _audioQueue = Promise.resolve();
+function queueAudioFiles(files){
+  const target = ST.addTarget; ST.addTarget = null;
+  if(ST.screen==='create') exitCreate();
+  files.forEach(f=>{
+    const id = 'n'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
+    const songObj = { id, title:'', sub:'', lyrics:'', chords:{}, notes:{}, synced:false, isPublic:false, plays:0, added:Date.now(), mine:true };
+    D.songs[id] = songObj;
+    const j = newJob(id, f.name, true); j.target = target; j.note = 'Waiting…';
+    _audioQueue = _audioQueue.then(()=>processRecordingFromScratch(songObj, f, j)).catch(e=>console.error('Singa: batch audio failed', e));
+  });
+  ST.screen='home'; ST.phase='idle';
   render();
+  toast('Adding '+files.length+' songs in the background');
 }
 
 // Recording / upload. In the "From Recording" flow (or with no lyrics typed
