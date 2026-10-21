@@ -27,20 +27,7 @@ create index if not exists songs_owner_idx on public.songs(owner_id);
 create index if not exists songs_public_title_idx on public.songs using gin (to_tsvector('simple', title)) ;
 
 alter table public.songs enable row level security;
-drop policy if exists "songs_select" on public.songs;
--- A song is readable if it's public, you own it, OR it's in the setlist of
--- any gig that's been made public (the Audience Guest Site reads a gig's
--- songs this way, with no login, so a shared gig doesn't also require
--- separately marking every one of its songs public).
-create policy "songs_select" on public.songs for select
-  using (
-    is_public
-    or owner_id = auth.uid()
-    or exists (
-      select 1 from public.gigs g
-      where g.is_public and g.setlist @> to_jsonb(songs.id)
-    )
-  );
+-- (songs_select is created after the gigs table below — it refers to gigs)
 drop policy if exists "songs_insert" on public.songs;
 create policy "songs_insert" on public.songs for insert
   with check (owner_id = auth.uid());
@@ -115,6 +102,24 @@ create policy "gigs_update" on public.gigs for update
 drop policy if exists "gigs_delete" on public.gigs;
 create policy "gigs_delete" on public.gigs for delete
   using (owner_id = auth.uid());
+
+-- Songs are readable when public, yours, or in a public gig's setlist.
+-- Created here, after public.gigs exists (it used to come first, which made
+-- the whole script fail on a fresh project).
+drop policy if exists "songs_select" on public.songs;
+-- A song is readable if it's public, you own it, OR it's in the setlist of
+-- any gig that's been made public (the Audience Guest Site reads a gig's
+-- songs this way, with no login, so a shared gig doesn't also require
+-- separately marking every one of its songs public).
+create policy "songs_select" on public.songs for select
+  using (
+    is_public
+    or owner_id = auth.uid()
+    or exists (
+      select 1 from public.gigs g
+      where g.is_public and g.setlist @> to_jsonb(songs.id)
+    )
+  );
 
 -- ============================================================
 -- STORAGE: 5-second song-preview audio clips (same pattern as the

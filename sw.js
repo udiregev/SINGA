@@ -1,11 +1,11 @@
-/* Singa app-shell service worker.
+/* Singa app-shell service worker (network-first).
    Lets the PWA install reliably on tablets/phones and opens instantly on
    repeat visits. Only caches this app's own files (same-origin) — it never
    touches Supabase, Google Fonts, or the Supabase CDN script, so sign-in
    and data always go straight to the network.
    Bump CACHE_NAME whenever the shell file list changes, so old caches get
    cleaned up automatically on the next visit. */
-const CACHE_NAME = 'singa-shell-v3';
+const CACHE_NAME = 'singa-shell-v4';
 const SHELL_FILES = [
   'singa-app.html',
   'singa-site.html',
@@ -37,19 +37,25 @@ self.addEventListener('activate', function(e){
   );
 });
 
+// Network first, so a new version shows up on the very next load; the cached
+// copy is only used when offline.
 self.addEventListener('fetch', function(e){
   const url = new URL(e.request.url);
   if(url.origin !== location.origin) return; // never intercept cross-origin (Supabase, fonts, CDN)
   if(e.request.method !== 'GET') return;
+  // revalidate with the server instead of trusting the browser's HTTP cache
+  let req;
+  try{ req = e.request.mode==='navigate' ? new Request(e.request.url, { cache:'no-cache', credentials:'same-origin' }) : new Request(e.request, { cache:'no-cache' }); }
+  catch(_e){ req = e.request; }
   e.respondWith(
-    caches.match(e.request).then(function(cached){
-      const network = fetch(e.request).then(function(resp){
-        if(resp && resp.ok){
-          caches.open(CACHE_NAME).then(function(cache){ cache.put(e.request, resp.clone()); });
-        }
-        return resp;
-      }).catch(function(){ return cached; });
-      return cached || network;
+    fetch(req).then(function(resp){
+      if(resp && resp.ok){
+        const copy = resp.clone();
+        caches.open(CACHE_NAME).then(function(cache){ cache.put(e.request, copy); });
+      }
+      return resp;
+    }).catch(function(){
+      return caches.match(e.request, { ignoreSearch:true });
     })
   );
 });
