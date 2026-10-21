@@ -390,9 +390,22 @@ function renderChatTab(){
 /* ============================================================
    TAB BAR + MAIN RENDER
    ============================================================ */
+function renderSetlistTab(){
+  const ids = (ST.gig && ST.gig.setlist) || [];
+  const cur = ST.live && !ST.ended ? ST.live.songId : null;
+  return `<div class="pad" style="display:flex;flex-direction:column;gap:12px;flex:1;min-height:0">
+    <div style="font-size:24px;font-weight:700">Setlist</div>
+    <div style="overflow:auto;flex:1">
+      ${ids.length ? ids.map((id,i)=>{ const x = ST.songsById[id] || {}; const on = id===cur;
+        return `<div class="reqRow"><div style="width:26px;color:var(--muted);font-weight:700">${i+1}</div><div style="flex:1"><div style="font-size:15px;font-weight:${on?800:600}">${esc(x.title||'Untitled song')}</div><div style="font-size:12px;color:${on?'var(--accent)':'var(--muted)'};margin-top:2px;font-weight:${on?700:400}">${on?'Now playing':esc(x.sub||'')}</div></div></div>`; }).join('')
+        : `<div style="color:var(--muted);padding:16px 0">The setlist is empty.</div>`}
+    </div>
+  </div>`;
+}
 function tabList(){
   const gs = ST.settings;
   const t = [['lyrics','lyrics','Lyrics']];
+  if(gs.browse) t.push(['setlist','format_list_numbered','Setlist']);
   if(gs.requests) t.push(['requests','queue_music','Requests']);
   if(gs.photos) t.push(['photos','photo_library','Photos']);
   if(gs.chat) t.push(['chat','chat_bubble','Chat']);
@@ -408,6 +421,7 @@ function renderMain(){
   if(ST.notFoundReason) return `<div class="empty"><h2>${esc(ST.notFoundReason.title)}</h2><div>${esc(ST.notFoundReason.sub)}</div></div>`;
   if(!ST.joined) return renderJoin();
   if(ST.tab==='requests') return renderRequestsTab();
+  if(ST.tab==='setlist') return renderSetlistTab();
   if(ST.tab==='photos') return renderPhotosTab();
   if(ST.tab==='chat') return renderChatTab();
   return renderLyricsTab();
@@ -476,12 +490,16 @@ async function init(){
 
   loadRequests(); loadPhotos(); loadChat();
 
-  const channel = sb.channel('gig-live-'+gigId);
+  // presence: each open guest page counts as one guest on the performer's
+  // "N guests" indicator
+  const channel = sb.channel('gig-live-'+gigId, { config: { presence: { key: guestId } } });
   channel.on('broadcast', { event:'state' }, msg=>{
     ST.live = msg.payload; ST.receivedAt = performance.now();
     if(ST.live.ended){ ST.ended=true; ST.live=null; }
     render();
-  }).subscribe();
+  }).subscribe(status=>{
+    if(status==='SUBSCRIBED'){ try{ channel.track({ role:'guest', name: ST.name||'' }); }catch(e){} }
+  });
 
   const dataChannel = sb.channel('gig-data-'+gigId);
   dataChannel.on('postgres_changes', { event:'INSERT', schema:'public', table:'gig_chat_messages', filter:'gig_id=eq.'+gigId }, payload=>{
