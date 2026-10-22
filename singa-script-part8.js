@@ -127,6 +127,10 @@ async function processRecordingBlob(songObj, blob){
   const hadManualLyrics = !!(songObj.lyrics && songObj.lyrics.trim());
   if(ST.createMode!=='manual' && !ST.editing){ queueImports([blob]); return; }
   if(!hadManualLyrics) return processRecordingFromScratch(songObj, blob);
+  // Manual song, "detect chords from a recording": like From Recording, no
+  // waiting around — the take is analysed in the background and you're told
+  // when the song is ready.
+  if(ST.autoChords && !ST.editing){ queueManualTake(songObj, blob); return; }
   ST.phase='processing'; ST.procPct=5; ST.procNote='Listening back to your take…'; render();
   try{
     const { float32, durationSec } = await decodeToFloat32Mono16k(blob);
@@ -165,6 +169,55 @@ async function processRecordingBlob(songObj, blob){
   }
   finishSong();
   render();
+}
+
+function queueManualTake(songObj, blob){
+  askNotify();
+  const label = songObj.title.trim() || 'Your song';
+  const j = newJob(songObj.id, label, true); j.target = ST.addTarget; ST.addTarget = null; j.note = 'Waiting…';
+  if(!D.order.includes(songObj.id)) D.order = [songObj.id, ...D.order];
+  ST.autoChords=false; ST.phase='idle'; ST.selWord=null; ST.queued=[label]; ST.screen='queued';
+  render();
+  _importAudioQueue = _importAudioQueue.then(()=>processManualTakeJob(songObj, blob, j)).catch(e=>{ console.error('Singa: manual take failed', e); jobFailed(j, "Couldn't analyse that take"); });
+}
+// Your typed lyrics stay exactly as they are; the take gives every word its
+// time (lined up against what was heard) and the chords heard at each point
+// land on the word being sung when they change.
+async function processManualTakeJob(songObj, blob, j){
+  jobProgress(j, 3, 'Listening back to your take…');
+  let res;
+  try{
+    if(!audioImportMod) audioImportMod = await import('./audio-import.js?v=1');
+    res = await audioImportMod.analyzeAudio(blob, { fileName: blob.name || 'recording.webm', onProgress: ({pct,note})=>jobProgress(j, Math.min(95,pct), note) });
+  }catch(err){
+    console.error('Singa: take analysis failed', err);
+    jobFailed(j, "Couldn't analyse the take for “"+(songObj.title||'your song')+"”: "+(err && err.message || err));
+    return;
+  }
+  const dur = res.durationSec;
+  const heard = [];
+  (res.sheet.sections||[]).forEach(sec=>(sec.lines||[]).forEach(ln=>(ln.words||[]).forEach(w=>{
+    const norm = normWord(w.text); if(norm) heard.push({ norm, start: typeof w.start==='number' ? w.start : null });
+  })));
+  for(let i=0;i<heard.length;i++) if(heard[i].start==null) heard[i].start = i>0 ? heard[i-1].start : 0;
+  const ref = [], refIds = [];
+  parseLyrics(songObj.lyrics).forEach((ws,li)=>{ if(!isHeaderLine(ws)) ws.forEach((w,wi)=>{ ref.push(normWord(w)); refIds.push(li+'-'+wi); }); });
+  const ts = fillTimestamps(heard.length ? alignSequences(ref, heard.map(h=>h.norm)) : new Array(ref.length).fill(null), heard, dur);
+  songObj.wordTimestamps = ts; songObj.audioDurationSec = dur; songObj.synced = true;
+  if(!Object.keys(songObj.chords||{}).length){
+    const chords = {}; let prev = null;
+    (res.sheet.chordTimeline||[]).forEach(seg=>{
+      const name = seg.concert || seg.shown; if(!name || name===prev) return;
+      const i = ts.findIndex(t=>t >= seg.start - 0.3);
+      if(i<0 || ts[i] > seg.end + 0.3) return;      // played between lines, under no word
+      chords[refIds[i]] = name; prev = name;
+    });
+    songObj.chords = chords;
+  }
+  jobProgress(j, 97, 'Saving a short sample…');
+  try{ await uploadSampleClip(songObj, res.pcm16k, ts.length ? ts[0] : 0); }catch(e){ console.error('Singa: sample clip upload failed', e); }
+  jobFinished(j, songObj);
+  if(res.chordSource==='fallback') toast("The chord server didn't answer, so the chords are a rough guess — check them");
 }
 
 // Slices a 5s window out of the (16kHz mono) decoded take starting at
@@ -261,4 +314,85 @@ async function startOnsetListening(onTrigger){
     onsetRaf = requestAnimationFrame(frame);
   }
   onsetRaf = requestAnimationFrame(frame);
+}
+
+/* ============================================================
+   PRACTICE THAT FOLLOWS YOU (Create → Sync → Practice)
+   Nothing is recorded. The mic listens: the lyrics wait until you start
+   singing, then move on at the song's pace while you're singing (and hold
+   while you stop). Where the browser can recognise speech (Safari, Chrome)
+   the words it hears pull the lyrics to the line you're actually on.
+   ============================================================ */
+let pracCtx=null, pracStream=null, pracRaf=null, pracRec=null, pracActive=false;
+function stopPracticeFollow(){
+  pracActive=false;
+  if(pracRaf!=null){ cancelAnimationFrame(pracRaf); pracRaf=null; }
+  if(pracRec){ try{ pracRec.onend=null; pracRec.abort(); }catch(e){} pracRec=null; }
+  if(pracStream){ pracStream.getTracks().forEach(t=>t.stop()); pracStream=null; }
+  if(pracCtx){ pracCtx.close().catch(()=>{}); pracCtx=null; }
+}
+async function startPracticeFollow(songObj){
+  stopPracticeFollow();
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ toast('Microphone not available on this device/browser'); return false; }
+  let stream;
+  try{ stream = await navigator.mediaDevices.getUserMedia({ audio:{ echoCancellation:false, noiseSuppression:false, autoGainControl:false } }); }
+  catch(err){ toast('Mic error: '+(err && err.name || err)); return false; }
+  pracActive=true; pracStream=stream;
+  const actx = new (window.AudioContext||window.webkitAudioContext)(); pracCtx = actx;
+  const an = actx.createAnalyser(); an.fftSize = 1024; an.smoothingTimeConstant = 0.3;
+  actx.createMediaStreamSource(stream).connect(an);
+  const buf = new Uint8Array(an.fftSize);
+  const t0 = performance.now(); const calib = []; let floor = null;
+  ST.pracHeardAt = 0; ST.pracLevel = 0;
+  (function frame(){
+    if(!pracActive || pracCtx!==actx) return;
+    an.getByteTimeDomainData(buf);
+    let sum=0; for(let i=0;i<buf.length;i++){ const v=(buf[i]-128)/128; sum+=v*v; }
+    const rms = Math.sqrt(sum/buf.length)*100;
+    const now = performance.now();
+    if(floor==null){
+      calib.push(rms);
+      if(now-t0 > 600){ calib.sort((a,b)=>a-b); floor = Math.max(0.4, calib[Math.floor(calib.length/2)]); }
+    } else {
+      ST.pracLevel = rms;
+      if(rms > Math.max(floor*2.4, floor+1.6)){
+        ST.pracHeardAt = now;
+        if(ST.pracState==='waiting'){ ST.pracState='following'; render(); }
+      } else floor = floor*0.995 + Math.min(rms, floor*1.5)*0.005;   // drift with the room
+    }
+    pracRaf = requestAnimationFrame(frame);
+  })();
+  // words → position in the lyrics
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(SR){
+    const tm = timing(songObj);
+    const lyr = tm.words.map(w=>normWord(parseLyrics(songObj.lyrics)[w.li][w.wi]));
+    const start = ()=>{
+      if(!pracActive) return;
+      let r; try{ r = new SR(); }catch(e){ return; }
+      r.continuous = true; r.interimResults = true; r.lang = 'en-US';
+      r.onresult = ev=>{
+        let txt=''; for(let i=ev.resultIndex;i<ev.results.length;i++) txt += ' '+ev.results[i][0].transcript;
+        const said = txt.split(/\s+/).map(normWord).filter(Boolean).slice(-4);
+        if(!said.length) return;
+        ST.pracHeardAt = performance.now();
+        if(ST.pracState==='waiting') ST.pracState='following';
+        const cur = Math.max(0, curWord(tm, ST.recT));
+        let best=-1, bestScore=0;
+        for(let k=Math.max(0,cur-6); k<Math.min(lyr.length, cur+30); k++){
+          // how many of the last words heard end right at lyric word k
+          let sc=0; for(let q=0;q<said.length;q++){ const li=k-(said.length-1-q); if(li>=0 && lyr[li]===said[q]) sc += said[q].length>3 ? 1.3 : 1; }
+          sc -= Math.abs(k-cur)*0.02;                                      // prefer staying close
+          if(sc>bestScore){ bestScore=sc; best=k; }
+        }
+        if(best>=0 && bestScore>=1.9){ ST.recT = tm.words[best].t + 0.05; render(); }
+      };
+      r.onerror = e=>{ if(e && (e.error==='not-allowed' || e.error==='service-not-allowed')) pracRec = null; };
+      r.onend = ()=>{ if(pracActive && pracRec===r) setTimeout(start, 250); };
+      pracRec = r;
+      try{ r.start(); }catch(e){ pracRec=null; }
+    };
+    start();
+  }
+  return true;
 }
