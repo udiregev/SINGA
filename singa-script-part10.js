@@ -211,8 +211,8 @@ document.addEventListener('scroll', function(e){
     const box = document.getElementById('chordDiagramBox');
     if(box){
       box.style.height = Math.round(h)+'px';
-      const inner = box.querySelector('.chordInnerScale');
-      if(inner) inner.style.transform = 'scale('+Math.max(0.55, Math.min(1.9, h/230))+')';
+      box.dataset.fit = Math.max(0.55, Math.min(1.9, h/230));
+      fitDias();
     }
   });
   document.addEventListener('pointerup', function(){
@@ -237,7 +237,8 @@ document.addEventListener('scroll', function(e){
     const box = document.getElementById('chordDiagramBox');
     if(box){
       box.style.width = Math.round(w)+'px';
-      fitLandDia();
+      box.dataset.fit = chordScaleV();
+      fitDias();
     }
   });
   document.addEventListener('pointerup', function(){ if(dragging){ dragging = false; render(); } });
