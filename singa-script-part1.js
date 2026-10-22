@@ -79,7 +79,7 @@ function emptyData(){
   return {
     songs: {},
     order: [],
-    playlists: [ { id:'my', title:'Demo Playlist', auto:true, ids:[], mine:true, added:Date.now(), plays:0 } ],
+    playlists: [],
     gigs: [],
     collabs: [],
     photos: []
@@ -292,10 +292,16 @@ async function loadUserData(){
     const songs = {}, order = [];
     (songsRes.data||[]).slice().sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)).forEach(row=>{ songs[row.id]=songRowToLocal(row); order.push(row.id); });
     D.songs = songs; D.order = order;
-    const autoPl = (D.playlists||[]).find(p=>p.auto) || { id:'my', title:'Demo Playlist', auto:true, ids:[], mine:true, added:Date.now(), plays:0 };
-    autoPl.ids = order;
-    D.playlists = [autoPl, ...(plRes.data||[]).map(playlistRowToLocal)];
+    D.playlists = (plRes.data||[]).map(playlistRowToLocal);
     D.gigs = (gigRes.data||[]).map(gigRowToLocal);
+    // Accounts made before playlists were real rows had a local-only "Demo
+    // Playlist" that showed every song. Give them a real one holding just
+    // the demo song (once — only while they have no playlists at all).
+    const demo = order.map(id=>songs[id]).find(x=>x.sub==='Demo song');
+    if(!D.playlists.length && demo){
+      const pl = { id:'p'+Date.now(), title:'Demo Playlist', ids:[demo.id], mine:true, isPublic:false, added:Date.now(), plays:0 };
+      D.playlists = [pl]; savePlaylistRow(pl);
+    }
   }catch(e){ console.error('Singa: failed to load your songs/playlists/gigs', e); }
 }
 
@@ -364,11 +370,12 @@ Dream a little dream of me`;
       lyrics:SEED_LYRICS, chords:SEED_CHORDS, notes:SEED_NOTES, synced:true,
       wordTimestamps:SEED_WORD_TIMESTAMPS, audioDurationSec:147.62, sampleUrl, isPublic:false, plays:0, added:Date.now(), mine:true };
     D.songs[songId] = song; D.order = [songId, ...D.order];
-    const autoPl = (D.playlists||[]).find(p=>p.auto); if(autoPl) autoPl.ids = D.order;
+    const pl = { id:'p'+Date.now(), title:'Demo Playlist', ids:[songId], mine:true, isPublic:false, added:Date.now(), plays:0 };
+    D.playlists = [pl, ...D.playlists.filter(p=>!p.auto)];
     const gigId = 'g'+Date.now();
     const gig = { id:gigId, title:'Demo Gig', date:'', setlist:[songId], settings:{}, isPublic:true, plays:0, added:Date.now(), mine:true };
     D.gigs = [...D.gigs, gig];
-    await Promise.all([ saveSongRow(song), saveGigRow(gig) ]);
+    await Promise.all([ saveSongRow(song), saveGigRow(gig), savePlaylistRow(pl) ]);
   }catch(e){ console.error('Singa: sample content setup failed', e); }
 }
 // Gate for any action that would write to Supabase (song/gig/playlist
@@ -510,13 +517,16 @@ function diagramHTML(dia, dotColor, vertical){
     dia.marks.forEach(x=> inner += `<div style="position:absolute;left:${x.left}px;top:-24px;width:14px;text-align:center;font-size:12px;font-weight:700">${x.txt}</div>`);
     inner += `</div>`;
   } else if(dia.isPiano){
-    inner += `<div class="piano">`;
+    // the keyboard stands upright: rotated 90° clockwise
+    inner += `<div class="piano-rot"><div class="piano">`;
     dia.white.forEach(k=> inner += `<div style="width:22px;height:100%;border-right:1px solid #1b1b1b;background:${k.on?dotColor:'#fff'}"></div>`);
     dia.black.forEach(k=> inner += `<div style="position:absolute;top:0;left:${k.left}px;width:14px;height:56px;background:${k.on?dotColor:'#1b1b1b'};border-radius:0 0 3px 3px;border:1px solid #1b1b1b"></div>`);
-    inner += `</div>`;
+    inner += `</div></div>`;
   }
-  const nameAnim = animStyle('diaName', dia.name, 'chordPop', 450);
-  const nextAnim = animStyle('diaNext', dia.next, 'nextIn', 450);
+  // On a chord change the "next" chord slides over into the current chord's
+  // place (and grows into it); the new next chord fades in behind it.
+  const nameAnim = animStyle('diaName'+(vertical?'V':''), dia.name, vertical ? 'chordFromNextV' : 'chordFromNext', 650);
+  const nextAnim = animStyle('diaNext'+(vertical?'V':''), dia.next, vertical ? 'nextInV' : 'nextIn', 650);
   const bar = dia.progress!=null ? `<div class="nextbar"><div style="width:${Math.round(dia.progress*100)}%"></div></div>` : '';
   // Landscape: a column — next chord on top (with ⌄⌄), the current chord, its diagram.
   if(vertical) return `<div class="dia-v">
