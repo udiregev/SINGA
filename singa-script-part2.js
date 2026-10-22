@@ -32,7 +32,7 @@ function buildLines(s, mode, opt){
       if(header){
         // Never interactive, never chorded/marked.
       } else if(mode==='chords'){
-        o.col='#a8a8a8'; o.weight=500; o.chordCol='#1b1b1b'; o.cursor='pointer'; o.clickAct='placeChord'; o.clickId=id; o.chip=true; o.drop=id;
+        o.col='#a8a8a8'; o.weight=500; o.chordCol='#1b1b1b'; o.chip=true; o.drop=id;
       } else if(mode==='markings'){
         o.cursor='pointer'; o.clickAct='pickMarkWord'; o.clickId=id;
       } else if(mode==='view'){
@@ -54,7 +54,7 @@ function buildLines(s, mode, opt){
       for(let k=0; s.chords[li+'-t'+k]; k++){
         const tid = li+'-t'+k, tc = s.chords[tid];
         const o = { id:tid, w:'', chord:tc, col:'#333', chordCol:'#9a9a9a', weight:400, cursor:'default', mark:'', markSide:null, selected:false, tail:true };
-        if(mode==='chords'){ o.chordCol='#1b1b1b'; o.cursor='pointer'; o.clickAct='placeChord'; o.clickId=tid; o.chip=true; o.drop=tid; }
+        if(mode==='chords'){ o.chordCol='#1b1b1b'; o.chip=true; o.drop=tid; }
         else if(mode==='view'){ o.chordCol = '#9a9a9a'; o.cursor='pointer'; o.clickAct='setViewChord'; o.clickId=tc; }
         else if(mode==='play'){ o.chordCol = curLine ? '#8a8a8a' : '#cfcfcf'; }
         w2.push(o);
@@ -87,10 +87,13 @@ function markRowHTML(mark, side, lvl, lift){
   if(!mark || side!=='top') return `<span class="lmark"${h}></span>`;
   return `<span class="lmark"${h}><span class="mk mk-c"${lvl?' style="bottom:29px"':''}><span class="mtext">${esc(mark)}</span></span></span>`;
 }
-function sideMarkHTML(w, hasTop, chordFs, textFs){
-  const act = w.clickAct==='pickMarkWord' ? `data-act="pickMarkWord" data-id="${esc(w.id)}" style="cursor:pointer"` : '';
+// Left/right marks hang outside the line (absolutely positioned), so they
+// never push the lyrics over; fitMarkGutters() makes room for them.
+function sideMarkHTML(w){
   const txt = `<span class="mtext">${esc(w.mark)}</span>`;
-  return `<span class="lword lside" ${act}>${hasTop?`<span class="lmark"${hasTop==='lift'?' style="height:52px"':''}></span>`:''}<span class="lchord-row" style="${chordFs}"></span><span class="ltext mside" style="${textFs}">${w.markSide==='left' ? txt+MARR_R : MARR_L+txt}</span></span>`;
+  return w.markSide==='left'
+    ? `<span class="mside-abs l">${txt}${MARR_R}</span>`
+    : `<span class="mside-abs r">${MARR_L}${txt}</span>`;
 }
 function headerLineHTML(l){
   const raw = l.words.map(w=>w.w).join(' ').replace(/^[\[(]\s*/,'').replace(/\s*[\])]$/,'');
@@ -107,21 +110,18 @@ function linesHTML(lines, big){
     l.words.forEach((w,i)=>{ if(w.mark && w.markSide==='top'){ w.lvl = (i-lastTop<=2 && lastLvl===0) ? 1 : 0; if(w.lvl) lift = true; lastTop = i; lastLvl = w.lvl; } });
     const fsz = big ? 'font-size:32px;padding:0 2px' : 'font-size:24px';
     const fszc = big ? 'font-size:15px;font-weight:700' : 'font-size:14px;font-weight:600';
-    let pre = '', post = '';
     const words = l.words.map(w=>{
       const act = w.clickAct ? `data-act="${w.clickAct}" data-id="${esc(w.clickId)}"` : '';
       const drop = w.drop ? ` data-drop="${esc(w.drop)}"` : '';
       const bg = w.selected ? 'background:#e5f0fc' : '';
       const chordCls = w.chip ? 'lchord chip' : 'lchord';
       const drag = (w.chip && w.chord) ? ` data-drag-chord="${esc(w.chord)}" data-from="${esc(w.id)}"` : '';
-      const ht = hasTop ? (lift ? 'lift' : true) : false;
-      if(w.mark && w.markSide==='left') pre = sideMarkHTML(w, ht, fszc, fsz);
-      if(w.mark && w.markSide==='right') post = sideMarkHTML(w, ht, fszc, fsz);
+      const side = (w.mark && (w.markSide==='left' || w.markSide==='right')) ? sideMarkHTML(w) : '';
       const topArrow = (w.mark && w.markSide==='top') ? `<span class="marr-v"${w.lvl?' style="margin-top:-31px"':''}></span>` : '';
       const rowCls = topArrow && !w.chord ? 'lchord-row solo' : 'lchord-row';
-      return `<span class="lword${w.chip?' editable':''}" style="cursor:${w.cursor};border-radius:5px;${bg}" ${act}${drop}>${hasTop?markRowHTML(w.mark, w.markSide, w.lvl, lift):''}<span class="${rowCls}"><span class="${chordCls}" style="${fszc};color:${w.chordCol};${w.chordAnim||''}"${drag}>${esc(w.chord)}</span>${topArrow}</span><span class="ltext" style="${fsz};font-weight:${w.weight};color:${w.col}">${w.w?esc(w.w):'&nbsp;'}</span></span>`;
+      return `<span class="lword${w.chip?' editable':''}" style="cursor:${w.cursor};border-radius:5px;${bg}" ${act}${drop}>${hasTop?markRowHTML(w.mark, w.markSide, w.lvl, lift):''}<span class="${rowCls}"><span class="${chordCls}" style="${fszc};color:${w.chordCol};${w.chordAnim||''}"${drag}>${esc(w.chord)}</span>${topArrow}</span><span class="ltext" style="${fsz};font-weight:${w.weight};color:${w.col}">${w.w?esc(w.w):'&nbsp;'}${side}</span></span>`;
     }).join('');
-    return `<div class="lline" style="${style}"${l.cur?' data-cur="1"':''}>${pre}${words}${post}</div>`;
+    return `<div class="lline" style="${style}"${l.cur?' data-cur="1"':''}>${words}</div>`;
   }).join('') + `</div>`;
 }
 /* ============================================================
@@ -194,7 +194,7 @@ function renderHome(){
         <button class="icon-btn" style="width:36px;height:36px" data-act="runSearch">${icon('search',22)}</button>
       </div>
       <div style="flex:1"></div>
-      <button class="icon-btn" title="Account & settings" data-act="openAccount" style="width:48px;height:48px;border-radius:50%;border:1.5px solid var(--fg);background:#fff">${icon('person',24)}</button>
+      <button class="icon-btn" title="Account & settings" data-act="openAccount" style="width:48px;height:48px;border-radius:50%;background:#1b1b1b;color:#fff;font-size:20px;font-weight:700">${esc(((ST.nickname || nicknameFromEmail(ST.email))||'?').charAt(0).toUpperCase())}</button>
     </div>
     <div class="home-grid">
       <div style="display:flex;flex-direction:column;gap:48px">
