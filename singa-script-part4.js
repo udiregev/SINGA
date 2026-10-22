@@ -19,47 +19,38 @@ function updateChipRowChevrons(id){
   chevL.style.display = overflow && el.scrollLeft > 2 ? 'flex' : 'none';
   chevR.style.display = overflow && el.scrollLeft < el.scrollWidth - el.clientWidth - 2 ? 'flex' : 'none';
 }
-function renderChordWheel(){
-  const roots = LETTERS.map((r,i)=>`<div style="flex:none;width:100px;height:72px;display:flex;align-items:center;justify-content:center;font-size:${i===ST.rootIdx?44:26}px;font-weight:700;color:${i===ST.rootIdx?'#1b1b1b':'#a8a8a8'};cursor:pointer;scroll-snap-align:center" data-act="pickRoot" data-id="${i}">${r}</div>`).join('');
+// Chords step: a picker column LEFT of the lyrics (both orientations).
+// Root letters scroll sideways (current big, next one faded), a ♯/♭ switch,
+// then the chord variants as a vertical list. Drag any chord onto a word —
+// or tap a chord, then tap words.
+const ROOT_W = 48;
+function renderChordPicker(){
+  const roots = LETTERS.map((r,i)=>`<div class="ce-root${i===ST.rootIdx?' on':''}" data-act="pickRoot" data-id="${i}">${r}</div>`).join('');
   const letter = LETTERS[ST.rootIdx];
-  const variants = [letter, ACC[letter]].flatMap(rt => SUFFIXES.map(q=>chordTileHTML(rt, q))).join('');
-  const used = usedChords(D.songs[ST.editId]);
-  const recentTiles = used.map(ch=>{ const p = splitChordStr(ch); return chordTileHTML(p.root, p.q, ch); }).join('');
-  return `<div style="display:flex;flex-direction:column;align-items:center;gap:10px;margin-top:10px">
-    <div style="display:flex;flex-direction:column;align-items:center;gap:12px">
-      <div style="position:relative;width:300px;height:72px">
-        <div style="position:absolute;left:100px;top:0;width:100px;height:72px;border-radius:14px;background:#f2f2f2"></div>
-        <div id="rootScroller" class="rootScroller" style="position:relative;width:300px;height:72px;overflow-x:auto;overflow-y:hidden;display:flex;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;mask-image:linear-gradient(90deg,transparent 0,#000 24%,#000 76%,transparent 100%)">
-          <div style="flex:none;width:100px"></div>${roots}<div style="flex:none;width:100px"></div>
-        </div>
-      </div>
-      <div id="chordVariants" style="opacity:1;transition:opacity .4s ease;display:flex;flex-direction:column;gap:12px;width:300px">
-        ${chipRowHTML('chordVariantRow', variants)}
-        ${used.length ? `<div style="display:flex;align-items:center;gap:10px;margin-top:6px">
-          <span style="font-size:12px;color:#8a8a8a;font-weight:700;letter-spacing:.04em;text-transform:uppercase;flex:none">used</span>
-          ${chipRowHTML('recentChordRow', recentTiles)}
-        </div>` : ''}
-      </div>
-    </div>
+  const rt = ST.accOn ? ACC[letter] : letter;
+  const tiles = SUFFIXES.map(q=>chordTileHTML(rt, q, null, 'ctile')).join('');
+  return `<div class="ce-picker">
+    <div id="rootScroller" class="rootScroller ce-roots" data-itemw="${ROOT_W}"><div class="ce-roots-in">${roots}<div style="flex:none;width:${ROOT_W}px"></div></div></div>
+    <button class="ce-acc${ST.accOn?' on':''}" data-act="toggleAcc">${esc(ACC[letter])}</button>
+    <div id="chordVariants" class="ce-variants">${tiles}</div>
   </div>`;
 }
+function renderUsedRow(){
+  const used = usedChords(D.songs[ST.editId]);
+  const tiles = used.map(ch=>{ const p = splitChordStr(ch); return chordTileHTML(p.root, p.q, ch, 'utile'); }).join('');
+  return `<div class="ce-used"><span class="ce-used-l">used</span><div class="ce-used-row">${tiles || '<span style="font-size:13px;color:#9a9a9a">Drag a chord onto a word</span>'}</div></div>`;
+}
 
+// The marking editor is a light-blue sticky note: close ×, the note itself
+// ("add a marking"), Remove (if there's one already) and Save. Nothing else.
 function renderNoteEditor(d){
   if(ST.selWord==null) return '';
-  const [li, wi] = ST.selWord.split('-').map(Number);
-  const ws = parseLyrics(d.lyrics)[li] || [];
-  const w = ws[wi] || '';
-  const placement = 'Shown above this word';
-  return `<div class="modal-backdrop" data-act="closeNoteEditor" style="align-items:flex-start;padding-top:120px">
-    <div class="modal" style="max-width:380px" onclick="modalClick(event)">
-      <div class="mhead"><span style="font-size:15px;font-weight:700;color:#2f8fe0">Mark on "${esc(w)}"</span><span class="icon-btn" data-act="closeNoteEditor">${icon('close',22)}</span></div>
-      <input class="ipt" style="height:44px;border:1px solid #cfe0f5;font-family:Caveat,cursive;font-size:24px;color:#2f8fe0;background:#f3f8ff" placeholder="e.g. Hi note, breathe, key change" value="${esc(ST.noteDraft)}" data-bind="noteDraft" autofocus>
-      <div class="row" style="gap:8px">
-        <span style="font-size:12px;color:#6f6f6f">${placement}</span>
-        <div style="flex:1"></div>
-        <a class="link link-accent" data-act="removeNote">Remove</a>
-        <button class="btn btn-dark btn-sm" data-act="saveNote">Save</button>
-      </div>
+  const has = !!((d.notes||{})[ST.selWord]);
+  return `<div class="modal-backdrop" data-act="closeNoteEditor" style="background:rgba(255,255,255,.55);align-items:flex-start;padding-top:120px">
+    <div class="sticky" onclick="modalClick(event)">
+      <span class="icon-btn sticky-x" data-act="closeNoteEditor">${icon('close',22)}</span>
+      <input class="sticky-ipt" placeholder="add a marking" value="${esc(ST.noteDraft)}" data-bind="noteDraft" data-key="saveNote" autofocus maxlength="40">
+      <div class="sticky-acts">${has?`<a data-act="removeNote">Remove</a>`:''}<a class="save" data-act="saveNote">Save</a></div>
     </div>
   </div>`;
 }
@@ -77,20 +68,25 @@ function renderSongBody(d){
   const skipAct = ST.step==='chords' ? 'detectChords' : 'createNextStep';
   return `<div style="width:100%;flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;margin-top:10px;position:relative">
     <div style="opacity:${opacity};flex:none;display:flex;flex-direction:column;align-items:center;width:100%">
-      <div style="font-size:32px;font-weight:800;letter-spacing:-0.02em;text-align:center">${esc(d.title||'Untitled song')}</div>
-      ${ST.step==='chords' ? renderChordWheel() : ''}
+      <div class="cs-title" style="font-size:32px;font-weight:800;letter-spacing:-0.02em;text-align:center">${esc(d.title||'Untitled song')}</div>
       ${ST.step==='markings' ? `<div style="font-size:13px;color:#6f6f6f;margin-top:14px">Tap a word to add a mark.</div>` : ''}
     </div>
-    <div id="editorLyricsScroll" class="${ST.step==='sync'?'':'sheet-edit'}" style="opacity:${opacity};${ST.step==='sync'?'flex:none;max-height:260px;':'flex:1;min-height:200px;'}width:100%;overflow-y:auto;margin-top:18px;display:flex;flex-direction:column;align-items:center">
+    ${ST.step==='chords' ? `<div class="ce-wrap">
+      ${renderChordPicker()}
+      <div class="ce-main">
+        ${renderUsedRow()}
+        <div id="editorLyricsScroll" class="sheet-edit ce-lyrics">${linesHTML(lines)}</div>
+      </div>
+    </div>` : `<div id="editorLyricsScroll" class="${ST.step==='sync'?'':'sheet-edit'}" style="opacity:${opacity};${ST.step==='sync'?'flex:none;max-height:260px;':'flex:1;min-height:200px;'}width:100%;overflow-y:auto;margin-top:18px;display:flex;flex-direction:column;align-items:center">
       ${linesHTML(lines)}
-    </div>
+    </div>`}
     ${ST.step==='sync' ? '<div style="flex:1"></div>' : ''}
     ${ST.phase==='countdown' ? `<div style="position:absolute;top:60px;left:0;right:0">${countdownBlock()}</div>` : ''}
     ${ST.phase==='processing' ? `<div style="position:absolute;top:60px;left:0;right:0">${processingBlock()}</div>` : ''}
-    ${(ST.step==='chords'||ST.step==='markings') && ST.editing ? `<div style="flex:none;display:flex;justify-content:center;padding-top:12px;border-top:1px solid #f0f0f0;width:100%;margin-top:14px">
+    ${(ST.step==='chords'||ST.step==='markings') && ST.editing ? `<div class="ce-foot" style="flex:none;display:flex;justify-content:center;padding-top:12px;border-top:1px solid #f0f0f0;width:100%;margin-top:14px">
         <button class="btn btn-dark" style="width:220px" data-act="editDone">Done</button>
       </div>` : ''}
-    ${(ST.step==='chords'||ST.step==='markings') && !ST.editing ? `<div style="flex:none;display:flex;flex-direction:column;align-items:center;gap:10px;padding-top:12px;border-top:1px solid #f0f0f0;width:100%;margin-top:14px">
+    ${(ST.step==='chords'||ST.step==='markings') && !ST.editing ? `<div class="ce-foot" style="flex:none;display:flex;flex-direction:column;align-items:center;gap:10px;padding-top:12px;border-top:1px solid #f0f0f0;width:100%;margin-top:14px">
         <div class="row" style="gap:12px">
           <button class="btn btn-outline" style="width:170px" data-act="abortCreate">Abort</button>
           <button class="btn btn-dark" style="width:170px" data-act="createNextStep">Next</button>
@@ -241,6 +237,23 @@ function renderDone(){
     <div style="display:flex;flex-direction:column;gap:12px;width:100%;max-width:340px;margin-top:30px">
       <button class="btn btn-grey" style="height:64px" data-act="viewDone">View Song</button>
       <button class="btn btn-dark" style="height:64px" data-act="newSong">Add New Song</button>
+    </div>
+  </div>`;
+}
+
+// Right after uploading a document or recording: same look as the
+// completion screen, but the song is still being added in the background.
+function renderQueued(){
+  const q = ST.queued || [];
+  const what = q.length===1 ? `“${esc(q[0])}”<br>is being added` : `${q.length} songs<br>are being added`;
+  return `<div class="scr center" style="padding-top:20px">
+    <svg class="mascot" style="height:280px" viewBox="0 0 160 160" fill="none" aria-hidden="true"><circle cx="80" cy="80" r="74" fill="var(--accent)"/><path d="M50 83l19 19 41-46" stroke="#fff" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/><circle cx="18" cy="34" r="6" fill="var(--accent)"/><circle cx="142" cy="46" r="5" fill="#2a9d6b"/><circle cx="136" cy="124" r="7" fill="#4169c7"/><circle cx="16" cy="118" r="5" fill="#8e4fd6"/></svg>
+    <div style="font-size:64px;font-weight:800;letter-spacing:-0.03em;margin-top:12px">Got it!</div>
+    <div style="font-size:22px;text-align:center;line-height:1.4;margin-top:4px">${what}</div>
+    <div style="font-size:15px;color:#6f6f6f;text-align:center;max-width:360px;line-height:1.5;margin-top:14px">No need to wait here. We'll let you know when ${q.length===1?'it\'s':'they\'re'} ready — you'll find ${q.length===1?'it':'them'} in your songs marked <b style="color:#2f8fe0">IN PROGRESS</b>.</div>
+    <div style="display:flex;flex-direction:column;gap:12px;width:100%;max-width:340px;margin-top:30px">
+      <button class="btn btn-grey" style="height:64px" data-act="goHome">Close</button>
+      <button class="btn btn-dark" style="height:64px" data-act="newSong">Add Another Song</button>
     </div>
   </div>`;
 }

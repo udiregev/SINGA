@@ -169,7 +169,8 @@ function recordRecentChord(ch){
   if(!ch) return;
   ST.recentChords = [ch, ...ST.recentChords.filter(c=>c!==ch)].slice(0,8);
 }
-function chordTileHTML(rt, q, label){
+function chordTileHTML(rt, q, label, cls){
   const on = rt===ST.selRoot && q===ST.selSuffix;
+  if(cls) return `<button class="${cls}${on?' on':''}" data-act="pickVariant" data-root="${esc(rt)}" data-q="${esc(q)}" data-drag-chord="${esc(rt+q)}">${esc(label!=null?label:rt+q)}</button>`;
   return `<button style="height:48px;border-radius:12px;border:1.5px solid var(--fg);background:${on?'#1b1b1b':'#fff'};color:${on?'#fff':'#1b1b1b'};font-size:17px;font-weight:700;padding:0 16px;white-space:nowrap" data-act="pickVariant" data-root="${esc(rt)}" data-q="${esc(q)}">${esc(label!=null?label:rt+q)}</button>`;
 }

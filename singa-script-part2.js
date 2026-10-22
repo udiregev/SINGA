@@ -24,16 +24,15 @@ function buildLines(s, mode, opt){
       const id = li+'-'+wi, gi = header ? -1 : g++;
       const ch = (header || opt.hideChords) ? '' : (s.chords[id]||'');
       const mark = header ? '' : (notes[id] || '');
-      // Each mark anchors to its own word (left/right of just that word),
-      // whichever edge the word is closer to — never the whole line, so two
-      // marks on one line never collide with each other.
-      const markSide = mark ? (wi <= last/2 ? 'left' : 'right') : null;
+      // Where a mark sits: first word → left of it, last word → right of it,
+      // anything in between → above the line, centred on the word.
+      const markSide = mark ? (wi===0 ? 'left' : (wi===last ? 'right' : 'top')) : null;
       const o = { id, w, chord:ch, col:'#333', chordCol:'#9a9a9a', weight:400, cursor:'default', mark, markSide,
         selected: ST.selWord===id };
       if(header){
         // Never interactive, never chorded/marked.
       } else if(mode==='chords'){
-        o.col='#1b1b1b'; o.chordCol='#1b1b1b'; o.cursor='pointer'; o.clickAct='placeChord'; o.clickId=id; o.chip=true;
+        o.col='#a8a8a8'; o.weight=500; o.chordCol='#1b1b1b'; o.cursor='pointer'; o.clickAct='placeChord'; o.clickId=id; o.chip=true; o.drop=id;
       } else if(mode==='markings'){
         o.cursor='pointer'; o.clickAct='pickMarkWord'; o.clickId=id;
       } else if(mode==='view'){
@@ -55,7 +54,7 @@ function buildLines(s, mode, opt){
       for(let k=0; s.chords[li+'-t'+k]; k++){
         const tid = li+'-t'+k, tc = s.chords[tid];
         const o = { id:tid, w:'', chord:tc, col:'#333', chordCol:'#9a9a9a', weight:400, cursor:'default', mark:'', markSide:null, selected:false, tail:true };
-        if(mode==='chords'){ o.chordCol='#1b1b1b'; o.cursor='pointer'; o.clickAct='placeChord'; o.clickId=tid; o.chip=true; }
+        if(mode==='chords'){ o.chordCol='#1b1b1b'; o.cursor='pointer'; o.clickAct='placeChord'; o.clickId=tid; o.chip=true; o.drop=tid; }
         else if(mode==='view'){ o.chordCol = '#9a9a9a'; o.cursor='pointer'; o.clickAct='setViewChord'; o.clickId=tc; }
         else if(mode==='play'){ o.chordCol = curLine ? '#8a8a8a' : '#cfcfcf'; }
         w2.push(o);
@@ -76,14 +75,22 @@ function animStyle(key, val, name, ms){
   const el = now - _anim[key].at;
   return el < ms ? `animation:${name} ${ms}ms cubic-bezier(.2,.8,.2,1) both;animation-delay:-${el}ms;` : '';
 }
-// Marks sit in a small row ABOVE the word they belong to (handwritten, blue,
-// with an arrow down to the word) so they never cover lyrics or chords.
-function markRowHTML(mark, side){
-  // marks on the right half of a line grow leftwards so they stay on screen
-  if(!mark) return `<span class="lmark"></span>`;
-  return side==='right'
-    ? `<span class="lmark"><span class="mk mk-r"><span class="mtext">${esc(mark)}</span><span class="msi" style="font-size:15px">south_east</span></span></span>`
-    : `<span class="lmark"><span class="mk"><span class="msi" style="font-size:15px">south_west</span><span class="mtext">${esc(mark)}</span></span></span>`;
+// Marks (handwritten, blue) never cover lyrics or chords:
+//  · first word of a line → the mark sits to its LEFT, arrow → the word
+//  · last word            → to its RIGHT, arrow ← the word
+//  · any word in between  → ABOVE the line, centred on the word, with an
+//    arrow down through the chord row (beside the chord symbol, never on it).
+const MARR_R = `<svg class="marr-h" width="30" height="14" viewBox="0 0 30 14" aria-hidden="true"><path d="M2 7h24M19 2l7 5-7 5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+const MARR_L = `<svg class="marr-h" width="30" height="14" viewBox="0 0 30 14" aria-hidden="true"><path d="M28 7H4M11 2L4 7l7 5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+function markRowHTML(mark, side, lvl, lift){
+  const h = lift ? ' style="height:52px"' : '';
+  if(!mark || side!=='top') return `<span class="lmark"${h}></span>`;
+  return `<span class="lmark"${h}><span class="mk mk-c"${lvl?' style="bottom:29px"':''}><span class="mtext">${esc(mark)}</span></span></span>`;
+}
+function sideMarkHTML(w, hasTop, chordFs, textFs){
+  const act = w.clickAct==='pickMarkWord' ? `data-act="pickMarkWord" data-id="${esc(w.id)}" style="cursor:pointer"` : '';
+  const txt = `<span class="mtext">${esc(w.mark)}</span>`;
+  return `<span class="lword lside" ${act}>${hasTop?`<span class="lmark"${hasTop==='lift'?' style="height:52px"':''}></span>`:''}<span class="lchord-row" style="${chordFs}"></span><span class="ltext mside" style="${textFs}">${w.markSide==='left' ? txt+MARR_R : MARR_L+txt}</span></span>`;
 }
 function headerLineHTML(l){
   const raw = l.words.map(w=>w.w).join(' ').replace(/^[\[(]\s*/,'').replace(/\s*[\])]$/,'');
@@ -94,16 +101,27 @@ function linesHTML(lines, big){
   return `<div class="lyrics-wrap">` + lines.map(l=>{
     if(l.header) return headerLineHTML(l);
     const style = `margin-top:${l.padTop}px;margin-bottom:${l.mb}px;transform:scale(${l.scale});transform-origin:left center;opacity:${l.op}`;
-    const hasMark = l.words.some(w=>w.mark);
+    const hasTop = l.words.some(w=>w.mark && w.markSide==='top');
+    // two marks above neighbouring words would overlap: lift the later one a row
+    let lastTop = -9, lastLvl = 1, lift = false;
+    l.words.forEach((w,i)=>{ if(w.mark && w.markSide==='top'){ w.lvl = (i-lastTop<=2 && lastLvl===0) ? 1 : 0; if(w.lvl) lift = true; lastTop = i; lastLvl = w.lvl; } });
+    const fsz = big ? 'font-size:32px;padding:0 2px' : 'font-size:24px';
+    const fszc = big ? 'font-size:15px;font-weight:700' : 'font-size:14px;font-weight:600';
+    let pre = '', post = '';
     const words = l.words.map(w=>{
       const act = w.clickAct ? `data-act="${w.clickAct}" data-id="${esc(w.clickId)}"` : '';
+      const drop = w.drop ? ` data-drop="${esc(w.drop)}"` : '';
       const bg = w.selected ? 'background:#e5f0fc' : '';
-      const fsz = big ? 'font-size:32px;padding:0 2px' : 'font-size:24px';
-      const fszc = big ? 'font-size:15px;font-weight:700' : 'font-size:14px;font-weight:600';
       const chordCls = w.chip ? 'lchord chip' : 'lchord';
-      return `<span class="lword${w.chip?' editable':''}" style="cursor:${w.cursor};border-radius:5px;${bg}" ${act}>${hasMark?markRowHTML(w.mark, w.markSide):''}<span class="${chordCls}" style="${fszc};color:${w.chordCol};${w.chordAnim||''}">${esc(w.chord)}</span><span class="ltext" style="${fsz};font-weight:${w.weight};color:${w.col}">${w.w?esc(w.w):'&nbsp;'}</span></span>`;
+      const drag = (w.chip && w.chord) ? ` data-drag-chord="${esc(w.chord)}" data-from="${esc(w.id)}"` : '';
+      const ht = hasTop ? (lift ? 'lift' : true) : false;
+      if(w.mark && w.markSide==='left') pre = sideMarkHTML(w, ht, fszc, fsz);
+      if(w.mark && w.markSide==='right') post = sideMarkHTML(w, ht, fszc, fsz);
+      const topArrow = (w.mark && w.markSide==='top') ? `<span class="marr-v"${w.lvl?' style="margin-top:-31px"':''}></span>` : '';
+      const rowCls = topArrow && !w.chord ? 'lchord-row solo' : 'lchord-row';
+      return `<span class="lword${w.chip?' editable':''}" style="cursor:${w.cursor};border-radius:5px;${bg}" ${act}${drop}>${hasTop?markRowHTML(w.mark, w.markSide, w.lvl, lift):''}<span class="${rowCls}"><span class="${chordCls}" style="${fszc};color:${w.chordCol};${w.chordAnim||''}"${drag}>${esc(w.chord)}</span>${topArrow}</span><span class="ltext" style="${fsz};font-weight:${w.weight};color:${w.col}">${w.w?esc(w.w):'&nbsp;'}</span></span>`;
     }).join('');
-    return `<div class="lline" style="${style}">${words}</div>`;
+    return `<div class="lline" style="${style}"${l.cur?' data-cur="1"':''}>${pre}${words}${post}</div>`;
   }).join('') + `</div>`;
 }
 /* ============================================================
@@ -149,22 +167,20 @@ function gigRowHome(g){
   const sub = g.date ? (g.date+' · '+songCount) : songCount;
   return `<div class="list-row" data-act="openGig" data-id="${g.id}"><div style="min-width:0"><div class="t" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(g.title)}</div><div class="s">${esc(sub)}</div></div>${g.id==='nye'?'<span style="font-size:11px;font-weight:700;letter-spacing:.06em;color:#f24822">LIVE</span>':''}</div>`;
 }
-function jobsHTML(){
-  if(!ST.jobs.length) return '';
-  return `<div class="jobs">${ST.jobs.map(j=>{
-    const s = D.songs[j.songId] || {};
-    return `<div class="job"><div class="row" style="justify-content:space-between;gap:10px"><span style="font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(s.title || j.label || 'New song')}</span><span style="font-size:11px;font-weight:800;letter-spacing:.06em;color:#2f8fe0">${j.bg?'ADDING':'OPEN'}</span></div>
-      <div class="jobbar"><div id="jobbar-${j.id}" style="width:${Math.round(j.pct)}%"></div></div>
-      <div id="jobnote-${j.id}" style="font-size:12px;color:#8a8a8a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(j.note||'Waiting…')}</div></div>`;
-  }).join('')}</div>`;
+function songJob(s){ return ST.jobs.find(j=>j.songId===s.id); }
+function songTitle(s){ const j = songJob(s); return s.title || (j && j.label) || 'Untitled song'; }
+function jobBarHTML(s){
+  const j = songJob(s); if(!j) return '';
+  return `<div class="jobbar" style="margin-top:6px;max-width:240px"><div id="jobbar-${j.id}" style="width:${Math.round(j.pct)}%"></div></div><div id="jobnote-${j.id}" style="font-size:11px;color:#8a8a8a;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px">${esc(j.note||'Waiting…')}</div>`;
 }
 function songBadge(s){
-  if(ST.jobs.some(j=>j.songId===s.id)) return ['ADDING…','#2f8fe0'];
+  if(songJob(s)) return ['IN PROGRESS','#2f8fe0'];
   if(s.needsReview) return ['REVIEW','#2f8fe0'];
   return s.synced ? ['SYNCED','#1b1b1b'] : ['NO TAKE','#b0b0b0'];
 }
 function songRowHome(s){
-  return `<div class="list-row" data-act="openSongFrom" data-id="${s.id}" data-from="home" style="border-bottom:1px solid var(--b2)"><div><div class="t">${esc(s.title||'Untitled song')}</div><div class="s">${esc(s.sub || (s.synced?'':'Draft'))}</div></div>${(()=>{ const b=songBadge(s); return b[0]==='SYNCED'||b[0]==='NO TAKE' ? '' : `<span style="font-size:11px;font-weight:800;letter-spacing:.05em;color:${b[1]}">${b[0]}</span>`; })()}</div>`;
+  const j = songJob(s);
+  return `<div class="list-row" data-act="openSongFrom" data-id="${s.id}" data-from="home" style="border-bottom:1px solid var(--b2)"><div style="min-width:0;flex:1"><div class="t">${esc(songTitle(s))}</div>${j ? jobBarHTML(s) : `<div class="s">${esc(s.sub || (s.synced?'':'Draft'))}</div>`}</div>${(()=>{ const b=songBadge(s); return b[0]==='SYNCED'||b[0]==='NO TAKE' ? '' : `<span style="font-size:11px;font-weight:800;letter-spacing:.05em;color:${b[1]}">${b[0]}</span>`; })()}</div>`;
 }
 
 function renderHome(){
@@ -196,7 +212,6 @@ function renderHome(){
       <div style="display:flex;flex-direction:column;gap:48px">
         <div>
           <div class="row" style="justify-content:space-between;margin-bottom:8px"><span style="font-size:26px;font-weight:700">Songs</span><span class="icon-btn" title="Add a song" data-act="newSong">${icon('add',24)}</span></div>
-          ${jobsHTML()}
           ${recent || '<div style="padding:14px 0;color:#8a8a8a;font-size:14px">No songs yet — tap + to add one.</div>'}
           <a class="link" style="display:inline-block;margin-top:14px;text-decoration:underline" data-act="openList" data-kind="songs">All Songs</a>
         </div>
@@ -219,7 +234,7 @@ function sortDropdown(){
 }
 function songRowList(id, badgeText, badgeCol, from){
   const s = song(id);
-  return `<div class="list-row" data-act="openSongFrom" data-id="${id}" data-from="${from}"><div><div class="t">${esc(s.title||'Untitled song')}</div><div class="s">${esc(s.sub || (s.synced?'':'Draft'))}</div></div><div class="row" style="gap:12px"><span style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:${badgeCol}">${esc(badgeText)}</span>${icon('chevron_right',22)}</div></div>`;
+  return `<div class="list-row" data-act="openSongFrom" data-id="${id}" data-from="${from}"><div style="min-width:0;flex:1"><div class="t">${esc(songTitle(s))}</div>${songJob(s) ? jobBarHTML(s) : `<div class="s">${esc(s.sub || (s.synced?'':'Draft'))}</div>`}</div><div class="row" style="gap:12px"><span style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:${badgeCol}">${esc(badgeText)}</span>${icon('chevron_right',22)}</div></div>`;
 }
 function gigRowList(g){
   const sub = g.date+' · '+g.setlist.length+' songs'+(g.mine?'':' · by '+g.by);
