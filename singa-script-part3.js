@@ -48,25 +48,31 @@
 .sticky-acts a.save{color:#0f4f8a}
 
 /* ---- chords step: picker column left of the lyrics, drag & drop ---- */
-.ce-wrap{flex:1;min-height:0;width:100%;max-width:860px;display:flex;gap:18px;margin-top:16px}
+.ce-wrap{flex:1;min-height:0;width:100%;max-width:880px;display:flex;gap:40px;margin-top:16px}
 .ce-picker{flex:none;width:104px;display:flex;flex-direction:column;align-items:stretch;gap:10px;min-height:0}
 .ce-roots{width:96px;height:62px;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;scrollbar-width:none;-webkit-overflow-scrolling:touch}
 .ce-roots::-webkit-scrollbar{display:none}
 .ce-roots-in{display:flex;height:100%}
 .ce-root{flex:none;width:48px;height:62px;display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:700;color:#c4c4c4;cursor:pointer;scroll-snap-align:start}
 .ce-root.on{font-size:46px;color:#1b1b1b}
-.ce-acc{align-self:flex-start;height:30px;padding:0 12px;border-radius:15px;border:1.5px solid #d6d6d6;font-size:14px;font-weight:700;color:#8a8a8a}
-.ce-acc.on{border-color:#1b1b1b;background:#1b1b1b;color:#fff}
+.ce-acc{align-self:flex-start;width:34px;height:34px;padding:0;border-radius:50%;border:1.5px solid #d6d6d6;background:#fff;font-size:18px;font-weight:700;color:#9a9a9a;display:flex;align-items:center;justify-content:center;line-height:1}
+.ce-acc.on{border-color:#1b1b1b;background:#fff;color:#1b1b1b}
 .ce-variants{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;align-items:flex-start;gap:2px;transition:opacity .4s ease;padding-bottom:6px}
 .ctile,.utile{display:inline-flex;align-items:center;align-self:flex-start;height:40px;border:0;border-radius:999px;background:#fff;color:#1b1b1b;font-size:18px;font-weight:700;padding:0 14px;white-space:nowrap;cursor:grab;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;flex:none}
 .ctile{touch-action:pan-y}
 .utile{touch-action:pan-x;height:36px;font-size:16px}
 .ce-main{flex:1;min-width:0;display:flex;flex-direction:column;min-height:0}
-.ce-used{display:flex;align-items:center;gap:10px;padding-bottom:10px;border-bottom:1px solid #f0f0f0}
+.ce-used{display:flex;align-items:center;gap:10px;min-height:40px;padding-bottom:16px;border-bottom:1px solid #f0f0f0}
 .ce-used-l{font-size:12px;color:#8a8a8a;font-weight:700;letter-spacing:.04em;text-transform:uppercase;flex:none}
 .ce-used-row{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;min-width:0}
 .ce-used-row::-webkit-scrollbar{display:none}
-.ce-lyrics{flex:1;min-height:200px;overflow-y:auto;padding-top:14px;display:flex;flex-direction:column;align-items:flex-start}
+.ce-lyrics{flex:1;min-height:200px;overflow-y:auto;padding-top:26px;display:flex;flex-direction:column;align-items:flex-start}
+/* no grey "hover" flash on tapped words (iPad keeps :hover after a tap) */
+.ce-lyrics .lword,.ce-lyrics .lword.editable:hover{background:transparent;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none}
+.ce-lyrics .lword.drop-on{background:#e5f0fc !important}
+.chip-x{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;margin:0 2px 3px -4px;border-radius:50%;font-size:15px;line-height:1;font-weight:700;color:#b0b0b0;cursor:pointer;-webkit-tap-highlight-color:transparent;flex:none}
+.chip-x:hover{color:#1b1b1b}
+body.chord-dragging .chip-x{visibility:hidden}
 .lword .lchord.chip{height:auto;min-height:22px;min-width:14px;line-height:22px;border-radius:999px;padding:0 7px;margin:0 0 2px -7px;background:#fff;font-size:16px !important;font-weight:800 !important}
 .lword .lchord.chip:empty{background:transparent}
 .lword .lchord.chip[data-drag-chord]{cursor:grab;touch-action:none;-webkit-user-select:none;user-select:none}
@@ -113,6 +119,9 @@ body.chord-dragging,body.chord-dragging *{cursor:grabbing !important;-webkit-use
 .lyr-win .lline{max-width:none}
 .lyr-win .lyrics-wrap{max-width:89%}
 .lyr-win .lyrics-wrap,.lyr-scroll .lyrics-wrap{padding:0 4px}
+/* playlist / gig viewers: lyrics start in line with the title */
+.lyr-area.al-left,.al-left .lyr-win,.al-left .lyr-scroll{align-items:flex-start}
+.al-left .lyrics-wrap,.lyr-win.al-left .lyrics-wrap{padding:0 !important;max-width:100% !important}
 `;
   document.head.appendChild(st);
 })();
@@ -241,18 +250,21 @@ function waveformBlock(){
 function countdownBlock(){
   return `<div style="position:relative;top:40px;display:flex;justify-content:center;font-size:160px;font-weight:800;line-height:1">${Math.max(1,Math.ceil(ST.cd))}</div>`;
 }
-// Practice follows along with the lyrics (same scrolling 4-line window as
-// Record) without saving a take — no mic, no waveform, just a clock and a
-// Stop button. Lyrics scroll karaoke-paced but no line bolds yet; that only
-// happens once there's a real recorded-and-aligned take to play back.
+// Practice: the mic listens (nothing is recorded) and the lyrics follow
+// your singing — they wait for you to start and hold when you stop.
 function practiceBlock(){
-  return `<div style="display:flex;flex-direction:column;align-items:center;gap:20px">
-    <div style="font-size:14px;color:#6f6f6f;text-align:center">Practicing — follow along with the lyrics. Nothing is being recorded.</div>
-    <div style="font-size:14px;color:#6f6f6f;font-variant-numeric:tabular-nums">${fmtTime(ST.recT)}</div>
+  const waiting = ST.pracState!=='following';
+  const lvl = Math.max(0, Math.min(1, (ST.pracLevel||0)/12));
+  const singing = !waiting && performance.now() - (ST.pracHeardAt||0) < 1500;
+  return `<div style="display:flex;flex-direction:column;align-items:center;gap:18px;margin-top:6px">
+    <div class="row" style="gap:10px;font-size:15px;font-weight:600">
+      <span style="width:12px;height:12px;border-radius:50%;background:#f24822;opacity:${(0.3+lvl*0.7).toFixed(2)};transform:scale(${(0.8+lvl*0.6).toFixed(2)});transition:transform .1s,opacity .1s"></span>
+      ${waiting ? 'Listening — start singing' : (singing ? 'Following you' : 'Waiting for you to carry on')}
+    </div>
+    <div style="font-size:13px;color:#8a8a8a;text-align:center;max-width:340px;line-height:1.45">The lyrics move with your singing. Nothing is being recorded.</div>
     <button class="btn btn-outline" style="width:170px" data-act="stopPractice">Stop</button>
   </div>`;
 }
-
 function renderManualLyrics(d){
   const hasLyrics = !!d.lyrics.trim();
   return `<div style="width:100%;flex:1;display:flex;flex-direction:column;gap:14px;margin-top:28px;max-width:640px;margin-left:auto;margin-right:auto">
