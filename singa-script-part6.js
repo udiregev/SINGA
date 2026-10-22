@@ -86,7 +86,6 @@ function renderGigPlayer(){
   if(gq.played.length){ queueHTML += `<div style="font-size:11px;font-weight:800;letter-spacing:.08em;color:#9a9a9a;padding:22px 0 6px">PLAYED</div>`; gq.played.forEach(id=> queueHTML += qRow(id,'played')); }
 
   const guestCount = ST.guestCount + (ST.guestCount===1?' guest':' guests');
-  const chordScale = Math.max(0.55, Math.min(1.9, ST.chordH/230));
   const hint = !gigHasLyrics ? 'No lyrics for this song — tap another song to continue' : (ST.playing ? 'Playing' : (gStarted ? 'Paused' : (ST.startMode==='countdown' ? 'Starts with a 3-2-1 countdown' : 'Starts when you start singing')));
 
   return `<div class="gigplayer-grid">
@@ -97,7 +96,7 @@ function renderGigPlayer(){
         <span style="font-size:12px;color:#6f6f6f;display:flex;align-items:center;gap:3px">${icon('group',16)}${guestCount}</span>
       </div>
       <div style="font-size:18px;font-weight:700;line-height:1.25;margin:22px 16px 18px 0">${esc(g.title)}</div>
-      <div style="flex:1;min-height:0;overflow:auto">${queueHTML}</div>
+      <div id="gigSideList" style="flex:1;min-height:0;overflow:auto">${queueHTML}</div>
     </div>
     <div style="padding:20px clamp(16px,4vw,48px) 20px;display:flex;flex-direction:column;min-height:0;position:relative;flex:1">
       <div>
@@ -111,12 +110,8 @@ function renderGigPlayer(){
         </div>` : ''}
       </div>
       ${gigHasLyrics ? `
-        ${gigShowChords ? `<div style="height:${Math.round(ST.chordH)}px;display:flex;align-items:center;justify-content:center;overflow:hidden">
-          <div style="display:flex;flex-direction:column;align-items:center;gap:14px;transform:scale(${chordScale})">${diagramHTML(dia)}
-            <button class="link" style="display:flex;align-items:center;gap:6px" data-act="playSample">${icon(ST.sampling?'stop_circle':'play_circle',22)}${ST.sampling?'Stop sample':'Play Sample'}</button>
-          </div></div>
-        <div class="row" style="justify-content:center;cursor:ns-resize;height:30px">${icon('drag_handle',26)}</div>` : ''}
-        <div style="flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;align-items:center;padding:16px 0 30%">${linesHTML(lines)}</div>
+        ${playerBodyHTML({ lines, live:gStarted, winKey:'gig-'+curId, dia, showDia:gigShowChords, scrollId:'gigLyricsScroll',
+          extraDia: `<button class="link" style="display:flex;align-items:center;gap:6px;margin-top:10px" data-act="playSample">${icon(ST.sampling?'stop_circle':'play_circle',22)}${ST.sampling?'Stop sample':'Play Sample'}</button>` })}
       ` : `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:#6f6f6f">
           ${icon('lyrics',40)}
           <div style="font-size:16px;font-weight:600;color:#1b1b1b">No synced take for this song yet</div>

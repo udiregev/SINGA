@@ -22,6 +22,59 @@ function playButtonHTML(playing, act, listening){
     return `<button class="icon-btn playbtn" title="${playing?'Pause':'Start'}" data-act="${act}">${icon(playing?'pause':'play_arrow',34)}</button>`;
   return `<div class="row" style="gap:10px;cursor:pointer;max-width:460px" data-act="${act}"><span class="icon-btn playbtn" style="background:${listening||playing?'#f24822':'#1b1b1b'}">${icon(playing?'pause':'mic',28)}</span><div><div style="font-size:15px;font-weight:600">${playing?'Following your voice':(listening?'Listening… starts the moment you sing':'Start')}</div><div style="font-size:12px;color:#8a8a8a;margin-top:2px">${playing?'Tap to pause':(listening?'Tap to cancel':'Starts when you start singing')}</div></div></div>`;
 }
+// Shared by the song viewer, Practice and the gig player.
+// Portrait: chord diagram above the lyrics (drag ═ to resize it).
+// Landscape: lyrics on the left, the diagram in a column on the right with
+// the next chord above it (drag ||| to resize it).
+// While playing, the lyrics are a 4-line window (see syncLyricWindow).
+function chordScaleV(){ return Math.max(0.6, Math.min(1.8, ST.chordW/260)); }
+function lyricsAreaHTML(lines, live, winKey, big, scrollId){
+  const id = scrollId || 'lyricsScroll';
+  if(live) return `<div class="lyr-area live"><div id="${id}" class="lyr-win" data-win="${esc(winKey)}">${linesHTML(lines, big)}</div></div>`;
+  return `<div class="lyr-area"><div id="${id}" class="lyr-scroll">${linesHTML(lines, big)}</div></div>`;
+}
+function playerBodyHTML(o){
+  // o: { lines, live, winKey, dia, showDia, big, extraDia, scrollId }
+  if(isLandscape()){
+    return `<div class="land-grid">
+      ${lyricsAreaHTML(o.lines, o.live, o.winKey, o.big, o.scrollId)}
+      ${o.showDia ? `<div id="chordResizeHandleX" class="land-handle" title="Drag to resize">${icon('drag_indicator',22)}</div>
+      <div id="chordDiagramBox" class="land-dia" style="width:${Math.round(ST.chordW)}px"><div class="chordInnerScale" style="transform:scale(${chordScaleV()})">${diagramHTML(o.dia, o.dotColor, true)}${o.extraDia||''}</div></div>` : ''}
+    </div>`;
+  }
+  const chordScale = Math.max(0.55, Math.min(1.9, ST.chordH/230));
+  return `${o.showDia ? `<div id="chordDiagramBox" style="height:${Math.round(ST.chordH)}px;display:flex;align-items:center;justify-content:center;overflow:hidden;margin-top:8px;flex:none">
+        <div class="chordInnerScale" style="display:flex;flex-direction:column;align-items:center;gap:14px;transform:scale(${chordScale})">${diagramHTML(o.dia, o.dotColor)}${o.extraDia||''}</div>
+      </div>
+      <div id="chordResizeHandle" class="row" style="justify-content:center;cursor:ns-resize;height:30px;touch-action:none;flex:none" title="Drag to resize">${icon('drag_handle',26)}</div>` : ''}
+    ${lyricsAreaHTML(o.lines, o.live, o.winKey, o.big, o.scrollId)}`;
+}
+// The songs you opened this one from (a playlist, or All Songs), down the
+// side — same as the gig player's setlist. Tap one to switch to it.
+function listSongIds(){
+  const curPl = ST.listPl ? D.playlists.find(p=>p.id===ST.listPl) : null;
+  const ids = curPl ? (curPl.auto?D.order:curPl.ids) : D.order;
+  let rows = ids.map(id=>({ id, ...song(id) })).filter(r=>r.lyrics && r.lyrics.trim());
+  const q = (ST.listQuery||'').trim().toLowerCase();
+  if(q) rows = rows.filter(r=>((r.title||'')+' '+(r.sub||'')).toLowerCase().includes(q));
+  return { title: curPl ? curPl.title : 'Songs', ids: sortRows(rows).map(r=>r.id) };
+}
+function songSideHTML(){
+  const L = listSongIds();
+  const rows = L.ids.map(id=>{
+    const x = song(id), cur = id===ST.songId;
+    return `<div class="row" style="gap:8px;padding:12px 0;border-bottom:1px solid var(--b2);cursor:pointer;justify-content:space-between" data-act="openSongFrom" data-id="${esc(id)}" data-from="list">
+      <div style="min-width:0;flex:1">
+        ${cur?`<div style="font-size:10px;font-weight:800;letter-spacing:.08em;color:${ST.playing?'#f24822':'#8a8a8a'};margin-bottom:3px">${ST.playing?'NOW PLAYING':'OPEN'}</div>`:''}
+        <div style="font-size:14px;font-weight:${cur?700:400};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(x.title||'Untitled song')}</div>
+        <div style="font-size:11px;color:${cur?'#1b1b1b':'#8a8a8a'};margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(x.sub||'')}</div>
+      </div>${cur?icon(ST.playing?'pause':'play_arrow',18):''}</div>`;
+  }).join('');
+  return `<div class="gigplayer-side">
+    <div class="row" style="gap:8px;cursor:pointer" data-act="back" data-to="list">${icon('chevron_left',24)}<span style="font-size:16px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(L.title)}</span></div>
+    <div id="songSideList" style="flex:1;min-height:0;overflow:auto;margin-top:14px">${rows}</div>
+  </div>`;
+}
 function renderSong(){
   const s = song(ST.songId);
   const inst = ST.instrument, hasInst = inst!=='none';
@@ -33,28 +86,32 @@ function renderSong(){
   else { diaChord = ST.viewChord || (seq[0]&&seq[0].ch); const vi = seq.findIndex(x=>x.ch===diaChord); diaNext = (seq.slice(vi+1).find(x=>x.ch!==diaChord)||seq[0]||{}).ch; }
   const dia = diagram(diaChord, diaNext, inst); dia.progress = progress;
   const lines = buildLines(s, vLive?'play':'view', { t: vLive?ST.t:null, hideChords: !hasInst });
-  const chordScale = Math.max(0.55, Math.min(1.9, ST.chordH/230));
-  return `<div class="scr" style="padding-bottom:0">
-    <div class="row" style="gap:14px;align-items:flex-start">
-      <span class="icon-btn" style="margin-top:4px" data-act="back" data-to="${esc(ST.back)}">${icon('chevron_left',26)}</span>
+  const withList = ST.back==='list' && ST.listKind==='songs' && !ST.viewBy;
+  const land = isLandscape();
+  const head = land ? `<div class="row" style="gap:14px;align-items:center">
+      ${withList ? '' : `<span class="icon-btn" data-act="back" data-to="${esc(ST.back)}">${icon('chevron_left',26)}</span>`}
       <div style="flex:1;min-width:0">
-        <div style="font-size:28px;font-weight:700;letter-spacing:-0.01em">${esc(s.title||'Untitled song')}</div>
+        <div style="font-size:22px;font-weight:700;letter-spacing:-0.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(s.title||'Untitled song')}</div>
+        <div style="font-size:13px;color:#6f6f6f;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(s.sub)}${ST.viewBy?' · added by '+esc(ST.viewBy):''}</div>
+      </div>
+      ${ST.viewBy?`<button class="btn btn-dark btn-sm" data-act="copySong">Copy to your songs</button>`:''}
+      ${playButtonHTML(ST.playing,'viewPlay',ST.listening)}
+      <span class="icon-btn" data-act="toggleMenu">${icon('menu',28)}</span>
+    </div>` : '';
+  const main = `<div class="${withList?'song-main':'scr'}" style="padding-bottom:0">
+    ${land ? head : `<div class="row" style="gap:14px;align-items:flex-start">
+      ${withList ? '' : `<span class="icon-btn" style="margin-top:4px" data-act="back" data-to="${esc(ST.back)}">${icon('chevron_left',26)}</span>`}
+      <div style="flex:1;min-width:0">
+        <div style="font-size:${land?24:28}px;font-weight:700;letter-spacing:-0.01em">${esc(s.title||'Untitled song')}</div>
         <div style="font-size:14px;color:#6f6f6f;margin-top:4px">${esc(s.sub)}</div>
         ${ST.viewBy?`<div class="row" style="gap:6px;font-size:13px;margin-top:8px">${icon('account_circle',18)}added by ${esc(ST.viewBy)}</div>`:''}
-        <div class="row" style="gap:14px;margin-top:14px">${playButtonHTML(ST.playing,'viewPlay',ST.listening)}${ST.viewBy?`<button class="btn btn-dark btn-sm" data-act="copySong">Copy to your songs</button>`:''}</div>
+        <div class="row" style="gap:14px;margin-top:${land?10:14}px">${playButtonHTML(ST.playing,'viewPlay',ST.listening)}${ST.viewBy?`<button class="btn btn-dark btn-sm" data-act="copySong">Copy to your songs</button>`:''}</div>
       </div>
       <span class="icon-btn" data-act="toggleMenu">${icon('menu',28)}</span>
-    </div>
-    ${hasInst?`<div id="chordDiagramBox" style="height:${Math.round(ST.chordH)}px;display:flex;align-items:center;justify-content:center;overflow:hidden;margin-top:8px;flex:none">
-        <div class="chordInnerScale" style="display:flex;flex-direction:column;align-items:center;gap:14px;transform:scale(${chordScale})">
-          ${diagramHTML(dia)}
-        </div>
-      </div>
-      <div id="chordResizeHandle" class="row" style="justify-content:center;cursor:ns-resize;height:30px;touch-action:none;flex:none" title="Drag to resize">${icon('drag_handle',26)}</div>`:''}
-    <div style="flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;align-items:center;padding:20px 0 40%" id="lyricsScroll">
-      ${linesHTML(lines)}
-    </div>
-  </div>
+    </div>`}
+    ${playerBodyHTML({ lines, live:vLive, winKey:'song-'+s.id, dia, showDia:hasInst })}
+  </div>`;
+  return `${withList ? `<div class="gigplayer-grid songlist">${songSideHTML()}${main}</div>` : main}
   ${ST.vcd>0?`<div class="modal-backdrop" style="background:rgba(255,255,255,.75);font-size:180px;font-weight:800;animation:none">${Math.max(1,Math.ceil(ST.vcd))}</div>`:''}
   ${ST.menu?renderSongMenu():''}`;
 }
@@ -82,10 +139,10 @@ function renderPractice(){
         <div style="font-size:14px;color:#6f6f6f;margin-top:4px">${esc(s.sub)}</div>
       </div>
     </div>
-    ${ST.instrument!=='none' ? `<div style="margin-top:30px;min-height:140px">${diagramHTML(dia,'#f24822')}</div>` : ''}
-    <div style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center">
-      ${linesHTML(lines, true)}
-    </div>
+    ${isLandscape()
+      ? playerBodyHTML({ lines, live:true, winKey:'practice-'+s.id, dia, showDia:ST.instrument!=='none', big:true, dotColor:'#f24822' })
+      : `${ST.instrument!=='none' ? `<div style="margin-top:30px;min-height:140px;flex:none">${diagramHTML(dia,'#f24822')}</div>` : ''}
+    ${lyricsAreaHTML(lines, true, 'practice-'+s.id, true)}`}
     <div style="border-top:1px solid #ececec;padding-top:22px;display:flex;flex-direction:column;gap:18px">
       <div style="height:22px;display:flex;align-items:center;cursor:pointer" data-act="seek"><div style="flex:1;height:6px;border-radius:3px;background:#e6e6e6;position:relative"><div style="position:absolute;left:0;top:0;bottom:0;width:${progress}%;background:#1b1b1b;border-radius:3px"></div></div></div>
       <div class="row" style="gap:16px">
