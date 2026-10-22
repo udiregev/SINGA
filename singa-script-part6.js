@@ -33,9 +33,18 @@ function queueFor(g){
   return { played, cued, up };
 }
 function gigSongId(){ const q = queueFor(gigObj()); return q.cued || gigObj().setlist[0]; }
+function endLiveGig(){
+  if(!ST._liveGig) return;
+  stopOnsetListening();
+  if(_liveChannelGigId===ST._liveGig) broadcastGigState({ ended:true });
+  leaveGigChannel();
+  ST._liveGig=null; ST.gigCur=null; ST.played=[]; ST.t=0; ST.playing=false; ST.vcd=0; ST.gListening=false;
+}
 function openPlayer(id){
   stopOnsetListening();
-  const g = gigObj(); const fresh = ST._liveGig !== g.id;
+  const g = gigObj();
+  if(ST._liveGig && ST._liveGig!==g.id) endLiveGig();   // only one gig live at a time
+  const fresh = ST._liveGig !== g.id;
   ST.screen='gigplayer'; ST.ctx='gig'; ST._liveGig=g.id;
   joinGigChannel(g.id);
   ST.gigCur = id || (fresh ? null : ST.gigCur);
@@ -60,7 +69,7 @@ function renderGigPlayer(){
   const dia = diagram(chord, next || (seq[0]||{}).ch, isCollab ? (ST.part==='Keys'?'piano':'guitar') : ST.instrument);
   if(gStarted) dia.progress = lc.progress;
   const gigHasLyrics = !!(s.lyrics && s.lyrics.trim());
-  const lines = gigHasLyrics ? buildLines(s, gStarted?'play':'view', { t: gStarted?ST.t:null, hideChords: !isCollab && !hasInst }) : [];
+  const lines = gigHasLyrics ? buildLines(s, gStarted?'play':'view', { t: gStarted?ST.t:null, hideChords: !isCollab && !hasInst, leftTop: true }) : [];
 
   const qRow = (id, kind) => {
     const x = song(id), isCur = kind==='cur';
@@ -99,7 +108,8 @@ function renderGigPlayer(){
       <div id="gigSideList" style="flex:1;min-height:0;overflow:auto">${queueHTML}</div>
     </div>
     <div style="padding:20px clamp(16px,4vw,48px) 20px;display:flex;flex-direction:column;min-height:0;position:relative;flex:1">
-      <div>
+      <div style="position:relative;padding-right:44px">
+        <span class="icon-btn" style="position:absolute;top:0;right:0" title="Song menu" data-act="toggleMenu">${icon('menu',28)}</span>
         <div style="font-size:26px;font-weight:700;letter-spacing:-0.01em">${esc(s.title||'Untitled song')}</div>
         <div style="font-size:14px;color:#6f6f6f;margin-top:4px">${esc(s.sub)}</div>
         ${s.by?`<div class="row" style="gap:6px;font-size:13px;margin-top:8px">${icon('account_circle',18)}added by ${esc(s.by)}</div>`:''}
@@ -110,7 +120,7 @@ function renderGigPlayer(){
         </div>` : ''}
       </div>
       ${gigHasLyrics ? `
-        ${playerBodyHTML({ lines, live:gStarted, winKey:'gig-'+curId, dia, showDia:gigShowChords, scrollId:'gigLyricsScroll',
+        ${playerBodyHTML({ lines, live:gStarted, winKey:'gig-'+curId, dia, showDia:gigShowChords, scrollId:'gigLyricsScroll', left:true,
           extraDia: `<button class="link" style="display:flex;align-items:center;gap:6px;margin-top:10px" data-act="playSample">${icon(ST.sampling?'stop_circle':'play_circle',22)}${ST.sampling?'Stop sample':'Play Sample'}</button>` })}
       ` : `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:#6f6f6f">
           ${icon('lyrics',40)}
@@ -123,7 +133,8 @@ function renderGigPlayer(){
         </div>` : ''}
     </div>
   </div>
-  ${ST.vcd>0?`<div class="modal-backdrop" style="background:rgba(255,255,255,.75);font-size:180px;font-weight:800;animation:none">${Math.max(1,Math.ceil(ST.vcd))}</div>`:''}`;
+  ${ST.vcd>0?`<div class="modal-backdrop" style="background:rgba(255,255,255,.75);font-size:180px;font-weight:800;animation:none">${Math.max(1,Math.ceil(ST.vcd))}</div>`:''}
+  ${ST.menu?renderSongMenu():''}`;
 }
 /* ============================================================
    MODALS: Upgrade / Picker / New / Collaborator editor
