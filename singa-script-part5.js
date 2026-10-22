@@ -1,30 +1,47 @@
 "use strict";
+// Where the song menu was opened from: the plain song viewer, a playlist's
+// song viewer (songs down the side) or the live gig player.
+function songMenuCtx(){
+  if(ST.screen==='gigplayer') return 'gig';
+  const pl = ST.listPl ? D.playlists.find(p=>p.id===ST.listPl) : null;
+  if(ST.screen==='song' && ST.back==='list' && ST.listKind==='songs' && pl && !pl.auto && pl.mine!==false) return 'playlist';
+  return 'song';
+}
 function renderSongMenu(){
   const s = song(ST.songId);
+  const ctx = songMenuCtx();
   const instOpts = INSTS.map(([v,l])=>`<a class="link" style="display:flex;align-items:center;gap:8px;font-weight:${v===ST.instrument?700:500};color:${v===ST.instrument?'#1b1b1b':'#6f6f6f'}" data-act="setInstrumentMenu" data-id="${v}">${icon('check',18)}${l}</a>`).join('');
+  const item = (act, label, extra) => `<a class="link" style="font-size:17px;font-weight:700${extra||''}" data-act="${act}">${label}</a>`;
   // the close × sits exactly where the ☰ button was
   const mp = ST.menuPos || { top: 84, right: 24 };
+  const mine = s.mine!==false && !ST.viewBy;
   return `<div class="modal-backdrop" style="background:rgba(255,255,255,.92);display:block;padding:0" data-act="toggleMenu">
     <div style="position:fixed;top:${Math.round(mp.top)}px;right:${Math.round(mp.right)}px;display:flex;flex-direction:column;align-items:flex-end;gap:12px;text-align:right" onclick="modalClick(event)">
       <span class="icon-btn" data-act="toggleMenu">${icon('close',28)}</span>
-      <a class="link" style="font-size:17px;font-weight:700" data-act="editSong">Edit</a>
+      ${mine ? item('editSong','Edit') : ''}
       <a class="link" style="font-size:17px;font-weight:700;display:flex;align-items:center;gap:4px" data-act="toggleInstMenu">Change instrument</a>
       ${ST.instMenu?`<div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;margin:-4px 0 4px">${instOpts}</div>`:''}
-      ${Object.keys(s.notes||{}).length ? `<a class="link" style="font-size:17px;font-weight:700" data-act="removeMarkings">Remove markings</a>` : ''}
-      <a class="link" style="font-size:17px;font-weight:700" data-act="menuAddGig">Add to a gig</a>
-      <a class="link" style="font-size:17px;font-weight:700" data-act="openAccount">Full settings</a>
+      ${mine && Object.keys(s.notes||{}).length ? item('removeMarkings','Remove markings') : ''}
+      ${ctx==='playlist' ? item('menuRemovePlaylist','Remove song from playlist') : item('menuAddPlaylist','Add song to a playlist')}
+      ${ctx==='gig' ? item('menuRemoveGig','Remove song from gig') : item('menuAddGig','Add song to a gig')}
       <a class="link" style="font-size:17px;font-weight:700;margin-top:16px;display:flex;align-items:center;gap:6px" data-act="newSong">Add a new song${icon('add_circle',22)}</a>
-      <a class="link link-accent" style="font-size:17px;font-weight:700;margin-top:16px" data-act="deleteSong">Delete song</a>
+      ${mine ? `<a class="link link-accent" style="font-size:17px;font-weight:700;margin-top:16px" data-act="deleteSong">Delete song</a>` : ''}
     </div>
   </div>`;
 }
 
-// The Play / Pause capsule (song viewer + gig player).
+// The song viewer's Play / Stop capsule (Stop goes back to the start).
+// A song with no synced take can't play: it says so and offers to add one.
 function playButtonHTML(playing, act, listening, id){
   const did = id ? ` data-id="${esc(id)}"` : '';
-  const label = playing ? 'Pause' : (listening ? 'Listening…' : 'Play');
-  const hint = ST.startMode==='countdown' ? '' : (playing ? '' : (listening ? 'Starts the moment you sing — tap to cancel' : 'Starts when you start singing'));
-  return `<div class="row" style="gap:12px"><button class="playcap${playing||listening?' live':''}" data-act="${act}"${did}>${label}</button>${hint?`<span style="font-size:12px;color:#8a8a8a">${hint}</span>`:''}</div>`;
+  const counting = ST.vcd>0;
+  const label = (playing||counting) ? 'Stop' : (listening ? 'Listening…' : 'Play');
+  const hint = ST.startMode==='countdown' ? '' : (playing||counting ? '' : (listening ? 'Starts the moment you sing — tap to cancel' : 'Starts when you start singing'));
+  return `<div class="row" style="gap:12px"><button class="playcap${playing||listening||counting?' live':''}" data-act="${act}"${did}>${label}</button>${hint?`<span style="font-size:12px;color:#8a8a8a">${hint}</span>`:''}</div>`;
+}
+function noSyncHTML(s){
+  const own = s.mine!==false && !ST.viewBy;
+  return `<div class="row" style="gap:12px;flex-wrap:wrap"><span style="font-size:13px;color:#8a8a8a">No sync yet — record a take to play along</span>${own?`<button class="btn btn-outline btn-sm" data-act="addSync">Add sync</button>`:''}</div>`;
 }
 // Shared by the song viewer, Practice and the gig player.
 // Portrait: chord diagram above the lyrics (drag ═ to resize it).
@@ -32,26 +49,32 @@ function playButtonHTML(playing, act, listening, id){
 // the next chord above it (drag ||| to resize it).
 // While playing, the lyrics are a 4-line window (see syncLyricWindow).
 function chordScaleV(){ return Math.max(0.6, Math.min(1.8, ST.chordW/260)); }
-function lyricsAreaHTML(lines, live, winKey, big, scrollId){
-  const id = scrollId || 'lyricsScroll';
-  if(live) return `<div class="lyr-area live"><div id="${id}" class="lyr-win" data-win="${esc(winKey)}">${linesHTML(lines, big)}</div></div>`;
-  return `<div class="lyr-area"><div id="${id}" class="lyr-scroll">${linesHTML(lines, big)}</div></div>`;
+function lyricsAreaHTML(lines, live, winKey, big, scrollId, left){
+  const id = scrollId || 'lyricsScroll', al = left ? ' al-left' : '';
+  if(live) return `<div class="lyr-area live${al}"><div id="${id}" class="lyr-win" data-win="${esc(winKey)}">${linesHTML(lines, big)}</div></div>`;
+  return `<div class="lyr-area${al}"><div id="${id}" class="lyr-scroll">${linesHTML(lines, big)}</div></div>`;
+}
+// No chords on this song yet: the diagram's spot offers to add them.
+function addChordsHTML(){
+  return `<div style="display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center"><span style="font-size:13px;color:#8a8a8a">No chords yet</span><button class="btn btn-outline btn-sm" data-act="addChords">Add chords</button></div>`;
 }
 function playerBodyHTML(o){
-  // o: { lines, live, winKey, dia, showDia, big, extraDia, scrollId }
+  // o: { lines, live, winKey, dia, showDia, big, extraDia, scrollId, left, noChords }
   if(isLandscape()){
     return `<div class="land-grid">
-      ${lyricsAreaHTML(o.lines, o.live, o.winKey, o.big, o.scrollId)}
-      ${o.showDia ? `<div id="chordResizeHandleX" class="land-handle" title="Drag to resize">${icon('drag_indicator',22)}</div>
+      ${lyricsAreaHTML(o.lines, o.live, o.winKey, o.big, o.scrollId, o.left)}
+      ${o.noChords ? `<div class="land-dia" style="width:${Math.round(ST.chordW)}px;justify-content:center">${addChordsHTML()}</div>`
+      : o.showDia ? `<div id="chordResizeHandleX" class="land-handle" title="Drag to resize">${icon('drag_indicator',22)}</div>
       <div id="chordDiagramBox" class="land-dia" data-fit="${chordScaleV()}" style="width:${Math.round(ST.chordW)}px"><div class="chordInnerScale" style="transform:scale(${chordScaleV()})">${diagramHTML(o.dia, o.dotColor, true)}${o.extraDia||''}</div></div>` : ''}
     </div>`;
   }
   const chordScale = Math.max(0.55, Math.min(1.9, ST.chordH/230));
-  return `${o.showDia ? `<div id="chordDiagramBox" data-fit="${chordScale}" style="height:${Math.round(ST.chordH)}px;display:flex;align-items:center;justify-content:center;overflow:hidden;margin-top:8px;flex:none">
+  return `${o.noChords ? `<div style="height:${Math.round(Math.min(ST.chordH,170))}px;display:flex;align-items:center;justify-content:center;margin-top:8px;flex:none">${addChordsHTML()}</div>`
+    : o.showDia ? `<div id="chordDiagramBox" data-fit="${chordScale}" style="height:${Math.round(ST.chordH)}px;display:flex;align-items:center;justify-content:center;overflow:hidden;margin-top:8px;flex:none">
         <div class="chordInnerScale" style="display:flex;flex-direction:column;align-items:center;gap:14px;transform:scale(${chordScale})">${diagramHTML(o.dia, o.dotColor)}${o.extraDia||''}</div>
       </div>
       <div id="chordResizeHandle" class="row" style="justify-content:center;cursor:ns-resize;height:30px;touch-action:none;flex:none" title="Drag to resize">${icon('drag_handle',26)}</div>` : ''}
-    ${lyricsAreaHTML(o.lines, o.live, o.winKey, o.big, o.scrollId)}`;
+    ${lyricsAreaHTML(o.lines, o.live, o.winKey, o.big, o.scrollId, o.left)}`;
 }
 // The songs you opened this one from (a playlist, or All Songs), down the
 // side — same as the gig player's setlist. Tap one to switch to it.
@@ -72,7 +95,7 @@ function songSideHTML(){
         ${cur?`<div style="font-size:10px;font-weight:800;letter-spacing:.08em;color:${ST.playing?'#f24822':'#8a8a8a'};margin-bottom:3px">${ST.playing?'NOW PLAYING':'OPEN'}</div>`:''}
         <div style="font-size:14px;font-weight:${cur?700:400};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(x.title||'Untitled song')}</div>
         <div style="font-size:11px;color:${cur?'#1b1b1b':'#8a8a8a'};margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(x.sub||'')}</div>
-      </div>${cur?icon(ST.playing?'pause':'play_arrow',18):''}</div>`;
+      </div>${cur?icon(ST.playing?'stop':'play_arrow',18):''}</div>`;
   }).join('');
   return `<div class="gigplayer-side">
     <div class="row" style="gap:8px;cursor:pointer" data-act="back" data-to="list">${icon('chevron_left',24)}<span style="font-size:16px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(L.title)}</span></div>
@@ -89,17 +112,20 @@ function renderSong(){
   if(vLive){ const lc = liveChord(s, vtm, ST.t); diaChord = lc.chord; diaNext = lc.next; progress = lc.progress; }
   else { diaChord = ST.viewChord || (seq[0]&&seq[0].ch); const vi = seq.findIndex(x=>x.ch===diaChord); diaNext = (seq.slice(vi+1).find(x=>x.ch!==diaChord)||seq[0]||{}).ch; }
   const dia = diagram(diaChord, diaNext, inst); dia.progress = progress;
-  const lines = buildLines(s, vLive?'play':'view', { t: vLive?ST.t:null, hideChords: !hasInst });
   const withList = ST.back==='list' && ST.listKind==='songs' && !ST.viewBy;
+  // in a playlist's viewer the lyrics line up with the title, so a mark on a
+  // line's first word goes above it rather than out to the left
+  const lines = buildLines(s, vLive?'play':'view', { t: vLive?ST.t:null, hideChords: !hasInst, leftTop: withList });
   const land = isLandscape();
-  const head = land ? `<div class="row" style="gap:14px;align-items:center">
-      ${withList ? '' : `<span class="icon-btn" data-act="back" data-to="${esc(ST.back)}">${icon('chevron_left',26)}</span>`}
+  const playRow = s.synced ? playButtonHTML(ST.playing,'viewPlay',ST.listening) : noSyncHTML(s);
+  const noChords = hasInst && !seq.length && !ST.viewBy && s.mine!==false;
+  const head = land ? `<div class="row" style="gap:14px;align-items:flex-start">
+      ${withList ? '' : `<span class="icon-btn" style="margin-top:2px" data-act="back" data-to="${esc(ST.back)}">${icon('chevron_left',26)}</span>`}
       <div style="flex:1;min-width:0">
         <div style="font-size:22px;font-weight:700;letter-spacing:-0.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(s.title||'Untitled song')}</div>
         <div style="font-size:13px;color:#6f6f6f;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(s.sub)}${ST.viewBy?' · added by '+esc(ST.viewBy):''}</div>
+        <div class="row" style="gap:14px;margin-top:10px">${playRow}${ST.viewBy?`<button class="btn btn-dark btn-sm" data-act="copySong">Copy to your songs</button>`:''}</div>
       </div>
-      ${ST.viewBy?`<button class="btn btn-dark btn-sm" data-act="copySong">Copy to your songs</button>`:''}
-      ${playButtonHTML(ST.playing,'viewPlay',ST.listening)}
       <span class="icon-btn" data-act="toggleMenu">${icon('menu',28)}</span>
     </div>` : '';
   const main = `<div class="${withList?'song-main':'scr'}" style="padding-bottom:0">
@@ -109,11 +135,11 @@ function renderSong(){
         <div style="font-size:${land?24:28}px;font-weight:700;letter-spacing:-0.01em">${esc(s.title||'Untitled song')}</div>
         <div style="font-size:14px;color:#6f6f6f;margin-top:4px">${esc(s.sub)}</div>
         ${ST.viewBy?`<div class="row" style="gap:6px;font-size:13px;margin-top:8px">${icon('account_circle',18)}added by ${esc(ST.viewBy)}</div>`:''}
-        <div class="row" style="gap:14px;margin-top:${land?10:14}px">${playButtonHTML(ST.playing,'viewPlay',ST.listening)}${ST.viewBy?`<button class="btn btn-dark btn-sm" data-act="copySong">Copy to your songs</button>`:''}</div>
+        <div class="row" style="gap:14px;margin-top:${land?10:14}px">${playRow}${ST.viewBy?`<button class="btn btn-dark btn-sm" data-act="copySong">Copy to your songs</button>`:''}</div>
       </div>
       <span class="icon-btn" data-act="toggleMenu">${icon('menu',28)}</span>
     </div>`}
-    ${playerBodyHTML({ lines, live:vLive, winKey:'song-'+s.id, dia, showDia:hasInst })}
+    ${playerBodyHTML({ lines, live:vLive, winKey:'song-'+s.id, dia, showDia:hasInst, left:withList, noChords })}
   </div>`;
   return `${withList ? `<div class="gigplayer-grid songlist">${songSideHTML()}${main}</div>` : main}
   ${ST.vcd>0?`<div class="modal-backdrop" style="background:rgba(255,255,255,.75);font-size:180px;font-weight:800;animation:none">${Math.max(1,Math.ceil(ST.vcd))}</div>`:''}
@@ -190,6 +216,7 @@ function renderGig(){
     return `<div class="list-row" data-act="openGigSong" data-id="${id}"><div><div class="t">${esc(s.title||'Untitled song')}</div><div class="s">${esc(s.sub)}</div></div><div class="row" style="gap:10px"><span style="font-size:11px;font-weight:700;letter-spacing:.05em;color:${s.synced?'#1b1b1b':'#b0b0b0'}">${s.synced?'SYNCED':'NO TAKE'}</span>${icon('chevron_right',22)}</div></div>`;
   }).join('');
   const collapsed = ST.gigMenuCollapsed;
+  const live = ST._liveGig===g.id;
   const items = gigMenuItems().map(([ic,label,act])=>`<a class="gigmenu-item" data-act="${act}" title="${label}">${icon(ic,24)}<span class="lbl">${label}</span></a>`).join('');
   return `<div class="scr gig-layout">
     <div class="gigmenu-backdrop ${ST.gigMenuOpen?'open':''}" data-act="toggleGigMenu"></div>
@@ -198,16 +225,18 @@ function renderGig(){
       ${items}
     </aside>
     <div class="gig-main">
-      <div class="row" style="gap:12px;align-items:flex-start">
+      <div class="row" style="gap:14px;align-items:flex-start">
         <span class="icon-btn" style="margin-top:4px" data-act="nav" data-to="home">${icon('chevron_left',26)}</span>
-        <div style="flex:1;min-width:0"><div style="font-size:30px;font-weight:700;line-height:1.25">${esc(g.title)}</div><div style="font-size:14px;color:#6f6f6f;margin-top:6px">${esc(g.date)}${g.date?' · ':''}${g.setlist.length} song${g.setlist.length===1?'':'s'}</div></div>
+        <div style="flex:1;min-width:0"><div style="font-size:30px;font-weight:700;line-height:1.25;display:flex;align-items:center;gap:10px;flex-wrap:wrap">${esc(g.title)}${live?'<span style="background:#f24822;color:#fff;font-size:11px;font-weight:800;letter-spacing:.08em;padding:3px 7px;border-radius:4px">LIVE</span>':''}</div><div style="font-size:14px;color:#6f6f6f;margin-top:6px">${esc(g.date)}${g.date?' · ':''}${g.setlist.length} song${g.setlist.length===1?'':'s'}</div></div>
         <button class="icon-btn gigmenu-mobilebtn" title="Gig menu" data-act="toggleGigMenu">${icon('more_vert',26)}</button>
       </div>
       <div class="row" style="gap:10px;margin:18px 0 6px 40px;flex-wrap:wrap">
-        <button class="btn btn-accent btn-sm" style="display:flex;align-items:center;gap:8px" data-act="goLive">${icon('rocket_launch',20)}Go live</button>
+        ${live
+          ? `<button class="btn btn-dark btn-sm" style="display:flex;align-items:center;gap:8px" data-act="endGig">${icon('stop_circle',20)}End gig</button>`
+          : `<button class="btn btn-accent btn-sm" style="display:flex;align-items:center;gap:8px" data-act="goLive">${icon('rocket_launch',20)}Go live</button>`}
         <button class="btn btn-outline btn-sm" style="display:flex;align-items:center;gap:6px" data-act="gigAddSongs">${icon('add',20)}Add songs</button>
       </div>
-      <div style="margin-top:10px">${setRows || '<div style="padding:20px 0;color:#8a8a8a">No songs yet — add some to get started.</div>'}</div>
+      <div style="margin-top:10px;padding-left:40px">${setRows || '<div style="padding:20px 0;color:#8a8a8a">No songs yet — add some to get started.</div>'}</div>
     </div>
   </div>
   ${ST.qrOpen?`<div class="modal-backdrop" data-act="closeQr"><div class="modal" style="align-items:center;text-align:center;max-width:380px" onclick="modalClick(event)">
