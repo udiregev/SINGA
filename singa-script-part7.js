@@ -77,7 +77,23 @@ const DARK_MODE_SCREENS = ['gig','song','practice','gigplayer'];
 // growing the whole page — on desktop the song used to scroll off the page.
 const FIXED_SCREENS = ['song','practice','gigplayer','create','review'];
 let _prevRenderScreen = null, _prevModalKey = '', _prevScrollScreen = '', _lastEditorLine = null;
+// The screen is rebuilt every 100ms while a song plays. If that happens
+// between pressing and releasing a button, the button you pressed is gone
+// and the tap is lost (that's why Pause often didn't respond). So while a
+// finger/mouse is down on a button, rebuilding waits until it's released.
+let _holdRender = false, _renderPending = false, _holdT = 0;
+function releaseRenderHold(){ _holdRender = false; if(_renderPending){ _renderPending = false; render(); } }
+document.addEventListener('pointerdown', function(e){
+  const t = e.target.closest && e.target.closest('[data-act]');
+  if(!t || e.target.closest('[data-drag-chord]')) return;
+  _holdRender = true; clearTimeout(_holdT); _holdT = setTimeout(releaseRenderHold, 800);
+}, true);
+['pointerup','pointercancel'].forEach(ev=>document.addEventListener(ev, function(){
+  if(_holdRender){ clearTimeout(_holdT); _holdT = setTimeout(releaseRenderHold, 80); }
+}, true));
+document.addEventListener('click', function(){ if(_holdRender){ clearTimeout(_holdT); _holdRender = false; _renderPending = false; } }, true);
 function render(){
+  if(_holdRender){ _renderPending = true; return; }
   // A render triggered by the 100ms playback/recording/sampling tick
   // redraws the current screen's markup from scratch every time. Without
   // this check that replays the .scr mount-in animation (translateY+fade)
@@ -140,6 +156,8 @@ function render(){
   }
   // autofocus search on search screen
   if(ST.screen==='search'){ const el = document.querySelector('#screen input[data-bind="searchQuery"]'); if(el){ el.focus(); const v=el.value; el.value=''; el.value=v; } }
+  // room beside the lyrics for left/right marks
+  fitMarkGutters();
   // players: keep the playing line 2nd of a 4-line window
   syncLyricWindow();
   fitLandDia();
@@ -224,16 +242,38 @@ function stepLyricWindow(){
 }
 // Song viewer / gig player switch between portrait (diagram above the
 // lyrics) and landscape (lyrics left, diagram right) as the window turns.
-// Landscape chord column: scale the diagram to the column's width (the |||
-// handle) but never taller than the column itself.
-function fitLandDia(){
-  const box = document.querySelector('.land-dia'); if(!box) return;
-  const inner = box.querySelector('.chordInnerScale'); if(!inner) return;
-  const nh = inner.offsetHeight, nw = inner.offsetWidth; if(!nh || !nw) return;
-  const sc = Math.max(0.35, Math.min(chordScaleV(), (box.clientHeight-12)/nh, (box.clientWidth-12)/nw));
-  inner.style.transform = 'scale('+sc.toFixed(3)+')';
+// Marks to the left of a line's first word / right of its last word hang
+// outside the line. Shift the whole lyrics column right just enough for the
+// widest left mark, and keep right marks inside the visible area — so all
+// lines keep one left edge and no line is pushed by its own mark.
+function fitMarkGutters(){
+  document.querySelectorAll('#screen .lyrics-wrap').forEach(w=>{
+    const ls = w.querySelectorAll('.mside-abs.l'), rs = w.querySelectorAll('.mside-abs.r');
+    if(!ls.length && !rs.length) return;
+    const box = w.parentElement; if(!box) return;
+    const bw = box.clientWidth;
+    let L = 0; ls.forEach(m=>{ L = Math.max(L, m.offsetWidth + 10); });
+    w.style.paddingLeft = Math.min(L, Math.round(bw*0.3))+'px';
+    for(let pass=0; pass<2 && rs.length; pass++){
+      const right = box.getBoundingClientRect().right - 6;
+      let over = 0; rs.forEach(m=>{ over = Math.max(over, m.getBoundingClientRect().right - right); });
+      if(over <= 0.5) break;
+      w.style.paddingRight = Math.min(Math.round(bw*0.25), (parseFloat(w.style.paddingRight)||0) + over)+'px';
+    }
+  });
+}
+// Chord diagrams scale to their box (the resize handle sets the size) but
+// never spill out of it — the upright piano is tall, for instance.
+function fitDias(){
+  document.querySelectorAll('[data-fit]').forEach(box=>{
+    const inner = box.querySelector('.chordInnerScale'); if(!inner) return;
+    const nh = inner.offsetHeight, nw = inner.offsetWidth; if(!nh || !nw) return;
+    const sc = Math.max(0.3, Math.min(+box.dataset.fit || 1, (box.clientHeight-10)/nh, (box.clientWidth-10)/nw));
+    inner.style.transform = 'scale('+sc.toFixed(3)+')';
+  });
 }
 function isLandscape(){ return innerWidth > innerHeight && innerWidth >= 640; }
+function fitLandDia(){ fitDias(); }
 let _wasLandscape = null, _resizeT = 0;
 window.addEventListener('resize', function(){
   clearTimeout(_resizeT);
