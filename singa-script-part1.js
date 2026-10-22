@@ -96,8 +96,8 @@ const ST = {
   emailVerified:true, verifyModal:false,
   homeQuery:'', searchQuery:'', sort:'recent', sortOpen:false,
   listKind:'songs', listPl:null, listQuery:'',
-  songId:'dgbmh', viewBy:null, viewChord:null, instrument:'guitar', menu:false, instMenu:false, chordH:230,
-  recentChords:[], _lastProgScrollAt:0,
+  songId:'dgbmh', viewBy:null, viewChord:null, instrument:'guitar', menu:false, instMenu:false, chordH:230, chordW:260, accOn:false,
+  recentChords:[], _lastProgScrollAt:0, queued:[],
   startMode:'countdown', vcd:0, listening:false,
   editId:null, createMode:'manual', step:'lyrics', similar:false, similarLoading:false, similarResults:[], rootIdx:0, selRoot:'A', selSuffix:'m', selWord:null, noteDraft:'', autoChords:false, editorLine:0,
   phase:'idle', cd:0, recT:0, bars:[], procPct:0, procNote:'',
@@ -228,7 +228,7 @@ let _liveChannel = null, _liveChannelGigId = null;
 function joinGigChannel(gigId){
   if(!gigId || (_liveChannelGigId===gigId && _liveChannel)) return;
   leaveGigChannel();
-  _liveChannel = sb.channel('gig-live-'+gigId, { config: { broadcast: { self: false } } });
+  _liveChannel = sb.channel('gig-live-'+gigId, { config: { broadcast: { self: false }, presence: { key: 'performer', enabled: true } } });
   const ch = _liveChannel;
   ch.on('presence', { event:'sync' }, ()=>{
     if(_liveChannel!==ch) return;
@@ -498,7 +498,7 @@ function diagram(ch,next,inst){
   return { ...base, isGuitar:true, w:(n-1)*20, nut: shift?1.5:4, hasBase: shift>0, base: shift+1,
     strings: f.map((_,i)=>({k:i,left:i*20})), frets:[1,2,3,4,5].map(j=>({k:j,top:j*24-1})), dots, marks };
 }
-function diagramHTML(dia, dotColor){
+function diagramHTML(dia, dotColor, vertical){
   dotColor = dotColor || '#1b1b1b';
   let inner = '';
   if(dia.isGuitar){
@@ -518,5 +518,11 @@ function diagramHTML(dia, dotColor){
   const nameAnim = animStyle('diaName', dia.name, 'chordPop', 450);
   const nextAnim = animStyle('diaNext', dia.next, 'nextIn', 450);
   const bar = dia.progress!=null ? `<div class="nextbar"><div style="width:${Math.round(dia.progress*100)}%"></div></div>` : '';
+  // Landscape: a column — next chord on top (with ⌄⌄), the current chord, its diagram.
+  if(vertical) return `<div class="dia-v">
+    <div class="dia-v-next"><div class="diaNext" style="${nextAnim}">${esc(dia.next||'')}</div>${bar}<span class="msi" style="font-size:26px;color:#c4c4c4">keyboard_double_arrow_down</span></div>
+    <div class="diaName" style="${nameAnim}">${esc(dia.name)}</div>
+    ${inner}
+  </div>`;
   return `<div class="diagram-row"><div style="display:flex;align-items:center;gap:26px">${inner}<div class="diaName" style="${nameAnim}">${esc(dia.name)}</div><div class="diaNextWrap"><div class="diaNext" style="${nextAnim}">» ${esc(dia.next)}</div>${bar}</div></div></div>`;
 }
