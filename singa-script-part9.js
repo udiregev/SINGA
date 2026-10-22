@@ -197,6 +197,7 @@ const Actions = {
     el.scrollBy({ left: (+d.dir) * Math.round(el.clientWidth*0.8), behavior:'smooth' });
   },
   pickVariant(d){ ST.selRoot = d.root; ST.selSuffix = d.q; render(); },
+  toggleAcc(){ ST.accOn = !ST.accOn; render(); },
   placeChord(d){
     const s = D.songs[ST.editId]; const sel = ST.selRoot+ST.selSuffix;
     const [li, wi] = String(d.id).split('-').map(Number); if(!isNaN(li)) ST.editorLine = li;

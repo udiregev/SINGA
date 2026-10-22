@@ -130,25 +130,16 @@ document.getElementById('fileInput').addEventListener('change', function(e){
   const files = Array.from(e.target.files||[]);
   if(!files.length) return;
   e.target.value = '';
-  // Multiple files at once: a batch import. Each one is saved straight into
-  // the library as its own unsynced song (no detour through the Create
-  // flow for each) — opening one later prompts for a sync track the normal
-  // "incomplete song" way.
-  if(files.length > 1){
-    const docs = files.filter(f=>/\.(txt|md|pdf|docx?)$/i.test(f.name) || /^text\//.test(f.type) || f.type==='application/pdf');
-    const takes = files.filter(f=>!docs.includes(f));
-    if(docs.length) handleBatchFileUpload(docs);
-    if(takes.length) queueAudioFiles(takes);
-    return;
-  }
+  // From File / From Recording, or several files at once: each file becomes
+  // its own song, added in the background (see queueImports).
+  if(files.length > 1 || (ST.screen==='create' && ST.createMode!=='manual' && !ST.editing)){ queueImports(files); return; }
   const file = files[0];
   const s = D.songs[ST.editId];
   if(/\.docx?$/i.test(file.name)){
     toast("Word files aren't supported — save it as a PDF or .txt and upload that");
     return;
   }
-  // a chord sheet / lyrics file goes through Text import 01 (sheet-import.js)
-  if(isSheetFile(file)){ importSheetIntoDraft(s, file); return; }
+  if(isSheetFile(file)){ queueImports([file]); return; }
   processRecordingBlob(s, file);
 });
 
@@ -187,7 +178,7 @@ document.addEventListener('scroll', function(e){
   if(fadeEl) fadeEl.style.opacity = '0';
   clearTimeout(rootScrollTimer);
   rootScrollTimer = setTimeout(function(){
-    const itemW = 100;
+    const itemW = +(el.dataset.itemw || 100);
     const idx = Math.max(0, Math.min(LETTERS.length-1, Math.round(el.scrollLeft / itemW)));
     if(idx !== ST.rootIdx){
       Actions.pickRoot({ id: String(idx) });
@@ -229,6 +220,121 @@ document.addEventListener('scroll', function(e){
     dragging = false;
     render();
   });
+})();
+
+/* Landscape players: the ||| handle between the lyrics and the chord
+   column drags the column wider/narrower (live, then commits on release). */
+(function(){
+  let dragging = false, startX = 0, startW = 260;
+  document.addEventListener('pointerdown', function(e){
+    if(!e.target.closest('#chordResizeHandleX')) return;
+    dragging = true; startX = e.clientX; startW = ST.chordW; e.preventDefault();
+  });
+  document.addEventListener('pointermove', function(e){
+    if(!dragging) return;
+    const w = Math.max(160, Math.min(Math.min(560, innerWidth*0.55), startW - (e.clientX - startX)));
+    ST.chordW = w;
+    const box = document.getElementById('chordDiagramBox');
+    if(box){
+      box.style.width = Math.round(w)+'px';
+      fitLandDia();
+    }
+  });
+  document.addEventListener('pointerup', function(){ if(dragging){ dragging = false; render(); } });
+})();
+
+/* Chords step drag & drop. Works with mouse and touch: chord tiles in the
+   picker column only start a drag on a sideways move (an up/down swipe
+   still scrolls the list), "used" chips on a downward move, placed chords
+   any way. While dragging, the word under the finger previews the chord,
+   and so does the same spot on every repeat of that line. */
+(function(){
+  let drag = null, suppressClickUntil = 0, preview = [];
+  function clearPreview(){
+    preview.forEach(p=>{ p.el.classList.remove('drop-on'); if(p.ch){ p.ch.textContent = p.txt; p.ch.classList.remove('pv','pv-fill'); } });
+    preview = [];
+  }
+  function show(id, cls, word){
+    const w = document.querySelector('.lword[data-drop="'+id+'"]'); if(!w) return;
+    const ch = w.querySelector('.lchord');
+    preview.push({ el:w, ch, txt: ch ? ch.textContent : '' });
+    if(word) w.classList.add('drop-on');
+    if(ch){ ch.textContent = drag.chord; ch.classList.add(cls); }
+  }
+  function setTarget(id){
+    if(drag.target === id) return;
+    drag.target = id; clearPreview();
+    if(!id) return;
+    show(id, 'pv', true);
+    const s = D.songs[ST.editId];
+    if(s && !/t/.test(id)){
+      const [li, wi] = id.split('-').map(Number);
+      repeatSpots(s, li, wi).forEach(r=>{ if(r!==drag.from) show(r, 'pv-fill', false); });
+    }
+  }
+  function end(apply){
+    if(!drag) return;
+    const d = drag; drag = null;
+    if(d.raf) cancelAnimationFrame(d.raf);
+    if(d.ghost) d.ghost.remove();
+    document.body.classList.remove('chord-dragging');
+    if(d.srcChip) d.srcChip.classList.remove('drag-src');
+    if(!d.started) return;
+    suppressClickUntil = Date.now() + 250;
+    clearPreview();
+    if(apply){
+      if(d.target) dropChord(d.chord, d.from, d.target);
+      else if(d.from) dropChord(d.chord, d.from, null);
+    }
+  }
+  document.addEventListener('pointerdown', function(e){
+    if(ST.step!=='chords' || (ST.screen!=='create')) return;
+    if(e.button>0) return;
+    const src = e.target.closest('[data-drag-chord]');
+    if(!src) return;
+    drag = { chord: src.dataset.dragChord, from: src.dataset.from || null, x0:e.clientX, y0:e.clientY, pid:e.pointerId, started:false, target:null,
+      kind: src.classList.contains('ctile') ? 'tile' : (src.classList.contains('utile') ? 'used' : 'chip'), srcEl: src };
+  });
+  document.addEventListener('pointermove', function(e){
+    if(!drag || e.pointerId!==drag.pid) return;
+    const dx = e.clientX - drag.x0, dy = e.clientY - drag.y0;
+    if(!drag.started){
+      if(Math.hypot(dx, dy) < 7) return;
+      // touch: let the picker list / used row scroll on their own axis
+      if(e.pointerType==='touch'){
+        if(drag.kind==='tile' && Math.abs(dy) > Math.abs(dx)){ drag = null; return; }
+        if(drag.kind==='used' && Math.abs(dx) > Math.abs(dy)){ drag = null; return; }
+      }
+      drag.started = true;
+      const g = document.createElement('div'); g.className = 'chord-ghost'; g.textContent = drag.chord;
+      document.body.appendChild(g); drag.ghost = g;
+      document.body.classList.add('chord-dragging');
+      if(drag.from){ drag.srcChip = drag.srcEl; drag.srcEl.classList.add('drag-src'); }
+    }
+    e.preventDefault();
+    drag.x = e.clientX; drag.y = e.clientY;
+    drag.ghost.style.left = e.clientX+'px'; drag.ghost.style.top = e.clientY+'px';
+    const under = document.elementFromPoint(e.clientX, e.clientY);
+    const w = under && under.closest('.lword[data-drop]');
+    setTarget(w ? w.dataset.drop : null);
+    // near the top/bottom edge of the lyrics: keep scrolling
+    if(!drag.raf) drag.raf = requestAnimationFrame(function edge(){
+      if(!drag || !drag.started) return;
+      drag.raf = 0;
+      const box = document.getElementById('editorLyricsScroll'); if(!box) return;
+      const r = box.getBoundingClientRect();
+      let v = 0;
+      const zone = Math.min(40, r.height*0.15);
+      if(drag.x>r.left && drag.x<r.right){ if(drag.y < r.top+zone) v = -6; else if(drag.y > r.bottom-zone) v = 6; }
+      if(v){ box.scrollTop += v; drag.raf = requestAnimationFrame(edge); }
+    });
+  }, { passive:false });
+  document.addEventListener('pointerup', function(e){ if(drag && e.pointerId===drag.pid) end(true); });
+  document.addEventListener('pointercancel', function(e){ if(drag && e.pointerId===drag.pid) end(false); });
+  // a drag shouldn't also count as a tap on the tile / word it ended on
+  document.addEventListener('click', function(e){ if(Date.now() < suppressClickUntil){ e.stopPropagation(); e.preventDefault(); } }, true);
+  // stop the browser's own drag-image / text-drag on desktop
+  document.addEventListener('dragstart', function(e){ if(e.target.closest && e.target.closest('[data-drag-chord]')) e.preventDefault(); });
 })();
 
 /* ============================================================

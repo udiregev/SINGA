@@ -119,31 +119,14 @@ async function processRecordingFromScratch(songObj, blob, job){
   return true;
 }
 
-// Several recordings picked at once: each becomes its own song, analysed one
-// after another in the background (the lyrics model runs one take at a time).
-let _audioQueue = Promise.resolve();
-function queueAudioFiles(files){
-  const target = ST.addTarget; ST.addTarget = null;
-  if(ST.screen==='create') exitCreate();
-  files.forEach(f=>{
-    const id = 'n'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
-    const songObj = { id, title:'', sub:'', lyrics:'', chords:{}, notes:{}, synced:false, isPublic:false, plays:0, added:Date.now(), mine:true };
-    D.songs[id] = songObj;
-    const j = newJob(id, f.name, true); j.target = target; j.note = 'Waiting…';
-    _audioQueue = _audioQueue.then(()=>processRecordingFromScratch(songObj, f, j)).catch(e=>console.error('Singa: batch audio failed', e));
-  });
-  ST.screen='home'; ST.phase='idle';
-  render();
-  toast('Adding '+files.length+' songs in the background');
-}
-
 // Recording / upload. In the "From Recording" flow (or with no lyrics typed
 // yet) the take goes through Audio import 01 above.
 // With lyrics already typed (the manual flow's Sync step) the take is
 // transcribed and force-aligned against those lyrics, word for word.
 async function processRecordingBlob(songObj, blob){
   const hadManualLyrics = !!(songObj.lyrics && songObj.lyrics.trim());
-  if(!hadManualLyrics || ST.createMode==='recording') return processRecordingFromScratch(songObj, blob);
+  if(ST.createMode!=='manual' && !ST.editing){ queueImports([blob]); return; }
+  if(!hadManualLyrics) return processRecordingFromScratch(songObj, blob);
   ST.phase='processing'; ST.procPct=5; ST.procNote='Listening back to your take…'; render();
   try{
     const { float32, durationSec } = await decodeToFloat32Mono16k(blob);
