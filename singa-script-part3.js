@@ -1,4 +1,100 @@
 "use strict";
+/* Styles for the chords editor, markings, sticky note and players. They ship
+   inside the script (not only in the page's <style>) so a browser holding an
+   older cached copy of the page still gets them with the new code. */
+(function(){
+  if(document.getElementById('singa-ui-css')) return;
+  const st = document.createElement('style'); st.id = 'singa-ui-css';
+  st.textContent = `
+/* ---- lyric marks: left / right of the word, or above it with an arrow down ---- */
+.lchord-row{display:flex;align-items:flex-end;gap:4px;min-height:18px}
+.lchord-row.solo{justify-content:center}
+.lmark{position:relative;height:26px;display:block}
+.lmark .mk{position:absolute;bottom:3px;white-space:nowrap;color:var(--chordblue);pointer-events:none}
+.lmark .mk.mk-c{left:50%;transform:translateX(-50%)}
+.lline .mtext{font-family:Caveat,cursive;font-size:25px;font-weight:600;line-height:1;color:var(--chordblue)}
+.marr-v{position:relative;flex:none;width:2.2px;align-self:stretch;margin:-5px 1px -3px;background:var(--chordblue);border-radius:1px}
+.marr-v::after{content:'';position:absolute;left:50%;bottom:0;width:9px;height:9px;box-sizing:border-box;border-right:2.2px solid var(--chordblue);border-bottom:2.2px solid var(--chordblue);transform:translate(-50%,-1px) rotate(45deg)}
+.lside .mside{display:flex;align-items:center;gap:3px;color:var(--chordblue);white-space:nowrap}
+.marr-h{flex:none;color:var(--chordblue)}
+
+/* ---- marking editor: a light-blue sticky note ---- */
+.sticky{position:relative;width:min(300px,86vw);background:#d9ecfc;border-radius:4px 4px 18px 4px;padding:30px 22px 16px;box-shadow:0 14px 34px rgba(47,143,224,.22),0 2px 6px rgba(0,0,0,.06);transform:rotate(-1.2deg);animation:singaPop .28s cubic-bezier(.2,.8,.2,1) both;display:flex;flex-direction:column;gap:10px}
+.sticky-x{position:absolute;top:6px;right:6px;color:#2f6fa8}
+.sticky .sticky-ipt{height:44px;border-radius:0;border:0;background:transparent;outline:none;font-family:Caveat,cursive;font-size:32px;font-weight:600;color:#1f6fc0;width:100%;padding:0;border-bottom:1.5px dashed rgba(31,111,192,.35)}
+.sticky-ipt::placeholder{color:rgba(31,111,192,.45)}
+.sticky-acts{display:flex;justify-content:flex-end;gap:20px;font-size:15px;font-weight:700}
+.sticky-acts a{color:#2f6fa8}
+.sticky-acts a.save{color:#0f4f8a}
+
+/* ---- chords step: picker column left of the lyrics, drag & drop ---- */
+.ce-wrap{flex:1;min-height:0;width:100%;max-width:860px;display:flex;gap:18px;margin-top:16px}
+.ce-picker{flex:none;width:104px;display:flex;flex-direction:column;align-items:stretch;gap:10px;min-height:0}
+.ce-roots{width:96px;height:62px;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.ce-roots::-webkit-scrollbar{display:none}
+.ce-roots-in{display:flex;height:100%}
+.ce-root{flex:none;width:48px;height:62px;display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:700;color:#c4c4c4;cursor:pointer;scroll-snap-align:start}
+.ce-root.on{font-size:46px;color:#1b1b1b}
+.ce-acc{align-self:flex-start;height:30px;padding:0 12px;border-radius:15px;border:1.5px solid #d6d6d6;font-size:14px;font-weight:700;color:#8a8a8a}
+.ce-acc.on{border-color:#1b1b1b;background:#1b1b1b;color:#fff}
+.ce-variants{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:8px;transition:opacity .4s ease;padding-bottom:6px}
+.ctile,.utile{height:44px;border-radius:12px;border:1.5px solid var(--fg);background:#fff;color:#1b1b1b;font-size:17px;font-weight:700;padding:0 12px;white-space:nowrap;cursor:grab;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;flex:none}
+.ctile{touch-action:pan-y;text-align:left}
+.utile{touch-action:pan-x;height:38px;font-size:15px}
+.ctile.on,.utile.on{background:#1b1b1b;color:#fff}
+.ce-main{flex:1;min-width:0;display:flex;flex-direction:column;min-height:0}
+.ce-used{display:flex;align-items:center;gap:10px;padding-bottom:10px;border-bottom:1px solid #f0f0f0}
+.ce-used-l{font-size:12px;color:#8a8a8a;font-weight:700;letter-spacing:.04em;text-transform:uppercase;flex:none}
+.ce-used-row{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;min-width:0}
+.ce-used-row::-webkit-scrollbar{display:none}
+.ce-lyrics{flex:1;min-height:200px;overflow-y:auto;padding-top:14px;display:flex;flex-direction:column;align-items:flex-start}
+.lword .lchord.chip{height:auto;min-height:20px;min-width:14px;line-height:20px;border-radius:5px;padding:0 3px;margin-bottom:2px;background:transparent;font-size:16px !important;font-weight:800 !important}
+.lword .lchord.chip[data-drag-chord]{cursor:grab;touch-action:none;-webkit-user-select:none;user-select:none}
+.lword.drop-on{background:#e5f0fc !important}
+.lword .lchord.pv{color:var(--chordblue) !important}
+.lword .lchord.pv-fill{color:#9cc7ee !important}
+.lchord.drag-src{opacity:.25}
+.chord-ghost{position:fixed;z-index:300;pointer-events:none;transform:translate(-50%,-120%);background:#1b1b1b;color:#fff;font-size:18px;font-weight:800;padding:8px 14px;border-radius:12px;box-shadow:0 10px 26px rgba(0,0,0,.25)}
+body.chord-dragging,body.chord-dragging *{cursor:grabbing !important;-webkit-user-select:none;user-select:none}
+
+/* ---- players: 4-line window, portrait / landscape ---- */
+.lyr-area{flex:1;min-height:0;display:flex;flex-direction:column;align-items:center}
+.lyr-area.live{justify-content:center}
+.lyr-scroll{flex:1;min-height:0;width:100%;overflow:auto;display:flex;flex-direction:column;align-items:center;padding:20px 0 40%}
+.lyr-win{width:100%;overflow:hidden;display:flex;flex-direction:column;align-items:center;flex:none;max-height:100%;-webkit-mask-image:linear-gradient(180deg,#000 0,#000 85%,transparent 100%);mask-image:linear-gradient(180deg,#000 0,#000 85%,transparent 100%)}
+.land-grid{flex:1;min-height:0;display:flex;align-items:stretch;gap:6px;margin-top:10px}
+.land-grid .lyr-area{min-width:0}
+.land-handle{flex:none;width:22px;display:flex;align-items:center;justify-content:center;cursor:ew-resize;touch-action:none;color:#b0b0b0}
+.land-dia{flex:none;display:flex;align-items:center;justify-content:center;overflow:hidden;border-left:1px solid var(--b2)}
+.land-dia .chordInnerScale{display:flex;flex-direction:column;align-items:center;transform-origin:center}
+.dia-v{display:flex;flex-direction:column;align-items:center;gap:8px}
+.dia-v-next{display:flex;flex-direction:column;align-items:center;gap:4px;min-width:70px}
+.dia-v .diaNext{font-size:26px;font-weight:600}
+.dia-v .fretboard{margin-top:26px}
+.song-main{flex:1;min-height:0;min-width:0;display:flex;flex-direction:column;padding:20px clamp(16px,4vw,48px) 0}
+@media(max-width:759px){.songlist .gigplayer-side{max-height:150px;padding:12px 16px}}
+
+/* short landscape screens (phones on their side): tighter chrome */
+@media (max-height:520px){
+  body.fixed-screen #topbar{height:40px}
+  body.fixed-screen .scr{padding-top:8px}
+  .ce-lyrics{min-height:0}
+  .ce-wrap{margin-top:6px}
+  .ce-roots{height:44px} .ce-root{height:44px} .ce-root.on{font-size:34px}
+  .ctile{height:36px;font-size:15px}
+  .cs-title{display:none}
+  .ce-used{padding-bottom:4px}
+  .ce-lyrics{padding-top:6px}
+  .ce-foot{flex-direction:row !important;justify-content:center;padding-top:6px !important;margin-top:6px !important}
+  .ce-foot .btn{height:40px}
+  .song-main{padding-top:8px}
+}
+.lyrics-wrap{max-width:100%}
+.lyr-win .lline{max-width:89%}
+.lyr-win .lyrics-wrap,.lyr-scroll .lyrics-wrap{padding:0 4px}
+`;
+  document.head.appendChild(st);
+})();
 function renderSearch(){
   const q = ST.searchQuery.trim().toLowerCase();
   const match = r => !q || ((r.title||'')+' '+(r.sub||'')).toLowerCase().includes(q);
