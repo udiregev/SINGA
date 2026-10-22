@@ -97,7 +97,10 @@ const Actions = {
   editDone(){
     const s = D.songs[ST.editId];
     ST.editing=false; ST.selWord=null; ST.phase='idle';
-    if(s){ finalizeSong(s); openSongOrIncomplete(s.id, 'home'); }
+    const ret = ST.editReturn; ST.editReturn = null;
+    if(s) finalizeSong(s);
+    if(ret==='gigplayer') ST.screen='gigplayer';
+    else if(s) openSongOrIncomplete(s.id, ST.back==='list' ? 'list' : 'home');
     else ST.screen='home';
     render();
   },
@@ -112,7 +115,7 @@ const Actions = {
   nav(d){ stopOnsetListening(); if(ST.screen==='search' && d.to!=='search'){ ST.searchQuery=''; ST.homeQuery=''; } ST.screen=d.to; ST.menu=false; ST.qrOpen=false; ST.sortOpen=false; render(); },
   back(d){ stopOnsetListening(); ST.screen = d.to && d.to!==ST.screen ? d.to : 'home'; ST.menu=false; render(); },
   async signOut(){
-    stopOnsetListening();
+    stopOnsetListening(); endLiveGig();
     try{ await sb.auth.signOut(); }catch(e){}
     ST.screen='login'; ST.email=''; ST.password=''; ST.nickname=null; ST.authProvider=null; ST.userId=null; render();
   },
@@ -162,7 +165,7 @@ const Actions = {
   abortCreate(){
     const s = D.songs[ST.editId];
     if(s && !s.synced){ delete D.songs[ST.editId]; D.order = D.order.filter(x=>x!==ST.editId); }
-    stopOnsetListening(); ST.phase='idle'; ST.selWord=null; ST.screen='home'; render();
+    stopOnsetListening(); stopPracticeFollow(); ST.phase='idle'; ST.selWord=null; ST.screen='home'; render();
   },
   createBack(){ if(ST.editing){ Actions.editDone(); return; } exitCreate(); },
   goCreateStep(d){
@@ -198,6 +201,7 @@ const Actions = {
   },
   pickVariant(d){ ST.selRoot = d.root; ST.selSuffix = d.q; render(); },
   toggleAcc(){ ST.accOn = !ST.accOn; render(); },
+  removeChord(d){ const s = D.songs[ST.editId]; if(!s || !s.chords[d.id]) return; dropChord(s.chords[d.id], d.id, null); },
   placeChord(d){
     const s = D.songs[ST.editId]; const sel = ST.selRoot+ST.selSuffix;
     const [li, wi] = String(d.id).split('-').map(Number); if(!isNaN(li)) ST.editorLine = li;
@@ -219,11 +223,13 @@ const Actions = {
   // lyrics window Record uses) instead of jumping to the full Practice
   // Player — nothing is captured, it just paces through the lyrics so you
   // can rehearse against the beat before actually recording a take.
-  practiceDraft(){
+  async practiceDraft(){
     if(ST.phase!=='idle') return;
-    ST.phase='practicing'; ST.recT=0; ST.editorLine=0; render();
+    ST.phase='practicing'; ST.pracState='waiting'; ST.recT=0; ST.editorLine=0; render();
+    const ok = await startPracticeFollow(D.songs[ST.editId]);
+    if(!ok && ST.phase==='practicing'){ ST.phase='idle'; render(); }
   },
-  stopPractice(){ if(ST.phase==='practicing'){ ST.phase='idle'; ST.recT=0; render(); } },
+  stopPractice(){ stopPracticeFollow(); if(ST.phase==='practicing'){ ST.phase='idle'; ST.recT=0; ST.editorLine=0; render(); } },
   // "Play your synced take": previews the song's real recorded-and-aligned
   // take right there on the Sync step, with the same bold-focus progression
   // the Practice Player/Song Viewer use — reusing their exact timing/curWord
@@ -308,6 +314,7 @@ const Actions = {
   },
 
   toggleMenu(d, e){
+    if(!ST.menu && ST.screen==='gigplayer') ST.songId = gigSongId();
     if(!ST.menu && e && e.target){
       const b = (e.target.closest('[data-act]')||e.target).getBoundingClientRect();
       ST.menuPos = { top: b.top, right: innerWidth - b.right };
@@ -317,9 +324,44 @@ const Actions = {
   toggleInstMenu(d,e){ if(e) e.stopPropagation(); ST.instMenu = !ST.instMenu; render(); },
   setInstrumentMenu(d, e){ if(e) e.stopPropagation(); ST.instrument=d.id; ST.menu=false; ST.instMenu=false; render(); },
   menuAddGig(){ ST.menu=false; ST.pick = { kind:'gig', songId: ST.songId }; render(); },
+  menuAddPlaylist(){ ST.menu=false; ST.pick = { kind:'playlist', songId: ST.songId }; render(); },
+  menuRemovePlaylist(){
+    if(!canSync()) return;
+    const p = D.playlists.find(x=>x.id===ST.listPl); const sid = ST.songId; if(!p) return;
+    p.ids = p.ids.filter(i=>i!==sid); queueSavePlaylist(p.id);
+    ST.menu=false; stopOnsetListening(); ST.playing=false; ST.listening=false;
+    // carry on with the next song in the playlist, or back to the list when it's empty
+    const next = listSongIds().ids[0];
+    if(next) openSongOrIncomplete(next, 'list'); else ST.screen='list';
+    render(); toast('Removed from '+p.title);
+  },
+  menuRemoveGig(){
+    if(!canSync()) return;
+    const g = gigObj(); const sid = ST.songId;
+    g.setlist = g.setlist.filter(i=>i!==sid); queueSaveGig(g.id);
+    ST.menu=false;
+    if(ST.gigCur===sid){ stopOnsetListening(); ST.gigCur=null; ST.t=0; ST.playing=false; ST.gListening=false; ST.vcd=0; }
+    ST.played = ST.played.filter(i=>i!==sid);
+    if(!g.setlist.length) ST.screen='gig';
+    render(); toast('Removed from '+g.title);
+  },
+  // song viewer: a song without a take / without chords
+  addSync(){ Actions.editSong(); if(ST.screen==='create'){ ST.step='sync'; render(); } },
+  addChords(){ Actions.editSong(); },
   removeMarkings(){ const s = song(ST.songId); if(!s || s.id==='none') return; s.notes={}; ST.menu=false; render(); toast('Markings removed'); queueSaveSong(s.id); },
-  editSong(){ if(!canSync()) return; stopOnsetListening(); ST.editId = ST.songId; ST.editing=true; ST.addTarget=null; ST.screen='create'; ST.createMode='manual'; ST.step='chords'; ST.phase='idle'; ST.menu=false; ST.selWord=null; ST.editorLine=0; render(); },
-  deleteSong(){ if(!canSync()) return; stopOnsetListening(); const delId=ST.songId; delete D.songs[delId]; D.order = D.order.filter(x=>x!==delId); const autoPl=D.playlists.find(p=>p.auto); if(autoPl) autoPl.ids=D.order; ST.screen='home'; ST.menu=false; render(); toast('Song deleted'); deleteSongRow(delId); },
+  editSong(){ if(!canSync()) return; stopOnsetListening(); ST.editReturn = ST.screen==='gigplayer' ? 'gigplayer' : null; ST.playing=false; ST.vcd=0; ST.editId = ST.songId; ST.editing=true; ST.addTarget=null; ST.screen='create'; ST.createMode='manual'; ST.step='chords'; ST.phase='idle'; ST.menu=false; ST.selWord=null; ST.editorLine=0; render(); },
+  deleteSong(){
+    if(!canSync()) return; stopOnsetListening();
+    const delId=ST.songId, fromGig = ST.screen==='gigplayer';
+    delete D.songs[delId]; D.order = D.order.filter(x=>x!==delId);
+    const autoPl=D.playlists.find(p=>p.auto); if(autoPl) autoPl.ids=D.order;
+    D.playlists.forEach(p=>{ if(!p.auto && p.ids.includes(delId)){ p.ids = p.ids.filter(i=>i!==delId); queueSavePlaylist(p.id); } });
+    D.gigs.forEach(g=>{ if(g.setlist.includes(delId)){ g.setlist = g.setlist.filter(i=>i!==delId); queueSaveGig(g.id); } });
+    ST.menu=false;
+    if(fromGig){ if(ST.gigCur===delId){ ST.gigCur=null; ST.t=0; ST.playing=false; ST.gListening=false; } if(!gigObj().setlist.length) ST.screen='gig'; }
+    else ST.screen='home';
+    render(); toast('Song deleted'); deleteSongRow(delId);
+  },
   copySong(){
     if(!canSync()) return;
     const src = song(ST.songId);
@@ -336,8 +378,8 @@ const Actions = {
   setViewChord(d){ ST.viewChord = d.id; render(); },
   viewPlay(){
     const s = song(ST.songId); const tm = timing(s);
-    if(ST.playing){ ST.playing=false; render(); return; }
-    if(ST.vcd>0) return;
+    // Stop: back to the start of the song
+    if(ST.playing || ST.vcd>0){ ST.playing=false; ST.vcd=0; ST.t=0; render(); return; }
     if(ST.listening){ stopOnsetListening(); ST.listening=false; render(); return; }
     const t = ST.t < tm.total ? ST.t : 0;
     ST.t = t;
@@ -412,6 +454,7 @@ const Actions = {
   deleteGig(){
     if(!canSync()) return;
     const delId = gigObj().id;
+    if(ST._liveGig===delId) endLiveGig();
     D.gigs = D.gigs.filter(g=>g.id!==delId);
     ST.gigSettings=false; ST.screen='home'; render();
     toast('Gig deleted'); deleteGigRow(delId);
@@ -421,7 +464,14 @@ const Actions = {
     const g = gigObj(); if(!g.setlist.length){ toast('Add songs to this gig first'); return; }
     openPlayer(null); render();
   },
-  exitGig(){ stopOnsetListening(); broadcastGigState({ ended:true }); leaveGigChannel(); ST.screen='gig'; ST.playing=false; ST.listening=false; ST.gListening=false; render(); },
+  // Leaving the player doesn't end the gig: guests stay connected (on a
+  // paused screen) until you tap End gig on the gig page.
+  exitGig(){
+    stopOnsetListening(); ST.playing=false; ST.listening=false; ST.gListening=false; ST.vcd=0; ST.menu=false;
+    if(ST._liveGig) broadcastGigState({ songId: gigSongId(), t: ST.t, playing:false, listening:false, vcd:0, ended:false });
+    ST.screen='gig'; render();
+  },
+  endGig(){ endLiveGig(); render(); toast('Gig ended'); },
   startGig(d){
     const g = gigObj();
     joinGigChannel(g.id);
