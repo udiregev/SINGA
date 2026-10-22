@@ -76,7 +76,7 @@ const DARK_MODE_SCREENS = ['gig','song','practice','gigplayer'];
 // Screens that fit the window (the lyrics scroll inside them) instead of
 // growing the whole page — on desktop the song used to scroll off the page.
 const FIXED_SCREENS = ['song','practice','gigplayer','create','review'];
-let _prevRenderScreen = null, _prevModalKey = '';
+let _prevRenderScreen = null, _prevModalKey = '', _prevScrollScreen = '', _lastEditorLine = null;
 function render(){
   // A render triggered by the 100ms playback/recording/sampling tick
   // redraws the current screen's markup from scratch every time. Without
@@ -106,6 +106,7 @@ function render(){
     case 'create': html = renderCreate(); break;
     case 'review': html = renderReview(); break;
     case 'done': html = renderDone(); break;
+    case 'queued': html = renderQueued(); break;
     case 'incomplete': html = renderIncomplete(); break;
     case 'song': html = renderSong(); break;
     case 'practice': html = renderPractice(); break;
@@ -116,7 +117,13 @@ function render(){
     case 'gigplayer': html = renderGigPlayer(); break;
     default: html = renderHome();
   }
+  // Remember where the scrollable lyric areas were, so a re-render (the
+  // whole screen is rebuilt) doesn't jump them back to the top.
+  const _keep = {};
+  ['editorLyricsScroll','lyricsScroll','gigLyricsScroll','songSideList','gigSideList'].forEach(id=>{ const el = document.getElementById(id); if(el) _keep[id] = el.scrollTop; });
+  const _keepScreen = _prevScrollScreen; _prevScrollScreen = ST.screen + '|' + (ST.songId||'') + '|' + (ST.editId||'');
   document.getElementById('screen').innerHTML = html;
+  if(_keepScreen === _prevScrollScreen) Object.keys(_keep).forEach(id=>{ const el = document.getElementById(id); if(el && !el.hasAttribute('data-win')) el.scrollTop = _keep[id]; });
   const _sp = document.querySelector('#modalLayer .sidepanel'), _spTop = _sp ? _sp.scrollTop : 0;
   document.getElementById('modalLayer').innerHTML = renderModals();
   const _sp2 = document.querySelector('#modalLayer .sidepanel'); if(_sp2 && _spTop) _sp2.scrollTop = _spTop;
@@ -133,25 +140,26 @@ function render(){
   }
   // autofocus search on search screen
   if(ST.screen==='search'){ const el = document.querySelector('#screen input[data-bind="searchQuery"]'); if(el){ el.focus(); const v=el.value; el.value=''; el.value=v; } }
-  // scroll current lyric line into view
-  const sc = document.getElementById('lyricsScroll');
-  if(sc){ const cur = sc.querySelector('[data-cur]'); }
+  // players: keep the playing line 2nd of a 4-line window
+  syncLyricWindow();
+  fitLandDia();
   // keep the chord-root spinner's scroll position in sync with ST.rootIdx
   // across any re-render that isn't itself caused by scrolling it
   const rs = document.getElementById('rootScroller');
   if(rs){
-    const want = ST.rootIdx*100;
+    const want = ST.rootIdx*(+(rs.dataset.itemw||100));
     if(Math.abs(rs.scrollLeft-want)>1){ ST._lastProgScrollAt = Date.now(); rs.scrollLeft = want; }
   }
   // chord-chip row chevrons: recompute every render, since content (and so
   // overflow) can change — e.g. switching root letter or adding a recent chord
-  ['chordVariantRow','recentChordRow'].forEach(updateChipRowChevrons);
   // Keep the chords/markings editor's fixed ~4-line lyrics viewport scrolled
   // so the line you're currently working on sits as the 2nd of the visible
   // rows — like a typewriter margin — clamping at the very top of the first
   // line and the very bottom of the last one.
   const els = document.getElementById('editorLyricsScroll');
-  if(els){
+  const editorMoved = _lastEditorLine !== ST.editorLine || !(_keepScreen === _prevScrollScreen);
+  _lastEditorLine = ST.editorLine;
+  if(els && editorMoved){
     const lineEls = els.querySelectorAll('.lline');
     if(lineEls.length){
       const rowH = els.scrollHeight / lineEls.length;
@@ -173,6 +181,69 @@ function render(){
     _histScreen = ST.screen;
   }
 }
+/* While a song plays (song viewer, Practice, gig player) the lyrics show
+   just 4 lines. The highlighted line sits 2nd (1st at the very start, 4th
+   at the very end) and the window glides there smoothly. The screen is
+   rebuilt every 100ms, so the eased position lives here, not in the DOM. */
+const _win = { pos:0, target:0, key:'', raf:0, lineH:0 };
+function syncLyricWindow(){
+  const el = document.querySelector('[data-win]');
+  if(!el){ _win.key=''; return; }
+  const lines = Array.from(el.querySelectorAll('.lline'));
+  if(!lines.length) return;
+  const key = el.getAttribute('data-win');
+  // window height = 4 typical sung lines (measured once per song/layout)
+  const sizeKey = key+'|'+innerWidth+'x'+innerHeight;
+  if(_win.sizeKey !== sizeKey){
+    const sung = lines.filter(l=>!l.classList.contains('lheader'));
+    const hs = sung.map(l=>l.offsetHeight).sort((a,b)=>a-b);
+    const med = hs.length ? hs[Math.floor(hs.length/2)] : 60;
+    const gap = parseFloat(getComputedStyle(el.querySelector('.lyrics-wrap')).rowGap) || 16;
+    _win.lineH = med + gap; _win.sizeKey = sizeKey;
+  }
+  el.style.height = Math.round(_win.lineH*4 + 8)+'px';
+  const ci = lines.findIndex(l=>l.hasAttribute('data-cur'));
+  const base = lines[0].offsetTop;
+  const max = Math.max(0, el.scrollHeight - el.clientHeight);
+  let target = 0;
+  if(ci > 0) target = Math.min(max, lines[ci-1].offsetTop - base);
+  if(ci === lines.length-1) target = max;
+  if(_win.key !== key){ _win.key = key; _win.pos = target; }
+  _win.target = target;
+  el.scrollTop = _win.pos;
+  if(!_win.raf && Math.abs(_win.pos-_win.target) > 0.5) _win.raf = requestAnimationFrame(stepLyricWindow);
+}
+function stepLyricWindow(){
+  _win.raf = 0;
+  const el = document.querySelector('[data-win]');
+  if(!el) return;
+  const d = _win.target - _win.pos;
+  _win.pos = Math.abs(d) < 0.5 ? _win.target : _win.pos + d*0.12;
+  el.scrollTop = _win.pos;
+  if(_win.pos !== _win.target) _win.raf = requestAnimationFrame(stepLyricWindow);
+}
+// Song viewer / gig player switch between portrait (diagram above the
+// lyrics) and landscape (lyrics left, diagram right) as the window turns.
+// Landscape chord column: scale the diagram to the column's width (the |||
+// handle) but never taller than the column itself.
+function fitLandDia(){
+  const box = document.querySelector('.land-dia'); if(!box) return;
+  const inner = box.querySelector('.chordInnerScale'); if(!inner) return;
+  const nh = inner.offsetHeight, nw = inner.offsetWidth; if(!nh || !nw) return;
+  const sc = Math.max(0.35, Math.min(chordScaleV(), (box.clientHeight-12)/nh, (box.clientWidth-12)/nw));
+  inner.style.transform = 'scale('+sc.toFixed(3)+')';
+}
+function isLandscape(){ return innerWidth > innerHeight && innerWidth >= 640; }
+let _wasLandscape = null, _resizeT = 0;
+window.addEventListener('resize', function(){
+  clearTimeout(_resizeT);
+  _resizeT = setTimeout(function(){
+    const l = isLandscape();
+    if(l !== _wasLandscape && ['song','gigplayer','practice'].includes(ST.screen)) render();
+    _wasLandscape = l;
+  }, 120);
+});
+
 let _histScreen = null, _poppingHistState = false;
 window.addEventListener('popstate', function(e){
   _poppingHistState = true;
@@ -196,18 +267,41 @@ function autoChordsFor(lyrics){
 // or chorus line) gets the same chord at the same word position — but only
 // where that spot is still empty, so it never overwrites a chord the user
 // already set differently on a particular repeat.
-function applyChordPatternToRepeats(s, li, wi, chordVal){
-  if(isNaN(li) || isNaN(wi)) return;
+// The same word position on every OTHER line with identical text that has
+// no chord there yet.
+function repeatSpots(s, li, wi){
+  const out = [];
+  if(isNaN(li) || isNaN(wi)) return out;
   const lines = parseLyrics(s.lyrics);
-  const ws0 = lines[li]; if(!ws0 || isHeaderLine(ws0)) return;
+  const ws0 = lines[li]; if(!ws0 || isHeaderLine(ws0)) return out;
   const target = ws0.join(' ').toLowerCase();
-  if(!target) return;
+  if(!target) return out;
   lines.forEach((ws, i)=>{
     if(i===li || isHeaderLine(ws)) return;
     if(ws.join(' ').toLowerCase() !== target) return;
     const id = i+'-'+wi;
-    if(wi < ws.length && !s.chords[id]) s.chords[id] = chordVal;
+    if(wi < ws.length && !s.chords[id]) out.push(id);
   });
+  return out;
+}
+function applyChordPatternToRepeats(s, li, wi, chordVal){
+  repeatSpots(s, li, wi).forEach(id=>{ s.chords[id] = chordVal; });
+}
+// Drag & drop on the Chords step: drop a chord on a word (filling the same
+// spot on every repeat of that line), move a placed chord to another word,
+// or drag a placed chord off the lyrics to remove it.
+function dropChord(chord, from, to){
+  const s = D.songs[ST.editId]; if(!s || !chord) return;
+  if(from && from===to) return;
+  if(from) delete s.chords[from];
+  if(to){
+    s.chords[to] = chord; recordRecentChord(chord);
+    const [li, wi] = String(to).split('-').map(Number);
+    applyChordPatternToRepeats(s, li, wi, chord);
+    const p = splitChordStr(chord); ST.selRoot = p.root; ST.selSuffix = p.q;
+  }
+  render();
+  queueSaveSong(ST.editId);
 }
 /* ============================================================
    CHORD-SHEET TEXT IMPORT ("From File" → a plain-text document of
@@ -345,12 +439,17 @@ function jobFinished(j, songObj){
     addSongToTarget(songObj.id, j.target);
     render();
     toast('“'+songObj.title+'” is ready — open it to review');
+    notifyReady(songObj.title);
   }
   saveSongRow(songObj);
 }
 function jobFailed(j, msg){
   const wasFg = endJob(j);
-  const s = D.songs[j.songId]; if(s && !s.lyrics && !D.order.includes(s.id)) delete D.songs[s.id];
+  const s = D.songs[j.songId];
+  if(s && !(s.lyrics||'').trim() && !s.synced){
+    delete D.songs[s.id]; D.order = D.order.filter(x=>x!==s.id);
+    const autoPl = (D.playlists||[]).find(p=>p.auto); if(autoPl) autoPl.ids = D.order;
+  }
   render();
   toast(msg);
   return wasFg;
@@ -362,62 +461,75 @@ function addSongToTarget(songId, target){
   else if(target.kind==='gig'){ const g = D.gigs.find(x=>x.id===target.id); if(g && !g.setlist.includes(songId)){ g.setlist = [...g.setlist, songId]; queueSaveGig(g.id); } }
   else if(target.kind==='gigedit'){ if(ST.editList && !ST.editList.includes(songId)) ST.editList = [...ST.editList, songId]; }
 }
-async function importSheetIntoDraft(s, file){
-  const j = newJob(s.id, file.name, false);
+// Text import 01 for one file, as a background job.
+async function importSheetJob(s, file, j){
   jobProgress(j, 10, 'Reading '+file.name+'…');
   let res;
   try{
     res = await readSheetFile(file, msg=>jobProgress(j, Math.min(90, j.pct+8), msg));
   }catch(e){
     console.error('Singa: file import failed', e);
-    jobFailed(j, "Couldn't read that file: "+(e && e.message || e));
+    jobFailed(j, "Couldn't read “"+file.name+"”: "+(e && e.message || e));
     return;
   }
-  applySheetToSong(s, res, false);
-  if(!s.lyrics.trim()){ jobFailed(j, "Couldn't find any lyrics in that file"); return; }
+  applySheetToSong(s, res, !s.title.trim());
+  if(!s.title.trim()) s.title = file.name.replace(/\.[^.]+$/, '').replace(/_+/g,' ').trim();
+  if(!s.lyrics.trim()){ jobFailed(j, "Couldn't find any lyrics in “"+file.name+"”"); return; }
   s.synced = false;
   jobFinished(j, s);
-  const extra = [res.junkCount ? res.junkCount+' page number line'+(res.junkCount>1?'s':'')+' left out' : '', res.usedOcr ? 'read with OCR' : ''].filter(Boolean).join(', ');
-  if(extra) toast('Imported ('+extra+')');
 }
-
-// Batch "From File" import: each selected file becomes its own song, saved
-// straight into the library rather than routed through the Create flow one
-// at a time. Text/chord-sheet files get their lyrics/chords/title parsed
-// immediately; audio/video files are saved as a bare unsynced shell (title
-// from the filename) — the user records or uploads a sync track later from
-// the song's own (incomplete-song) screen, same as any other unsynced song.
-async function handleBatchFileUpload(files){
-  let added = 0, skipped = 0;
-  const total = files.length;
+// Uploading a document or a recording never makes you wait: each file
+// becomes a song marked IN PROGRESS in your songs, the work runs in the
+// background, and you get a "we'll let you know" screen right away. When
+// it's done the song is marked REVIEW and you're told (in the app, and
+// with a notification if you allowed them).
+let _importAudioQueue = Promise.resolve();
+function queueImports(files){
+  askNotify();
   const target = ST.addTarget; ST.addTarget = null;
-  if(ST.screen==='create') exitCreate();
-  for(const file of files){
-    if(/\.docx?$/i.test(file.name)){ skipped++; continue; }
-    const baseName = file.name.replace(/\.[^.]+$/, '').trim() || 'Untitled song';
-    const id = 'n'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
-    const songObj = { id, title:baseName, sub:'', lyrics:'', chords:{}, notes:{}, synced:false, isPublic:false, plays:0, added:Date.now(), mine:true };
-    if(isSheetFile(file)){
-      toast('Reading '+(added+skipped+1)+' of '+total+': '+file.name+'…');
-      try{
-        const res = await readSheetFile(file);
-        applySheetToSong(songObj, res, true);
-        songObj.needsReview = !!songObj.lyrics.trim();
-      }catch(e){ console.error('Singa: batch file read failed', e); }
+  const draft = ST.screen==='create' ? D.songs[ST.editId] : null;
+  const labels = [];
+  let skipped = 0;
+  files.forEach(f=>{
+    if(/\.docx?$/i.test(f.name||'')){ skipped++; return; }
+    let songObj;
+    if(draft && !labels.length && !(draft.lyrics||'').trim() && !draft.synced) songObj = draft;   // keep a title you already typed
+    else {
+      const id = 'n'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
+      songObj = { id, title:'', sub:'', lyrics:'', chords:{}, notes:{}, synced:false, isPublic:false, plays:0, added:Date.now(), mine:true };
+      D.songs[id] = songObj;
     }
-    D.songs[id] = songObj; D.order = [id, ...D.order]; added++;
-    addSongToTarget(id, target);
-    saveSongRow(songObj);
-  }
+    if(!D.order.includes(songObj.id)) D.order = [songObj.id, ...D.order];
+    const base = (f.name||'').replace(/\.[^.]+$/, '').replace(/_+/g,' ').trim();
+    const label = songObj.title.trim() || base || 'Your recording';
+    const j = newJob(songObj.id, label, true); j.target = target; j.note = 'Waiting…';
+    labels.push(label);
+    if(f.name && isSheetFile(f)) importSheetJob(songObj, f, j).catch(e=>console.error('Singa: import failed', e));
+    else _importAudioQueue = _importAudioQueue.then(()=>processRecordingFromScratch(songObj, f, j)).catch(e=>console.error('Singa: audio import failed', e));
+  });
   const autoPl = (D.playlists||[]).find(p=>p.auto); if(autoPl) autoPl.ids = D.order;
+  if(skipped) toast("Word files aren't supported — save them as PDF or .txt");
+  if(!labels.length){ render(); return; }
+  ST.phase='idle'; ST.selWord=null; ST.queued = labels; ST.screen='queued';
   render();
-  if(added) toast(`Added ${added} song${added===1?'':'s'}${skipped?` (skipped ${skipped} unsupported)`:''} — open each to review it`);
-  else toast('No supported files in that selection');
+}
+function askNotify(){
+  try{ if('Notification' in window && Notification.permission==='default') Notification.requestPermission().catch(()=>{}); }catch(e){}
+}
+function notifyReady(title){
+  try{
+    if(!('Notification' in window) || Notification.permission!=='granted' || !document.hidden) return;
+    const body = '“'+title+'” is ready — open it to review';
+    const plain = ()=>{ try{ new Notification('Singa', { body }); }catch(e){} };
+    if(navigator.serviceWorker && navigator.serviceWorker.controller) navigator.serviceWorker.ready.then(r=>r.showNotification('Singa', { body, tag:'singa-ready-'+Date.now() })).catch(plain);
+    else plain();
+  }catch(e){}
 }
 function openSongOrIncomplete(id, from){
   stopOnsetListening();
   const s = song(id);
-  if(s.needsReview && !ST.jobs.some(j=>j.songId===id)){ ST.editId = id; ST.screen='review'; ST.back = from || 'home'; return; }
+  if(ST.jobs.some(j=>j.songId===id)){ toast('Still being added — we\'ll let you know when it\'s ready'); return; }
+  if(s.needsReview){ ST.editId = id; ST.screen='review'; ST.back = from || 'home'; return; }
   const ok = s.lyrics && s.lyrics.trim();
   ST.songId = id; ST.viewBy=null; ST.viewChord=null; ST.menu=false; ST.instMenu=false; ST.ctx='view'; ST.t=0; ST.playing=false; ST.vcd=0; ST.listening=false; ST.sortOpen=false;
   ST.screen = ok ? 'song' : 'incomplete';
