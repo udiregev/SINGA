@@ -18,6 +18,26 @@
 .lside .mside{display:flex;align-items:center;gap:3px;color:var(--chordblue);white-space:nowrap}
 .marr-h{flex:none;color:var(--chordblue)}
 
+/* left/right marks hang outside the line, never pushing it */
+.lword .ltext{position:relative}
+.mside-abs{position:absolute;top:50%;transform:translateY(-50%);display:flex;align-items:center;gap:3px;white-space:nowrap;color:var(--chordblue);pointer-events:none;font-weight:600}
+.mside-abs.l{right:100%;margin-right:8px;text-align:right}
+.mside-abs.r{left:100%;margin-left:8px}
+.mside-abs .mtext{white-space:normal;width:max-content;max-width:min(26vw,220px);min-width:min-content}
+
+/* piano keyboard stands upright (rotated 90deg clockwise) */
+.piano-rot{position:relative;width:96px;height:314px;flex:none}
+.piano-rot .piano{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) rotate(90deg)}
+
+/* next chord slides into the current chord's place */
+@keyframes chordFromNext{from{transform:translate(96px,6px) scale(.46);opacity:.55}to{transform:none;opacity:1}}
+@keyframes chordFromNextV{from{transform:translateY(-80px) scale(.5);opacity:.55}to{transform:none;opacity:1}}
+@keyframes nextInV{from{transform:translateY(-12px);opacity:0}to{transform:none;opacity:1}}
+
+/* Play / Pause capsule */
+.playcap{height:44px;padding:0 28px;border-radius:999px;background:#1b1b1b;color:#fff;font-size:16px;font-weight:700;border:0;display:inline-flex;align-items:center;justify-content:center;gap:8px;flex:none;cursor:pointer}
+.playcap.live{background:#f24822}
+
 /* ---- marking editor: a light-blue sticky note ---- */
 .sticky{position:relative;width:min(300px,86vw);background:#d9ecfc;border-radius:4px 4px 18px 4px;padding:30px 22px 16px;box-shadow:0 14px 34px rgba(47,143,224,.22),0 2px 6px rgba(0,0,0,.06);transform:rotate(-1.2deg);animation:singaPop .28s cubic-bezier(.2,.8,.2,1) both;display:flex;flex-direction:column;gap:10px}
 .sticky-x{position:absolute;top:6px;right:6px;color:#2f6fa8}
@@ -37,24 +57,24 @@
 .ce-root.on{font-size:46px;color:#1b1b1b}
 .ce-acc{align-self:flex-start;height:30px;padding:0 12px;border-radius:15px;border:1.5px solid #d6d6d6;font-size:14px;font-weight:700;color:#8a8a8a}
 .ce-acc.on{border-color:#1b1b1b;background:#1b1b1b;color:#fff}
-.ce-variants{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:8px;transition:opacity .4s ease;padding-bottom:6px}
-.ctile,.utile{height:44px;border-radius:12px;border:1.5px solid var(--fg);background:#fff;color:#1b1b1b;font-size:17px;font-weight:700;padding:0 12px;white-space:nowrap;cursor:grab;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;flex:none}
-.ctile{touch-action:pan-y;text-align:left}
-.utile{touch-action:pan-x;height:38px;font-size:15px}
-.ctile.on,.utile.on{background:#1b1b1b;color:#fff}
+.ce-variants{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;align-items:flex-start;gap:2px;transition:opacity .4s ease;padding-bottom:6px}
+.ctile,.utile{display:inline-flex;align-items:center;align-self:flex-start;height:40px;border:0;border-radius:999px;background:#fff;color:#1b1b1b;font-size:18px;font-weight:700;padding:0 14px;white-space:nowrap;cursor:grab;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;flex:none}
+.ctile{touch-action:pan-y}
+.utile{touch-action:pan-x;height:36px;font-size:16px}
 .ce-main{flex:1;min-width:0;display:flex;flex-direction:column;min-height:0}
 .ce-used{display:flex;align-items:center;gap:10px;padding-bottom:10px;border-bottom:1px solid #f0f0f0}
 .ce-used-l{font-size:12px;color:#8a8a8a;font-weight:700;letter-spacing:.04em;text-transform:uppercase;flex:none}
 .ce-used-row{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;min-width:0}
 .ce-used-row::-webkit-scrollbar{display:none}
 .ce-lyrics{flex:1;min-height:200px;overflow-y:auto;padding-top:14px;display:flex;flex-direction:column;align-items:flex-start}
-.lword .lchord.chip{height:auto;min-height:20px;min-width:14px;line-height:20px;border-radius:5px;padding:0 3px;margin-bottom:2px;background:transparent;font-size:16px !important;font-weight:800 !important}
+.lword .lchord.chip{height:auto;min-height:22px;min-width:14px;line-height:22px;border-radius:999px;padding:0 7px;margin:0 0 2px -7px;background:#fff;font-size:16px !important;font-weight:800 !important}
+.lword .lchord.chip:empty{background:transparent}
 .lword .lchord.chip[data-drag-chord]{cursor:grab;touch-action:none;-webkit-user-select:none;user-select:none}
 .lword.drop-on{background:#e5f0fc !important}
 .lword .lchord.pv{color:var(--chordblue) !important}
 .lword .lchord.pv-fill{color:#9cc7ee !important}
 .lchord.drag-src{opacity:.25}
-.chord-ghost{position:fixed;z-index:300;pointer-events:none;transform:translate(-50%,-120%);background:#1b1b1b;color:#fff;font-size:18px;font-weight:800;padding:8px 14px;border-radius:12px;box-shadow:0 10px 26px rgba(0,0,0,.25)}
+.chord-ghost{position:fixed;z-index:300;pointer-events:none;transform:translate(-50%,-120%);background:#fff;color:#1b1b1b;font-size:18px;font-weight:800;padding:6px 14px;border-radius:999px}
 body.chord-dragging,body.chord-dragging *{cursor:grabbing !important;-webkit-user-select:none;user-select:none}
 
 /* ---- players: 4-line window, portrait / landscape ---- */
@@ -90,7 +110,8 @@ body.chord-dragging,body.chord-dragging *{cursor:grabbing !important;-webkit-use
   .song-main{padding-top:8px}
 }
 .lyrics-wrap{max-width:100%}
-.lyr-win .lline{max-width:89%}
+.lyr-win .lline{max-width:none}
+.lyr-win .lyrics-wrap{max-width:89%}
 .lyr-win .lyrics-wrap,.lyr-scroll .lyrics-wrap{padding:0 4px}
 `;
   document.head.appendChild(st);
@@ -125,14 +146,17 @@ function renderSearch(){
    ============================================================ */
 // Account & settings open as a side panel over whatever screen you're on,
 // grouped: who you are · how you play · gigs · plan · app.
+function radioHTML(on, act, id, label){
+  return `<div class="row" style="gap:8px;cursor:pointer;padding:6px 0" data-act="${act}" data-id="${id}">
+    <span style="width:20px;height:20px;border-radius:50%;border:1.5px solid var(--fg);display:flex;align-items:center;justify-content:center"><span style="width:10px;height:10px;border-radius:50%;background:var(--fg);opacity:${on?1:0}"></span></span>
+    <span style="font-size:15px;font-weight:600">${label}</span></div>`;
+}
 function renderAccountPanel(){
   const planName = ST.plan==='rockstar' ? 'RockStar' : 'Free';
   const planSub = ST.plan==='rockstar' ? '$4.99 / month' : 'Basic features for performing with Singa';
   const name = ST.nickname || nicknameFromEmail(ST.email);
   const collabRows = D.collabs.map((c,i)=>`<div class="list-row" data-act="editCollab" data-id="${i}"><div><div class="t">${esc(c.name)}</div><div class="s">${c.gigs.length} ${c.gigs.length===1?'gig':'gigs'}</div></div>${icon('chevron_right',22)}</div>`).join('');
-  const instRadio = INSTS.map(([v,label])=>`<div class="row" style="gap:8px;cursor:pointer;padding:6px 0" data-act="setInstrument" data-id="${v}">
-    <span style="width:20px;height:20px;border-radius:50%;border:1.5px solid var(--fg);display:flex;align-items:center;justify-content:center"><span style="width:10px;height:10px;border-radius:50%;background:var(--fg);opacity:${ST.instrument===v?1:0}"></span></span>
-    <span style="font-size:15px;font-weight:600">${label}</span></div>`).join('');
+  const instRadio = INSTS.map(([v,label])=>radioHTML(ST.instrument===v, 'setInstrument', v, label)).join('');
   const startHint = ST.startMode==='countdown' ? 'Press start and Singa counts down from 3.' : 'Singa listens and starts when you start singing.';
   const notifRows = [['req','Song requests'],['photos','Guest photos'],['chat','Chat messages']].map(([k,label])=>{
     const on = ST.notif[k];
@@ -142,7 +166,7 @@ function renderAccountPanel(){
   }).join('');
   const sec = (title, body)=>`<div class="ap-sec"><div class="ap-h">${title}</div>${body}</div>`;
   return `<div class="sidepanel-backdrop" data-act="closeAccount"></div>
-  <aside class="sidepanel" onclick="event.stopPropagation()">
+  <aside class="sidepanel">
     <div class="row" style="gap:14px;align-items:center">
       <div style="width:52px;height:52px;border-radius:50%;background:#1b1b1b;color:#fff;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;flex:none">${esc((name||'?').charAt(0).toUpperCase())}</div>
       <div style="flex:1;min-width:0"><div style="font-size:19px;font-weight:700">${esc(name)}</div><div style="font-size:13px;color:#8a8a8a;overflow:hidden;text-overflow:ellipsis">${esc(ST.email||'Not signed in')}</div></div>
@@ -151,7 +175,7 @@ function renderAccountPanel(){
     ${sec('Profile', `<div class="list-row" data-act="editNickname"><div><div class="s" style="margin:0 0 3px">Nickname · shown to collaborators and guests</div><div class="t">${esc(name)}</div></div>${icon('chevron_right',22)}</div>`)}
     ${sec('Playing', `<div style="font-size:13px;color:#8a8a8a;margin:2px 0 4px">Chord diagrams for</div><div style="display:flex;gap:6px 20px;flex-wrap:wrap">${instRadio}</div>
       <div style="font-size:13px;color:#8a8a8a;margin:14px 0 8px">Start songs with — ${startHint}</div>
-      <div class="seg"><button class="${ST.startMode==='countdown'?'on':''}" data-act="setStartMode" data-id="countdown">Countdown</button><button class="${ST.startMode==='detect'?'on':''}" data-act="setStartMode" data-id="detect">Start detection</button></div>`)}
+      <div style="display:flex;gap:6px 20px;flex-wrap:wrap">${[['countdown','Countdown'],['detect','Start detection']].map(([v,label])=>radioHTML(ST.startMode===v, 'setStartMode', v, label)).join('')}</div>`)}
     ${sec('Gigs', `<div style="font-size:13px;color:#8a8a8a;margin:2px 0 2px">Notify me during gigs</div>${notifRows}
       <div style="font-size:13px;color:#8a8a8a;margin:14px 0 0">Collaborators</div>${collabRows}
       <a class="link" style="display:inline-flex;align-items:center;gap:6px;margin-top:10px" data-act="newCollab">${icon('person_add',20)}Add collaborator</a>`)}
@@ -267,6 +291,6 @@ function recordRecentChord(ch){
 }
 function chordTileHTML(rt, q, label, cls){
   const on = rt===ST.selRoot && q===ST.selSuffix;
-  if(cls) return `<button class="${cls}${on?' on':''}" data-act="pickVariant" data-root="${esc(rt)}" data-q="${esc(q)}" data-drag-chord="${esc(rt+q)}">${esc(label!=null?label:rt+q)}</button>`;
+  if(cls) return `<span class="${cls}" data-drag-chord="${esc(rt+q)}">${esc(label!=null?label:rt+q)}</span>`;
   return `<button style="height:48px;border-radius:12px;border:1.5px solid var(--fg);background:${on?'#1b1b1b':'#fff'};color:${on?'#fff':'#1b1b1b'};font-size:17px;font-weight:700;padding:0 16px;white-space:nowrap" data-act="pickVariant" data-root="${esc(rt)}" data-q="${esc(q)}">${esc(label!=null?label:rt+q)}</button>`;
 }
