@@ -307,7 +307,13 @@ const Actions = {
     render();
   },
 
-  toggleMenu(){ ST.menu = !ST.menu; ST.instMenu=false; render(); },
+  toggleMenu(d, e){
+    if(!ST.menu && e && e.target){
+      const b = (e.target.closest('[data-act]')||e.target).getBoundingClientRect();
+      ST.menuPos = { top: b.top, right: innerWidth - b.right };
+    }
+    ST.menu = !ST.menu; ST.instMenu=false; render();
+  },
   toggleInstMenu(d,e){ if(e) e.stopPropagation(); ST.instMenu = !ST.instMenu; render(); },
   setInstrumentMenu(d, e){ if(e) e.stopPropagation(); ST.instrument=d.id; ST.menu=false; ST.instMenu=false; render(); },
   menuAddGig(){ ST.menu=false; ST.pick = { kind:'gig', songId: ST.songId }; render(); },
