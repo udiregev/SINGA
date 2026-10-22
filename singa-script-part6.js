@@ -105,8 +105,8 @@ function renderGigPlayer(){
         ${s.by?`<div class="row" style="gap:6px;font-size:13px;margin-top:8px">${icon('account_circle',18)}added by ${esc(s.by)}</div>`:''}
         ${gigHasLyrics ? `<div class="row" style="gap:12px;margin-top:14px">
           ${ST.gListening
-            ? `<div class="row" style="gap:10px;cursor:pointer" data-act="gigHeard"><span class="icon-btn playbtn" style="background:#f24822">${icon('mic',28)}</span><div><div style="font-size:15px;font-weight:600">Listening… starts the moment you sing</div><div style="font-size:12px;color:#8a8a8a;margin-top:2px">Tap to start it now</div></div></div>`
-            : `<button class="icon-btn playbtn" title="${ST.playing?'Pause':'Start'}" data-act="startGig" data-id="${esc(curId)}">${icon(ST.playing?'pause':'play_arrow',34)}</button><span style="font-size:13px;color:#8a8a8a">${hint}</span>`}
+            ? `<button class="playcap live" data-act="gigHeard">Listening…</button><span style="font-size:13px;color:#8a8a8a">Starts the moment you sing — tap to start it now</span>`
+            : `<button class="playcap${ST.playing?' live':''}" data-act="startGig" data-id="${esc(curId)}">${ST.playing?'Pause':'Play'}</button><span style="font-size:13px;color:#8a8a8a">${hint}</span>`}
         </div>` : ''}
       </div>
       ${gigHasLyrics ? `
