@@ -37,6 +37,7 @@ function broadcastLiveTick(){
 
 function tick(){
   let changed = false;
+  if(pracActive && ST.phase!=='practicing') stopPracticeFollow();   // left Practice some other way (back, logo…)
   if(ST.vcd>0){ const v=ST.vcd-0.1; if(v<=0){ ST.vcd=0; ST.playing=true; } else ST.vcd=v; changed=true; }
   if((ST.ctx==='view' && ST.screen!=='song') || (ST.ctx==='practice' && ST.screen!=='practice') || (ST.ctx==='syncpreview' && (ST.screen!=='create' || ST.step!=='sync'))){
     if(ST.playing){ ST.playing=false; changed=true; }
@@ -65,7 +66,11 @@ function tick(){
     changed=true;
   }
   else if(ST.phase==='practicing'){
-    ST.recT += 0.1;
+    // moves on only while you're singing (see startPracticeFollow)
+    if(ST.pracState==='following' && performance.now() - (ST.pracHeardAt||0) < 1500){
+      const tot = timing(D.songs[ST.editId]).total;
+      ST.recT = Math.min(tot, ST.recT + 0.1);
+    }
     changed=true;
   }
   /* 'processing' phase is now driven entirely by processRecordingBlob()'s real
