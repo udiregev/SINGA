@@ -2,11 +2,13 @@
 function renderSongMenu(){
   const s = song(ST.songId);
   const instOpts = INSTS.map(([v,l])=>`<a class="link" style="display:flex;align-items:center;gap:8px;font-weight:${v===ST.instrument?700:500};color:${v===ST.instrument?'#1b1b1b':'#6f6f6f'}" data-act="setInstrumentMenu" data-id="${v}">${icon('check',18)}${l}</a>`).join('');
-  return `<div class="modal-backdrop" style="background:rgba(255,255,255,.9);align-items:flex-start;justify-content:flex-end;padding:20px 64px 0" data-act="toggleMenu">
-    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:12px;text-align:right" onclick="modalClick(event)">
+  // the close × sits exactly where the ☰ button was
+  const mp = ST.menuPos || { top: 84, right: 24 };
+  return `<div class="modal-backdrop" style="background:rgba(255,255,255,.92);display:block;padding:0" data-act="toggleMenu">
+    <div style="position:fixed;top:${Math.round(mp.top)}px;right:${Math.round(mp.right)}px;display:flex;flex-direction:column;align-items:flex-end;gap:12px;text-align:right" onclick="modalClick(event)">
       <span class="icon-btn" data-act="toggleMenu">${icon('close',28)}</span>
       <a class="link" style="font-size:17px;font-weight:700" data-act="editSong">Edit</a>
-      <a class="link" style="font-size:17px;font-weight:700;display:flex;align-items:center;gap:4px" data-act="toggleInstMenu">Change instrument${icon(ST.instMenu?'expand_less':'expand_more',20)}</a>
+      <a class="link" style="font-size:17px;font-weight:700;display:flex;align-items:center;gap:4px" data-act="toggleInstMenu">Change instrument</a>
       ${ST.instMenu?`<div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;margin:-4px 0 4px">${instOpts}</div>`:''}
       ${Object.keys(s.notes||{}).length ? `<a class="link" style="font-size:17px;font-weight:700" data-act="removeMarkings">Remove markings</a>` : ''}
       <a class="link" style="font-size:17px;font-weight:700" data-act="menuAddGig">Add to a gig</a>
@@ -17,10 +19,12 @@ function renderSongMenu(){
   </div>`;
 }
 
-function playButtonHTML(playing, act, listening){
-  if(ST.startMode==='countdown')
-    return `<button class="icon-btn playbtn" title="${playing?'Pause':'Start'}" data-act="${act}">${icon(playing?'pause':'play_arrow',34)}</button>`;
-  return `<div class="row" style="gap:10px;cursor:pointer;max-width:460px" data-act="${act}"><span class="icon-btn playbtn" style="background:${listening||playing?'#f24822':'#1b1b1b'}">${icon(playing?'pause':'mic',28)}</span><div><div style="font-size:15px;font-weight:600">${playing?'Following your voice':(listening?'Listening… starts the moment you sing':'Start')}</div><div style="font-size:12px;color:#8a8a8a;margin-top:2px">${playing?'Tap to pause':(listening?'Tap to cancel':'Starts when you start singing')}</div></div></div>`;
+// The Play / Pause capsule (song viewer + gig player).
+function playButtonHTML(playing, act, listening, id){
+  const did = id ? ` data-id="${esc(id)}"` : '';
+  const label = playing ? 'Pause' : (listening ? 'Listening…' : 'Play');
+  const hint = ST.startMode==='countdown' ? '' : (playing ? '' : (listening ? 'Starts the moment you sing — tap to cancel' : 'Starts when you start singing'));
+  return `<div class="row" style="gap:12px"><button class="playcap${playing||listening?' live':''}" data-act="${act}"${did}>${label}</button>${hint?`<span style="font-size:12px;color:#8a8a8a">${hint}</span>`:''}</div>`;
 }
 // Shared by the song viewer, Practice and the gig player.
 // Portrait: chord diagram above the lyrics (drag ═ to resize it).
@@ -39,11 +43,11 @@ function playerBodyHTML(o){
     return `<div class="land-grid">
       ${lyricsAreaHTML(o.lines, o.live, o.winKey, o.big, o.scrollId)}
       ${o.showDia ? `<div id="chordResizeHandleX" class="land-handle" title="Drag to resize">${icon('drag_indicator',22)}</div>
-      <div id="chordDiagramBox" class="land-dia" style="width:${Math.round(ST.chordW)}px"><div class="chordInnerScale" style="transform:scale(${chordScaleV()})">${diagramHTML(o.dia, o.dotColor, true)}${o.extraDia||''}</div></div>` : ''}
+      <div id="chordDiagramBox" class="land-dia" data-fit="${chordScaleV()}" style="width:${Math.round(ST.chordW)}px"><div class="chordInnerScale" style="transform:scale(${chordScaleV()})">${diagramHTML(o.dia, o.dotColor, true)}${o.extraDia||''}</div></div>` : ''}
     </div>`;
   }
   const chordScale = Math.max(0.55, Math.min(1.9, ST.chordH/230));
-  return `${o.showDia ? `<div id="chordDiagramBox" style="height:${Math.round(ST.chordH)}px;display:flex;align-items:center;justify-content:center;overflow:hidden;margin-top:8px;flex:none">
+  return `${o.showDia ? `<div id="chordDiagramBox" data-fit="${chordScale}" style="height:${Math.round(ST.chordH)}px;display:flex;align-items:center;justify-content:center;overflow:hidden;margin-top:8px;flex:none">
         <div class="chordInnerScale" style="display:flex;flex-direction:column;align-items:center;gap:14px;transform:scale(${chordScale})">${diagramHTML(o.dia, o.dotColor)}${o.extraDia||''}</div>
       </div>
       <div id="chordResizeHandle" class="row" style="justify-content:center;cursor:ns-resize;height:30px;touch-action:none;flex:none" title="Drag to resize">${icon('drag_handle',26)}</div>` : ''}
@@ -141,7 +145,7 @@ function renderPractice(){
     </div>
     ${isLandscape()
       ? playerBodyHTML({ lines, live:true, winKey:'practice-'+s.id, dia, showDia:ST.instrument!=='none', big:true, dotColor:'#f24822' })
-      : `${ST.instrument!=='none' ? `<div style="margin-top:30px;min-height:140px;flex:none">${diagramHTML(dia,'#f24822')}</div>` : ''}
+      : `${ST.instrument!=='none' ? `<div data-fit="1" style="margin-top:24px;height:190px;flex:none;display:flex;align-items:center;justify-content:center;overflow:hidden"><div class="chordInnerScale" style="display:flex;justify-content:center">${diagramHTML(dia,'#f24822')}</div></div>` : ''}
     ${lyricsAreaHTML(lines, true, 'practice-'+s.id, true)}`}
     <div style="border-top:1px solid #ececec;padding-top:22px;display:flex;flex-direction:column;gap:18px">
       <div style="height:22px;display:flex;align-items:center;cursor:pointer" data-act="seek"><div style="flex:1;height:6px;border-radius:3px;background:#e6e6e6;position:relative"><div style="position:absolute;left:0;top:0;bottom:0;width:${progress}%;background:#1b1b1b;border-radius:3px"></div></div></div>
