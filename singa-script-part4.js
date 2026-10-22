@@ -31,14 +31,15 @@ function renderChordPicker(){
   const tiles = SUFFIXES.map(q=>chordTileHTML(rt, q, null, 'ctile')).join('');
   return `<div class="ce-picker">
     <div id="rootScroller" class="rootScroller ce-roots" data-itemw="${ROOT_W}"><div class="ce-roots-in">${roots}<div style="flex:none;width:${ROOT_W}px"></div></div></div>
-    <button class="ce-acc${ST.accOn?' on':''}" data-act="toggleAcc">${esc(ACC[letter])}</button>
+    <button class="ce-acc${ST.accOn?' on':''}" data-act="toggleAcc" title="${ST.accOn?'Back to '+esc(letter):'Switch to '+esc(ACC[letter])}">${ACC[letter].slice(1)==='#'?'♯':'♭'}</button>
     <div id="chordVariants" class="ce-variants">${tiles}</div>
   </div>`;
 }
 function renderUsedRow(){
   const used = usedChords(D.songs[ST.editId]);
   const tiles = used.map(ch=>{ const p = splitChordStr(ch); return chordTileHTML(p.root, p.q, ch, 'utile'); }).join('');
-  return `<div class="ce-used"><span class="ce-used-l">used</span><div class="ce-used-row">${tiles || '<span style="font-size:13px;color:#9a9a9a">Drag a chord onto a word</span>'}</div></div>`;
+  const placed = Object.keys((D.songs[ST.editId]||{}).chords||{}).length;
+  return `<div class="ce-used"><div class="ce-used-row">${placed && tiles ? tiles : '<span style="font-size:14px;color:#9a9a9a">Drag and drop a chord onto a word</span>'}</div></div>`;
 }
 
 // The marking editor is a light-blue sticky note: close ×, the note itself
@@ -60,7 +61,8 @@ function renderSongBody(d){
   // no line is bolded yet — that only happens once there's a real take to
   // play back (see syncPreviewPlay), using real forced-alignment timing.
   const previewPlaying = ST.step==='sync' && ST.ctx==='syncpreview' && ST.playing;
-  const editMode = ST.step==='chords' ? 'chords' : ST.step==='markings' ? 'markings' : (previewPlaying ? 'play' : 'static');
+  const following = ST.step==='sync' && ST.phase==='practicing' && ST.pracState==='following';
+  const editMode = ST.step==='chords' ? 'chords' : ST.step==='markings' ? 'markings' : (previewPlaying||following ? 'play' : 'static');
   const liveT = (ST.phase==='recording'||ST.phase==='practicing') ? ST.recT : (previewPlaying ? ST.t : null);
   const lines = buildLines(d, editMode, liveT!=null ? {t:liveT} : null);
   const opacity = (ST.phase==='countdown'||ST.phase==='processing') ? 0.12 : 1;
@@ -94,7 +96,7 @@ function renderSongBody(d){
         <a class="link" style="color:#9a9a9a;text-align:center" data-act="${skipAct}">${skipLabel}</a>
       </div>` : ''}
     ${ST.step==='sync' && ST.phase==='idle' ? `<div style="flex:none;display:flex;flex-direction:column;align-items:center;gap:12px;width:100%;max-width:340px;margin:0 auto">
-        ${ST.autoChords?`<div style="font-size:13px;color:#2f8fe0;text-align:center;margin-bottom:6px">Chords will be detected from the instruments in your recording.</div>`:''}
+        ${ST.autoChords?`<div style="font-size:13px;color:#2f8fe0;text-align:center;margin-bottom:6px;line-height:1.45">Chords will be detected from the instruments in your recording. No need to wait for it — we'll let you know when the song is ready.</div>`:''}
         ${d.synced ? `<button class="btn btn-dark" style="width:100%" data-act="syncPreviewPlay">${previewPlaying?'Pause':'Play your synced take'}</button>` : ''}
         <button class="btn btn-grey" style="width:100%" data-act="practiceDraft">Practice</button>
         <button class="btn btn-accent" style="width:100%" data-act="startRecord">Record</button>

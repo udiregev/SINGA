@@ -26,7 +26,7 @@ function buildLines(s, mode, opt){
       const mark = header ? '' : (notes[id] || '');
       // Where a mark sits: first word → left of it, last word → right of it,
       // anything in between → above the line, centred on the word.
-      const markSide = mark ? (wi===0 ? 'left' : (wi===last ? 'right' : 'top')) : null;
+      const markSide = mark ? (wi===0 ? (opt.leftTop ? 'top' : 'left') : (wi===last ? 'right' : 'top')) : null;
       const o = { id, w, chord:ch, col:'#333', chordCol:'#9a9a9a', weight:400, cursor:'default', mark, markSide,
         selected: ST.selWord===id };
       if(header){
@@ -119,7 +119,9 @@ function linesHTML(lines, big){
       const side = (w.mark && (w.markSide==='left' || w.markSide==='right')) ? sideMarkHTML(w) : '';
       const topArrow = (w.mark && w.markSide==='top') ? `<span class="marr-v"${w.lvl?' style="margin-top:-31px"':''}></span>` : '';
       const rowCls = topArrow && !w.chord ? 'lchord-row solo' : 'lchord-row';
-      return `<span class="lword${w.chip?' editable':''}" style="cursor:${w.cursor};border-radius:5px;${bg}" ${act}${drop}>${hasTop?markRowHTML(w.mark, w.markSide, w.lvl, lift):''}<span class="${rowCls}"><span class="${chordCls}" style="${fszc};color:${w.chordCol};${w.chordAnim||''}"${drag}>${esc(w.chord)}</span>${topArrow}</span><span class="ltext" style="${fsz};font-weight:${w.weight};color:${w.col}">${w.w?esc(w.w):'&nbsp;'}${side}</span></span>`;
+      // a placed chord on the Chords step gets a × to take it off again
+      const chipX = (w.chip && w.chord) ? `<span class="chip-x" data-act="removeChord" data-id="${esc(w.id)}" title="Remove chord">×</span>` : '';
+      return `<span class="lword${w.chip?' editable':''}" style="cursor:${w.cursor};border-radius:5px;${bg}" ${act}${drop}>${hasTop?markRowHTML(w.mark, w.markSide, w.lvl, lift):''}<span class="${rowCls}"><span class="${chordCls}" style="${fszc};color:${w.chordCol};${w.chordAnim||''}"${drag}>${esc(w.chord)}</span>${chipX}${topArrow}</span><span class="ltext" style="${fsz};font-weight:${w.weight};color:${w.col}">${w.w?esc(w.w):'&nbsp;'}${side}</span></span>`;
     }).join('');
     return `<div class="lline" style="${style}"${l.cur?' data-cur="1"':''}>${words}</div>`;
   }).join('') + `</div>`;
@@ -165,7 +167,7 @@ function gigRowHome(g){
   const count = (g.setlist||[]).length;
   const songCount = count+' song'+(count===1?'':'s');
   const sub = g.date ? (g.date+' · '+songCount) : songCount;
-  return `<div class="list-row" data-act="openGig" data-id="${g.id}"><div style="min-width:0"><div class="t" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(g.title)}</div><div class="s">${esc(sub)}</div></div>${g.id==='nye'?'<span style="font-size:11px;font-weight:700;letter-spacing:.06em;color:#f24822">LIVE</span>':''}</div>`;
+  return `<div class="list-row" data-act="openGig" data-id="${g.id}"><div style="min-width:0"><div class="t" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(g.title)}</div><div class="s">${esc(sub)}</div></div>${ST._liveGig===g.id?'<span style="font-size:11px;font-weight:700;letter-spacing:.06em;color:#f24822">LIVE</span>':''}</div>`;
 }
 function songJob(s){ return ST.jobs.find(j=>j.songId===s.id); }
 function songTitle(s){ const j = songJob(s); return s.title || (j && j.label) || 'Untitled song'; }
@@ -199,19 +201,19 @@ function renderHome(){
     <div class="home-grid">
       <div style="display:flex;flex-direction:column;gap:48px">
         <div>
-          <div class="row" style="justify-content:space-between;margin-bottom:8px"><span style="font-size:26px;font-weight:700">Playlists</span><span class="icon-btn" title="New playlist" data-act="newItem" data-kind="playlist">${icon('add',24)}</span></div>
+          <div class="row home-h" style="gap:14px;margin-bottom:8px"><span style="font-size:26px;font-weight:700">Playlists</span><span class="icon-btn" style="margin-left:36px" title="New playlist" data-act="newItem" data-kind="playlist">${icon('add',24)}</span></div>
           ${playlists}
           <a class="link" style="display:inline-block;margin-top:14px;text-decoration:underline" data-act="openList" data-kind="playlists">All Playlists</a>
         </div>
         <div>
-          <div class="row" style="justify-content:space-between;margin-bottom:8px"><span style="font-size:26px;font-weight:700">Gigs</span><span class="icon-btn" title="New gig" data-act="newItem" data-kind="gig">${icon('add',24)}</span></div>
+          <div class="row home-h" style="gap:14px;margin-bottom:8px"><span style="font-size:26px;font-weight:700">Gigs</span><span class="icon-btn" style="margin-left:36px" title="New gig" data-act="newItem" data-kind="gig">${icon('add',24)}</span></div>
           ${gigs}
           <a class="link" style="display:inline-block;margin-top:14px;text-decoration:underline" data-act="openList" data-kind="gigs">All Gigs</a>
         </div>
       </div>
       <div style="display:flex;flex-direction:column;gap:48px">
         <div>
-          <div class="row" style="justify-content:space-between;margin-bottom:8px"><span style="font-size:26px;font-weight:700">Songs</span><span class="icon-btn" title="Add a song" data-act="newSong">${icon('add',24)}</span></div>
+          <div class="row home-h" style="gap:14px;margin-bottom:8px"><span style="font-size:26px;font-weight:700">Songs</span><span class="icon-btn" style="margin-left:36px" title="Add a song" data-act="newSong">${icon('add',24)}</span></div>
           ${recent || '<div style="padding:14px 0;color:#8a8a8a;font-size:14px">No songs yet — tap + to add one.</div>'}
           <a class="link" style="display:inline-block;margin-top:14px;text-decoration:underline" data-act="openList" data-kind="songs">All Songs</a>
         </div>
@@ -238,7 +240,7 @@ function songRowList(id, badgeText, badgeCol, from){
 }
 function gigRowList(g){
   const sub = g.date+' · '+g.setlist.length+' songs'+(g.mine?'':' · by '+g.by);
-  return `<div class="list-row" data-act="openGig" data-id="${g.id}"><div><div class="t">${esc(g.title)}</div><div class="s">${esc(sub)}</div></div><div class="row" style="gap:12px"><span style="font-size:11px;font-weight:700;letter-spacing:.05em;color:#f24822">${g.id==='nye'?'LIVE':''}</span>${icon('chevron_right',22)}</div></div>`;
+  return `<div class="list-row" data-act="openGig" data-id="${g.id}"><div><div class="t">${esc(g.title)}</div><div class="s">${esc(sub)}</div></div><div class="row" style="gap:12px"><span style="font-size:11px;font-weight:700;letter-spacing:.05em;color:#f24822">${ST._liveGig===g.id?'LIVE':''}</span>${icon('chevron_right',22)}</div></div>`;
 }
 
 function renderList(){
@@ -279,6 +281,6 @@ function renderList(){
       <div style="flex:1"></div>
       ${sortDropdown()}
     </div>
-    <div style="overflow:auto">${rowsHtml}${empty?'<div style="padding:24px 0;color:#8a8a8a">Nothing here yet.</div>':''}</div>
+    <div style="overflow:auto;padding-left:40px">${rowsHtml}${empty?'<div style="padding:24px 0;color:#8a8a8a">Nothing here yet.</div>':''}</div>
   </div>`;
 }
