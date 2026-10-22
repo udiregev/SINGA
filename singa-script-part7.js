@@ -290,10 +290,22 @@ function applyChordPatternToRepeats(s, li, wi, chordVal){
 // Drag & drop on the Chords step: drop a chord on a word (filling the same
 // spot on every repeat of that line), move a placed chord to another word,
 // or drag a placed chord off the lyrics to remove it.
+// Lines with the same text as line li (its repeats), excluding li itself.
+function repeatLines(s, li){
+  const lines = parseLyrics(s.lyrics), ws0 = lines[li];
+  if(!ws0 || isHeaderLine(ws0)) return [];
+  const target = ws0.join(' ').toLowerCase();
+  return lines.map((ws,i)=>i).filter(i=>i!==li && !isHeaderLine(lines[i]) && lines[i].join(' ').toLowerCase()===target);
+}
 function dropChord(chord, from, to){
   const s = D.songs[ST.editId]; if(!s || !chord) return;
   if(from && from===to) return;
-  if(from) delete s.chords[from];
+  if(from){
+    delete s.chords[from];
+    // moving or removing a chord takes its copies on the repeated lines with it
+    const [fl, fw] = String(from).split('-').map(Number);
+    if(!isNaN(fw)) repeatLines(s, fl).forEach(i=>{ if(s.chords[i+'-'+fw]===chord) delete s.chords[i+'-'+fw]; });
+  }
   if(to){
     s.chords[to] = chord; recordRecentChord(chord);
     const [li, wi] = String(to).split('-').map(Number);
