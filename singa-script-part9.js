@@ -96,6 +96,8 @@ const Actions = {
   reviewLater(){ ST.screen='home'; render(); },
   editDone(){
     const s = D.songs[ST.editId];
+    if(s && !lyricsReady(s)){ ST.step='lyrics'; render(); toast(lyricsMissing(s)); return; }
+    ST.playing=false; ST.testSpeed=false; stopPracticeFollow();
     ST.editing=false; ST.selWord=null; ST.phase='idle';
     const ret = ST.editReturn; ST.editReturn = null;
     if(s) finalizeSong(s);
@@ -109,6 +111,7 @@ const Actions = {
     const sp = ST.songPick;
     ST.addTarget = sp && sp.kind!=='all' ? { kind: sp.kind, id: sp.id } : null;
     ST.songPick=null; ST.spQuery='';
+    ST.doneSpeed=false; ST.doneNoticeHidden=false; ST.tempoTab=null;
     newSongDraft(); ST.createMode = d.id || 'manual'; render();
   },
   gigEditAddSongs(){ ST.songPick = { kind:'gigedit', id: gigObj().id }; render(); },
@@ -134,7 +137,7 @@ const Actions = {
   },
   runSearch(){ ST.screen='search'; ST.searchQuery = ST.homeQuery; ST.sortOpen=false; render(); },
   newItem(d){ if(!canSync()) return; ST.newItem = { kind:d.kind, name:'', date:'' }; render(); },
-  newSong(){ if(!canSync()) return; ST.addTarget=null; newSongDraft(); render(); },
+  newSong(){ if(!canSync()) return; ST.addTarget=null; ST.doneSpeed=false; ST.doneNoticeHidden=false; ST.tempoTab=null; newSongDraft(); render(); },
   openPlaylist(d){ ST.screen='list'; ST.listKind='songs'; ST.listPl=d.id; ST.listQuery=''; ST.sortOpen=false; render(); },
   openGig(d){ ST.gigId=d.id; ST.screen='gig'; ST.qrOpen=false; render(); },
   openSongFrom(d){ openSongOrIncomplete(d.id, d.from); render(); },
@@ -171,11 +174,11 @@ const Actions = {
   goCreateStep(d){
     const s = D.songs[ST.editId]; const hasLyrics = !!(s && s.lyrics.trim());
     if(ST.phase!=='idle') return;
-    if(!hasLyrics && d.id!=='lyrics'){ toast('Add lyrics first'); return; }
-    withModeSegTransition(()=>{ ST.step=d.id; ST.selWord=null; ST.editorLine=0; });
+    if(!lyricsReady(s) && d.id!=='lyrics'){ toast(lyricsMissing(s)); return; }
+    withModeSegTransition(()=>{ ST.step=d.id; ST.selWord=null; ST.editorLine=0; ST.tempoTab=null; ST.testSpeed=false; });
   },
-  createNextStep(){ withModeSegTransition(()=>{ const order=['lyrics','chords','markings','sync']; const i=order.indexOf(ST.step); ST.step=order[Math.min(3,i+1)]; ST.selWord=null; ST.editorLine=0; }); },
-  lyricsNext(){ const s = D.songs[ST.editId]; if(s.lyrics.trim()) Actions.createNextStep(); },
+  createNextStep(){ withModeSegTransition(()=>{ const order=['lyrics','chords','markings','sync']; const i=order.indexOf(ST.step); ST.step=order[Math.min(3,i+1)]; ST.selWord=null; ST.editorLine=0; ST.tempoTab=null; ST.testSpeed=false; }); },
+  lyricsNext(){ const s = D.songs[ST.editId]; if(!lyricsReady(s)){ toast(lyricsMissing(s)); return; } Actions.createNextStep(); },
   async openSimilar(){
     const d = D.songs[ST.editId];
     ST.similar=true; ST.similarLoading=true; ST.similarResults=[]; render();
@@ -218,7 +221,32 @@ const Actions = {
   saveNote(){ const s = D.songs[ST.editId]; const n = {...s.notes}; if(ST.noteDraft.trim()) n[ST.selWord]=ST.noteDraft.trim(); else delete n[ST.selWord]; s.notes=n; ST.selWord=null; render(); queueSaveSong(ST.editId); },
   removeNote(){ const s = D.songs[ST.editId]; const n = {...s.notes}; delete n[ST.selWord]; s.notes=n; ST.selWord=null; ST.noteDraft=''; render(); queueSaveSong(ST.editId); },
   closeNoteEditor(){ ST.selWord=null; ST.noteDraft=''; render(); },
-  detectChords(){ ST.autoChords=true; ST.step='sync'; render(); },
+  detectChords(){ ST.autoChords=true; ST.step='sync'; ST.tempoTab='synced'; render(); },
+  // Tempo step
+  setTempoTab(d){
+    const s = D.songs[ST.editId]; if(!s) return;
+    if(ST.ctx==='syncpreview'){ ST.playing=false; ST.testSpeed=false; }
+    ST.tempoTab = d.id;
+    if(d.id==='speed') setSongTempo(s, { mode:'speed' });
+    else if(s.synced) setSongTempo(s, { mode:'synced' });
+    render(); queueSaveSong(s.id);
+  },
+  testSpeed(){
+    if(ST.ctx==='syncpreview' && ST.playing && ST.testSpeed){ ST.playing=false; ST.testSpeed=false; ST.t=0; render(); return; }
+    ST.ctx='syncpreview'; ST.testSpeed=true; ST.t=0; ST.editorLine=0; ST.playing=true; render();
+  },
+  recordTempo(){ ST.playing=false; ST.testSpeed=false; ST.tempoTab='synced'; Actions.startRecord(); },
+  // Done on the Tempo step: the song is added (set speed if there's no take)
+  finishCreate(){
+    const s = D.songs[ST.editId]; if(!s) return;
+    if(!lyricsReady(s)){ ST.step='lyrics'; render(); toast(lyricsMissing(s)); return; }
+    stopPracticeFollow(); ST.playing=false; ST.testSpeed=false; ST.phase='idle';
+    if(!s.synced) setSongTempo(s, { mode:'speed' });
+    finalizeSong(s); ST.songId = s.id; ST.autoChords=false;
+    ST.doneSpeed=false; ST.doneNoticeHidden=false; ST.screen='done'; render();
+  },
+  doneSkipSync(){ const s = D.songs[ST.editId]; if(s){ setSongTempo(s, { mode:'speed' }); queueSaveSong(s.id); } ST.doneSpeed=true; render(); toast('The default scroll speed will be used — adjust it here if you like'); },
+  doneLater(){ ST.doneNoticeHidden=true; render(); toast('You can add a tempo any time: open the song → Edit → Tempo'); },
   // Practice stays right here on the Sync step (same compact scrolling
   // lyrics window Record uses) instead of jumping to the full Practice
   // Player — nothing is captured, it just paces through the lyrics so you
@@ -235,8 +263,9 @@ const Actions = {
   // the Practice Player/Song Viewer use — reusing their exact timing/curWord
   // machinery via ST.ctx='syncpreview' (see tick() and playId()).
   syncPreviewPlay(){
-    if(ST.ctx==='syncpreview' && ST.playing){ ST.playing=false; render(); return; }
+    if(ST.ctx==='syncpreview' && ST.playing && !ST.testSpeed){ ST.playing=false; render(); return; }
     const s = D.songs[ST.editId]; if(!s) return;
+    ST.testSpeed=false;
     const tm = timing(s);
     ST.ctx='syncpreview'; ST.t = ST.t<tm.total ? ST.t : 0; ST.playing=true; render();
   },
@@ -348,7 +377,7 @@ const Actions = {
   // song viewer: a song without a take / without chords
   addSync(){ Actions.editSong(); if(ST.screen==='create'){ ST.step='sync'; render(); } },
   addChords(){ Actions.editSong(); },
-  removeMarkings(){ const s = song(ST.songId); if(!s || s.id==='none') return; s.notes={}; ST.menu=false; render(); toast('Markings removed'); queueSaveSong(s.id); },
+  removeMarkings(){ const s = song(ST.songId); if(!s || s.id==='none') return; s.notes = s.notes && s.notes._tempo ? { _tempo: s.notes._tempo } : {}; ST.menu=false; render(); toast('Markings removed'); queueSaveSong(s.id); },
   editSong(){ if(!canSync()) return; stopOnsetListening(); ST.editReturn = ST.screen==='gigplayer' ? 'gigplayer' : null; ST.playing=false; ST.vcd=0; ST.editId = ST.songId; ST.editing=true; ST.addTarget=null; ST.screen='create'; ST.createMode='manual'; ST.step='chords'; ST.phase='idle'; ST.menu=false; ST.selWord=null; ST.editorLine=0; render(); },
   deleteSong(){
     if(!canSync()) return; stopOnsetListening();
