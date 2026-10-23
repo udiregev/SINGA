@@ -9,13 +9,46 @@ function qrHTML(){
   return `<img src="${ST.qrDataUrl}" alt="QR code" width="220" height="220" style="border-radius:8px">`;
 }
 
+/* ---- Tempo: every song either scrolls at a set speed (x0.5–x4, default
+   x1, no word highlighting) or follows a recorded take (audio synced, words
+   highlighted as they're sung). Kept in the song's notes under "_tempo" so it
+   saves with the song without a database change; it's never shown as a mark. */
+function songTempo(s){ const t = (s && s.notes && s.notes._tempo) || {}; return { mode: t.mode || (s && s.synced ? 'synced' : 'speed'), speed: +t.speed || 1 }; }
+function songMode(s){ const t = songTempo(s); return t.mode==='synced' && s && s.synced ? 'synced' : 'speed'; }
+function songSpeed(s){ return songTempo(s).speed; }
+function setSongTempo(s, patch){ if(!s) return; const t = { ...songTempo(s), ...patch }; s.notes = { ...(s.notes||{}), _tempo: { mode:t.mode, speed:t.speed } }; }
+function markCount(s){ return Object.keys((s && s.notes) || {}).filter(k=>k!=='_tempo').length; }
+function speedLabel(v){ return 'x'+(+v).toFixed(2).replace(/\.?0+$/,''); }
+// A speedometer: x0.5 at the far left, x4 at the far right.
+function speedometerHTML(v){
+  const a = -90 + (Math.max(0.5,Math.min(4,v))-0.5)/3.5*180;
+  const ticks = [0.5,1,2,3,4].map(x=>{ const r=(-90+(x-0.5)/3.5*180-90)*Math.PI/180; const c=Math.cos(r), sn=Math.sin(r);
+    return `<line x1="${(90+c*54).toFixed(1)}" y1="${(92+sn*54).toFixed(1)}" x2="${(90+c*62).toFixed(1)}" y2="${(92+sn*62).toFixed(1)}" stroke="#1b1b1b" stroke-width="2"/><text x="${(90+c*90).toFixed(1)}" y="${(96+sn*90).toFixed(1)}" font-size="11" font-weight="700" text-anchor="middle" fill="#8a8a8a">${speedLabel(x)}</text>`; }).join('');
+  return `<svg class="speedo" width="210" height="116" viewBox="-15 -12 210 116" aria-hidden="true">
+    <path d="M18 92 A72 72 0 0 1 162 92" fill="none" stroke="#ececec" stroke-width="10" stroke-linecap="round"/>
+    ${ticks}
+    <g id="speedNeedle" style="transform-origin:90px 92px;transform:rotate(${a.toFixed(1)}deg);transition:transform .15s"><line x1="90" y1="92" x2="90" y2="30" stroke="#f24822" stroke-width="3.5" stroke-linecap="round"/></g>
+    <circle cx="90" cy="92" r="7" fill="#1b1b1b"/>
+  </svg>`;
+}
+// Speedometer + x0.5–x4 slider (dragging updates in place; see Binds.songSpeed).
+function speedControlHTML(s){
+  const v = songSpeed(s);
+  return `<div class="speedctl">
+    ${speedometerHTML(v)}
+    <div id="speedLabel" class="speedval">${speedLabel(v)}</div>
+    <input class="speed-range" type="range" min="0.5" max="4" step="0.25" value="${v}" data-bind="songSpeed" aria-label="Scroll speed">
+    <div class="row" style="justify-content:space-between;width:100%;font-size:11px;color:#9a9a9a;font-weight:700"><span>x0.5</span><span>x4</span></div>
+  </div>`;
+}
+
 function buildLines(s, mode, opt){
   opt = opt || {};
   const tm = timing(s);
   const ci = opt.t!=null ? curWord(tm, opt.t) : -1;
   const cw = ci>=0 ? tm.words[ci] : null;
   let curChordK = -1; if(ci>=0) for(let k=0;k<=ci;k++){ const w=tm.words[k]; if(s.chords[w.li+'-'+w.wi]) curChordK=k; }
-  const notes = { ...(s.notes||{}), ...(opt.extraNotes||{}) };
+  const notes = { ...(s.notes||{}), ...(opt.extraNotes||{}) }; delete notes._tempo;
   let g = 0;
   return tm.lines.map((ws,li)=>{
     const header = isHeaderLine(ws);
@@ -38,6 +71,8 @@ function buildLines(s, mode, opt){
       } else if(mode==='view'){
         o.chordCol = '#9a9a9a';
         if(ch){ o.cursor='pointer'; o.clickAct='setViewChord'; o.clickId=ch; }
+      } else if(mode==='scroll'){
+        o.chordCol = '#9a9a9a';
       } else if(mode==='play'){
         const past = cw && li<cw.li;
         o.weight=700;
@@ -61,7 +96,8 @@ function buildLines(s, mode, opt){
       }
     }
     const isPlay = mode==='play', on = !header && isPlay && curLine;
-    return { li, words:w2, header, padTop: on?10:0, mb: on?10:0, scale: on?1.12:1, op: (!header && isPlay && cw && li<cw.li) ? 0.75:1, cur: on };
+    // (no extra margins on the current line, so starting playback never shifts the lyrics)
+    return { li, words:w2, header, padTop: 0, mb: 0, scale: on?1.08:1, op: (!header && isPlay && cw && li<cw.li) ? 0.75:1, cur: on || (mode==='scroll' && !header && !!curLine) };
   });
 }
 // A short-lived CSS animation that survives the app's 100ms full re-renders:
