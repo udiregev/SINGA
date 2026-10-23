@@ -21,7 +21,7 @@ function renderSongMenu(){
       ${mine ? item('editSong','Edit') : ''}
       <a class="link" style="font-size:17px;font-weight:700;display:flex;align-items:center;gap:4px" data-act="toggleInstMenu">Change instrument</a>
       ${ST.instMenu?`<div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;margin:-4px 0 4px">${instOpts}</div>`:''}
-      ${mine && Object.keys(s.notes||{}).length ? item('removeMarkings','Remove markings') : ''}
+      ${mine && markCount(s) ? item('removeMarkings','Remove markings') : ''}
       ${ctx==='playlist' ? item('menuRemovePlaylist','Remove song from playlist') : item('menuAddPlaylist','Add song to a playlist')}
       ${ctx==='gig' ? item('menuRemoveGig','Remove song from gig') : item('menuAddGig','Add song to a gig')}
       <a class="link" style="font-size:17px;font-weight:700;margin-top:16px;display:flex;align-items:center;gap:6px" data-act="newSong">Add a new song${icon('add_circle',22)}</a>
@@ -39,9 +39,9 @@ function playButtonHTML(playing, act, listening, id){
   const hint = ST.startMode==='countdown' ? '' : (playing||counting ? '' : (listening ? 'Starts the moment you sing — tap to cancel' : 'Starts when you start singing'));
   return `<div class="row" style="gap:12px"><button class="playcap${playing||listening||counting?' live':''}" data-act="${act}"${did}>${label}</button>${hint?`<span style="font-size:12px;color:#8a8a8a">${hint}</span>`:''}</div>`;
 }
-function noSyncHTML(s){
-  const own = s.mine!==false && !ST.viewBy;
-  return `<div class="row" style="gap:12px;flex-wrap:wrap"><span style="font-size:13px;color:#8a8a8a">No sync yet — record a take to play along</span>${own?`<button class="btn btn-outline btn-sm" data-act="addSync">Add sync</button>`:''}</div>`;
+// Set-speed songs say how fast they'll scroll, next to Play.
+function speedHintHTML(s){
+  return songMode(s)==='synced' ? '' : `<span style="font-size:12px;color:#8a8a8a;white-space:nowrap">Set speed ${speedLabel(songSpeed(s))}</span>`;
 }
 // Shared by the song viewer, Practice and the gig player.
 // Portrait: chord diagram above the lyrics (drag ═ to resize it).
@@ -115,9 +115,9 @@ function renderSong(){
   const withList = ST.back==='list' && ST.listKind==='songs' && !ST.viewBy;
   // in a playlist's viewer the lyrics line up with the title, so a mark on a
   // line's first word goes above it rather than out to the left
-  const lines = buildLines(s, vLive?'play':'view', { t: vLive?ST.t:null, hideChords: !hasInst, leftTop: withList });
+  const lines = buildLines(s, vLive?(songMode(s)==='synced'?'play':'scroll'):'view', { t: vLive?ST.t:null, hideChords: !hasInst, leftTop: withList });
   const land = isLandscape();
-  const playRow = s.synced ? playButtonHTML(ST.playing,'viewPlay',ST.listening) : noSyncHTML(s);
+  const playRow = playButtonHTML(ST.playing,'viewPlay',ST.listening) + speedHintHTML(s);
   const noChords = hasInst && !seq.length && !ST.viewBy && s.mine!==false;
   const head = land ? `<div class="row" style="gap:14px;align-items:flex-start">
       ${withList ? '' : `<span class="icon-btn" style="margin-top:2px" data-act="back" data-to="${esc(ST.back)}">${icon('chevron_left',26)}</span>`}
