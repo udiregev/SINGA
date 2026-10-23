@@ -14,8 +14,21 @@ const Binds = {
   spQuery(v){ ST.spQuery=v; render(); },
   ceName(v){ ST.collabEdit.name=v; },
   ceEmail(v){ ST.collabEdit.email=v; },
-  gigMsgDraft(v){ ST.gigMsgDraft=v; }
+  gigMsgDraft(v){ ST.gigMsgDraft=v; },
+  // the speed slider moves the speedometer in place (no re-render mid-drag)
+  songSpeed(v){
+    const s = D.songs[ST.editId]; if(!s) return;
+    const x = Math.max(0.5, Math.min(4, +v||1));
+    setSongTempo(s, { speed:x });
+    const lab = document.getElementById('speedLabel'); if(lab) lab.textContent = speedLabel(x);
+    const nd = document.getElementById('speedNeedle'); if(nd) nd.style.transform = 'rotate('+(-90+(x-0.5)/3.5*180).toFixed(1)+'deg)';
+    queueSaveSong(s.id);
+  }
 };
+// hold the screen still while the speed slider is being dragged
+document.addEventListener('pointerdown', function(e){
+  if(e.target && e.target.classList && e.target.classList.contains('speed-range')){ _holdRender = true; clearTimeout(_holdT); }
+}, true);
 /* ============================================================
    PLAYBACK TICK (simulated — no real audio capture/analysis)
    ============================================================ */
@@ -45,7 +58,9 @@ function tick(){
   }
   if(ST.playing){
     const s = song(playId()); const tm = timing(s);
-    let t = ST.t + 0.1;
+    // set-speed songs (and Test on the Tempo step) move at their speed
+    const sp = ST.ctx==='syncpreview' ? (ST.testSpeed ? songSpeed(s) : 1) : (songMode(s)==='synced' ? 1 : songSpeed(s));
+    let t = ST.t + 0.1*sp;
     if(t>=tm.total){
       if(ST.ctx==='practice' || ST.ctx==='syncpreview') t=0;
       else if(ST.ctx==='view'){ ST.playing=false; t=0; }
@@ -68,8 +83,8 @@ function tick(){
   else if(ST.phase==='practicing'){
     // moves on only while you're singing (see startPracticeFollow)
     if(ST.pracState==='following' && performance.now() - (ST.pracHeardAt||0) < 1500){
-      const tot = timing(D.songs[ST.editId]).total;
-      ST.recT = Math.min(tot, ST.recT + 0.1);
+      const ps = D.songs[ST.editId];
+      ST.recT = Math.min(timing(ps).total, ST.recT + 0.1*songSpeed(ps));
     }
     changed=true;
   }
@@ -84,7 +99,8 @@ function tick(){
   if(ST.screen==='create' && ST.createMode==='manual' && ST.step==='sync'){
     const s = D.songs[ST.editId];
     let liveT = null;
-    if(ST.phase==='recording' || ST.phase==='practicing') liveT = ST.recT;
+    if(ST.phase==='recording') liveT = ST.recT*songSpeed(s);
+    else if(ST.phase==='practicing') liveT = ST.recT;
     else if(ST.ctx==='syncpreview' && ST.playing) liveT = ST.t;
     if(s && liveT!=null){
       const tm = timing(s); const ci = curWord(tm, liveT);
@@ -112,8 +128,10 @@ document.addEventListener('input', function(e){
   const t = e.target.closest('[data-bind]');
   if(!t) return;
   const name = t.dataset.bind;
-  const pos = t.selectionStart, posEnd = t.selectionEnd;
+  let pos = null, posEnd = null;
+  try{ pos = t.selectionStart; posEnd = t.selectionEnd; }catch(err){}   // range inputs have no caret
   if(Binds[name]) Binds[name](t.value, t.dataset);
+  if(t.type==='range') return;
   requestAnimationFrame(function(){
     const el = document.querySelector('[data-bind="'+name+'"]');
     if(el && el !== document.activeElement){
