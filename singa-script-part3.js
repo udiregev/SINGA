@@ -122,6 +122,26 @@ body.chord-dragging,body.chord-dragging *{cursor:grabbing !important;-webkit-use
 /* playlist / gig viewers: lyrics start in line with the title */
 .lyr-area.al-left,.al-left .lyr-win,.al-left .lyr-scroll{align-items:flex-start}
 .al-left .lyrics-wrap,.lyr-win.al-left .lyrics-wrap{padding:0 !important;max-width:100% !important}
+/* pressing Play doesn't move the lyrics: the 4-line window starts exactly
+   where the still lyrics did */
+.lyr-area.live{justify-content:flex-start}
+.lyr-win{margin-top:20px}
+/* the current chord + its diagram sit dead centre; the next chord hangs
+   beside it (portrait) or above it (landscape) */
+.diagram-row > div{position:relative}
+.diagram-row .diaNextWrap{position:absolute;left:100%;top:50%;transform:translateY(-50%);margin-left:26px}
+.dia-v{position:relative}
+.dia-v-next{position:absolute;bottom:100%;left:50%;transform:translateX(-50%);margin-bottom:10px}
+/* tempo: set speed / audio synced */
+.speedctl{display:flex;flex-direction:column;align-items:center;gap:6px;width:100%;max-width:280px}
+.speedval{font-size:28px;font-weight:800;letter-spacing:-0.01em;margin-top:-6px}
+.speed-range{width:100%;accent-color:#f24822;height:28px;touch-action:none}
+.tempo-note{font-size:12px;color:#8a8a8a;text-align:center;line-height:1.45;max-width:340px}
+.steptabs{display:flex;border-bottom:1.5px solid #e2e2e2}
+.steptabs button{border:0;background:transparent;width:104px;height:42px;font-size:15px;font-weight:500;color:#8a8a8a;border-bottom:2.5px solid transparent;margin-bottom:-1.5px}
+.steptabs button.on{font-weight:700;color:#1b1b1b;border-bottom-color:#1b1b1b}
+.steptabs button.off{color:#c8c8c8}
+@media(max-width:520px){.steptabs button{width:auto;padding:0 12px}}
 `;
   document.head.appendChild(st);
 })();
@@ -265,8 +285,19 @@ function practiceBlock(){
     <button class="btn btn-outline" style="width:170px" data-act="stopPractice">Stop</button>
   </div>`;
 }
+// A song needs a title (at least one word) and at least 3 sung words of
+// lyrics before you can move on from the Lyrics step.
+function lyricWordCount(d){ return parseLyrics(d && d.lyrics).filter(ws=>!isHeaderLine(ws)).reduce((n,ws)=>n+ws.length,0); }
+function lyricsReady(d){ return !!(d && (d.title||'').trim()) && lyricWordCount(d) >= 3; }
+function lyricsMissing(d){
+  const t = !(d.title||'').trim(), n = lyricWordCount(d);
+  if(t && n<3) return 'Add a title and at least 3 words of lyrics to continue';
+  if(t) return 'Add a title to continue';
+  if(n<3) return 'Add at least 3 words of lyrics to continue';
+  return '';
+}
 function renderManualLyrics(d){
-  const hasLyrics = !!d.lyrics.trim();
+  const hasLyrics = lyricsReady(d), missing = lyricsMissing(d);
   return `<div style="width:100%;flex:1;display:flex;flex-direction:column;gap:14px;margin-top:28px;max-width:640px;margin-left:auto;margin-right:auto">
     <div class="row" style="gap:14px">
       <input class="ipt" style="height:64px;font-size:18px;font-weight:600" placeholder="Title" value="${esc(d.title)}" data-bind="draftTitle">
@@ -275,7 +306,8 @@ function renderManualLyrics(d){
     <input class="ipt" style="height:64px" placeholder="Sub title — artist, version" value="${esc(d.sub)}" data-bind="draftSub">
     <textarea class="ipt" style="min-height:300px;font-size:18px" placeholder="Type or paste lyrics, one line per row" data-bind="draftLyrics">${esc(d.lyrics)}</textarea>
     ${confirmFootnote()}
-    ${ST.editing ? `<div class="row" style="align-self:center"><button class="btn btn-dark" style="width:220px;height:48px" data-act="editDone">Done</button></div>` : `<div class="row" style="gap:12px;align-self:center">
+    ${missing ? `<div style="text-align:center;font-size:13px;color:#2f8fe0">${missing}</div>` : ''}
+    ${ST.editing ? `<div class="row" style="align-self:center"><button class="btn ${hasLyrics?'btn-dark':'btn-disabled'}" style="width:220px;height:48px" data-act="editDone">Done</button></div>` : `<div class="row" style="gap:12px;align-self:center">
       <button class="btn btn-outline" style="width:170px;height:48px" data-act="abortCreate">Abort</button>
       <button class="btn ${hasLyrics?'btn-dark':'btn-disabled'}" style="width:170px;height:48px" data-act="lyricsNext">Next</button>
     </div>`}
