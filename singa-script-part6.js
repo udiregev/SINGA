@@ -65,11 +65,11 @@ function renderGigPlayer(){
   const lc = liveChord(s, tm, ST.t);
   const chord = lc.chord, next = lc.next;
   const hasInst = ST.instrument!=='none';
-  const gigShowChords = hasInst || isCollab;
+  const gigShowChords = (hasInst || isCollab) && seq.length>0;   // no chords: no chord section at all
   const dia = diagram(chord, next || (seq[0]||{}).ch, isCollab ? (ST.part==='Keys'?'piano':'guitar') : ST.instrument);
   if(gStarted) dia.progress = lc.progress;
   const gigHasLyrics = !!(s.lyrics && s.lyrics.trim());
-  const lines = gigHasLyrics ? buildLines(s, gStarted?'play':'view', { t: gStarted?ST.t:null, hideChords: !isCollab && !hasInst, leftTop: true }) : [];
+  const lines = gigHasLyrics ? buildLines(s, gStarted?(songMode(s)==='synced'?'play':'scroll'):'view', { t: gStarted?ST.t:null, hideChords: !isCollab && !hasInst, leftTop: true }) : [];
 
   const qRow = (id, kind) => {
     const x = song(id), isCur = kind==='cur';
@@ -167,9 +167,7 @@ function renderPickerModal(){
     const q = (ST.spQuery||'').trim().toLowerCase();
     heading = 'Add songs'; sub = sp.kind==='all' ? 'New songs go into your library' : (target?target.title:''); hasSearch = sp.kind!=='all'; query = ST.spQuery||'';
     const createOpts = `<div style="display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 10px">
-      <button class="btn btn-dark btn-sm" style="flex:1 1 120px;display:flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap" data-act="addNewSong" data-id="manual">${icon('edit',18)}Create new</button>
-      <button class="btn btn-outline btn-sm" style="flex:1 1 120px;display:flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap" data-act="addNewSong" data-id="recording">${icon('mic',18)}From recording</button>
-      <button class="btn btn-outline btn-sm" style="flex:1 1 120px;display:flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap" data-act="addNewSong" data-id="file">${icon('description',18)}From file</button>
+      <button class="btn btn-dark btn-sm" style="flex:1 1 100%;display:flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap" data-act="addNewSong" data-id="manual">${icon('add',18)}Create new</button>
     </div>${sp.kind==='all'?'':`<div style="font-size:12px;font-weight:700;letter-spacing:.06em;color:#8a8a8a;text-transform:uppercase;margin-top:6px">Or pick from your songs</div>`}`;
     sub = sub; closeAct = 'closeSongPick';
     rows = sp.kind==='all' ? '' : D.order.filter(id=>{ const x=song(id); return !q || ((x.title||'')+' '+(x.sub||'')).toLowerCase().includes(q); })
