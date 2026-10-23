@@ -62,8 +62,9 @@ function renderSongBody(d){
   // play back (see syncPreviewPlay), using real forced-alignment timing.
   const previewPlaying = ST.step==='sync' && ST.ctx==='syncpreview' && ST.playing;
   const following = ST.step==='sync' && ST.phase==='practicing' && ST.pracState==='following';
-  const editMode = ST.step==='chords' ? 'chords' : ST.step==='markings' ? 'markings' : (previewPlaying||following ? 'play' : 'static');
-  const liveT = (ST.phase==='recording'||ST.phase==='practicing') ? ST.recT : (previewPlaying ? ST.t : null);
+  const editMode = ST.step==='chords' ? 'chords' : ST.step==='markings' ? 'markings' : (previewPlaying ? (ST.testSpeed ? 'scroll' : 'play') : (following ? 'play' : 'static'));
+  // the recording screen scrolls at the song's set speed
+  const liveT = ST.phase==='recording' ? ST.recT*songSpeed(d) : ST.phase==='practicing' ? ST.recT : (previewPlaying ? ST.t : null);
   const lines = buildLines(d, editMode, liveT!=null ? {t:liveT} : null);
   const opacity = (ST.phase==='countdown'||ST.phase==='processing') ? 0.12 : 1;
   const skipLabel = ST.step==='chords' ? 'Skip (detect chords from a recording instead)' : 'Skip';
@@ -95,17 +96,44 @@ function renderSongBody(d){
         </div>
         <a class="link" style="color:#9a9a9a;text-align:center" data-act="${skipAct}">${skipLabel}</a>
       </div>` : ''}
-    ${ST.step==='sync' && ST.phase==='idle' ? `<div style="flex:none;display:flex;flex-direction:column;align-items:center;gap:12px;width:100%;max-width:340px;margin:0 auto">
-        ${ST.autoChords?`<div style="font-size:13px;color:#2f8fe0;text-align:center;margin-bottom:6px;line-height:1.45">Chords will be detected from the instruments in your recording. No need to wait for it — we'll let you know when the song is ready.</div>`:''}
-        ${d.synced ? `<button class="btn btn-dark" style="width:100%" data-act="syncPreviewPlay">${previewPlaying?'Pause':'Play your synced take'}</button>` : ''}
-        <button class="btn btn-grey" style="width:100%" data-act="practiceDraft">Practice</button>
-        <button class="btn btn-accent" style="width:100%" data-act="startRecord">Record</button>
-        <a class="link" style="text-decoration:underline;margin-top:4px" data-act="startUpload">Upload</a>
-        <div style="font-size:12px;color:#8a8a8a;text-align:center">Sing and play it once. Singa isolates your vocal, aligns every word and detects the chords.</div>
-      </div>` : ''}
+    ${ST.step==='sync' && ST.phase==='idle' ? tempoPanelHTML(d) : ''}
     ${ST.step==='sync' && (ST.phase==='countdown'||ST.phase==='recording') ? waveformBlock() : ''}
     ${ST.step==='sync' && ST.phase==='practicing' ? practiceBlock() : ''}
   </div>`;
+}
+
+// Tempo step: Set speed (default x1 — the lyrics scroll at that speed, no
+// highlighting) or Audio synced (record / upload a take — every word
+// highlighted as it's sung).
+function tempoPanelHTML(d){
+  const tab = ST.tempoTab || songMode(d);
+  const testing = ST.ctx==='syncpreview' && ST.playing && ST.testSpeed;
+  const previewPlaying = ST.ctx==='syncpreview' && ST.playing && !ST.testSpeed;
+  const seg = `<div class="seg">${[['speed','Set speed'],['synced','Audio synced']].map(([k,l])=>`<button class="${k===tab?'on':''}" data-act="setTempoTab" data-id="${k}">${l}</button>`).join('')}</div>`;
+  const speed = `${speedControlHTML(d)}
+    <div class="row" style="gap:12px;flex-wrap:wrap;justify-content:center">
+      <button class="btn btn-grey" style="width:150px" data-act="testSpeed">${testing?'Stop':'Test'}</button>
+      <button class="btn btn-accent" style="min-width:230px;padding:0 20px;white-space:nowrap" data-act="recordTempo">Record your own tempo</button>
+    </div>
+    <div class="tempo-note">The lyrics scroll at this speed in the song viewer, without highlighting the words. Record your own tempo to have every word follow your take.</div>`;
+  const synced = `<div style="display:flex;flex-direction:column;align-items:center;gap:12px;width:100%;max-width:340px">
+    ${ST.autoChords?`<div style="font-size:13px;color:#2f8fe0;text-align:center;line-height:1.45">Chords will be detected from the instruments in your recording. No need to wait for it — we'll let you know when the song is ready.</div>`:''}
+    ${d.synced ? `<button class="btn btn-dark" style="width:100%" data-act="syncPreviewPlay">${previewPlaying?'Pause':'Play your synced take'}</button>` : ''}
+    <button class="btn btn-grey" style="width:100%" data-act="practiceDraft">Practice</button>
+    <button class="btn btn-accent" style="width:100%" data-act="startRecord">Record</button>
+    <a class="link" style="text-decoration:underline;margin-top:2px" data-act="startUpload">Upload</a>
+    <div class="tempo-note">Sing and play it once — Singa lines up every word with your take. The lyrics on the recording screen scroll at ${speedLabel(songSpeed(d))}.</div>
+  </div>`;
+  const foot = ST.editing ? '' : `<div class="row" style="gap:12px;margin-top:4px">
+      <button class="btn btn-outline" style="width:150px" data-act="abortCreate">Abort</button>
+      <button class="btn btn-dark" style="width:150px" data-act="finishCreate">Done</button>
+    </div>`;
+  return `<div style="flex:none;display:flex;flex-direction:column;align-items:center;gap:14px;width:100%;max-width:440px;margin:0 auto;padding-bottom:6px">${seg}${tab==='speed'?speed:synced}${foot}</div>`;
+}
+// Lyrics / Chords / Markings / Tempo — the same tabs when creating and editing.
+function stepTabsHTML(d){
+  const ok = lyricsReady(d);
+  return `<div class="steptabs">${[['lyrics','Lyrics'],['chords','Chords'],['markings','Markings'],['sync','Tempo']].map(([k,l])=>`<button class="${k===ST.step?'on':(ok||k==='lyrics'?'':'off')}" data-act="goCreateStep" data-id="${k}">${l}</button>`).join('')}</div>`;
 }
 
 function renderSimilarModal(){
@@ -122,15 +150,13 @@ function renderSimilarModal(){
 }
 
 function renderEdit(d){
-  const parts = [['chords','Chords'],['markings','Markings'],['lyrics','Lyrics'],['sync','Retake']];
   const body = ST.step==='lyrics' ? renderManualLyrics(d) : renderSongBody(d);
-  return `<div class="scr center edit-mode" style="padding-top:16px">
-    <div style="width:100%;display:flex;align-items:center;gap:12px;max-width:760px">
+  return `<div class="scr center" style="padding-top:16px">
+    <div style="width:100%;display:flex;align-items:center;gap:8px;margin-top:20px;min-height:44px;max-width:760px">
       <span class="icon-btn" title="Save and close" data-act="editDone">${icon('chevron_left',26)}</span>
-      <div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:800;letter-spacing:.08em;color:#2f8fe0">EDITING</div><div style="font-size:18px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(d.title||'Untitled song')}</div></div>
+      <div style="flex:1;display:flex;justify-content:center">${stepTabsHTML(d)}</div>
       <button class="btn btn-dark btn-sm" data-act="editDone">Done</button>
     </div>
-    <div class="seg" style="margin-top:14px">${parts.map(([k,l])=>`<button class="${k===ST.step?'on':''}" data-act="goCreateStep" data-id="${k}">${l}</button>`).join('')}</div>
     ${body}
   </div>`;
 }
@@ -162,16 +188,13 @@ function renderCreate(){
   const phaseIdle = ST.phase==='idle';
   const modeLocked = !phaseIdle || (ST.createMode==='manual' && ST.step!=='lyrics');
   const modeSegShown = !modeLocked;
-  const modes = [['manual','Manual'],['recording','From Recording'],['file','From File']];
+  const modes = [['manual','Manual'],['recording','Import audio'],['file','Import text']];
   const modeSeg = `<div class="seg">
     ${modes.map(([v,l])=>`<button class="${v===ST.createMode?'on':''}" data-act="setCreateMode" data-id="${v}">${l}</button>`).join('')}
   </div>`;
   const hasLyrics = !!d.lyrics.trim();
-  const stepTabs = ['lyrics','chords','markings','sync'];
   const isManual = ST.createMode==='manual';
-  const stepTabsHTML = isManual ? `<div style="display:flex;border-bottom:1.5px solid #e2e2e2">
-    ${stepTabs.map(k=>`<button style="border:0;background:transparent;width:104px;height:42px;font-size:15px;font-weight:${k===ST.step?700:500};color:${k===ST.step?'#1b1b1b':(hasLyrics||k==='lyrics'?'#8a8a8a':'#c8c8c8')};border-bottom:2.5px solid ${k===ST.step?'#1b1b1b':'transparent'};margin-bottom:-1.5px" data-act="goCreateStep" data-id="${k}">${k[0].toUpperCase()+k.slice(1)}</button>`).join('')}
-  </div>` : '';
+  const tabsHTML = isManual ? stepTabsHTML(d) : '';
 
   let body = '';
   if(isManual && ST.step==='lyrics'){
@@ -216,7 +239,7 @@ function renderCreate(){
     <div id="modeSegWrap" style="display:flex;justify-content:center;overflow:hidden;max-height:${modeSegShown?'60px':'0px'};opacity:${modeSegShown?1:0}">${modeSeg}</div>
     <div style="width:100%;display:flex;align-items:center;margin-top:20px;min-height:44px;max-width:760px">
       <span class="icon-btn" data-act="createBack">${icon('chevron_left',26)}</span>
-      <div style="flex:1;display:flex;justify-content:center">${stepTabsHTML}</div>
+      <div style="flex:1;display:flex;justify-content:center">${tabsHTML}</div>
       <span style="width:26px"></span>
     </div>
     ${body}
@@ -231,7 +254,12 @@ function renderDone(){
     <svg class="mascot" style="height:280px" viewBox="0 0 160 160" fill="none" aria-hidden="true"><circle cx="80" cy="80" r="74" fill="var(--accent)"/><path d="M50 83l19 19 41-46" stroke="#fff" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/><circle cx="18" cy="34" r="6" fill="var(--accent)"/><circle cx="142" cy="46" r="5" fill="#2a9d6b"/><circle cx="136" cy="124" r="7" fill="#4169c7"/><circle cx="16" cy="118" r="5" fill="#8e4fd6"/></svg>
     <div style="font-size:64px;font-weight:800;letter-spacing:-0.03em;margin-top:12px">Congrats!</div>
     <div style="font-size:22px;text-align:center;line-height:1.4;margin-top:4px">${esc(d.title||'Your song')}<br>was added</div>
-    <div style="display:flex;flex-direction:column;align-items:center;gap:12px;margin-top:30px">
+    ${songMode(d)!=='synced' && !ST.doneNoticeHidden ? `<div style="margin-top:22px;width:100%;max-width:420px;border:1.5px solid #e6e6e6;border-radius:16px;padding:16px 18px;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center">
+      <div style="font-size:15px;font-weight:700">No audio sync for this song</div>
+      <div style="font-size:13px;color:#6f6f6f;line-height:1.45">${ST.doneSpeed ? 'The lyrics will scroll at this speed — set it here, or later from Edit → Tempo.' : `Without a recorded take, the lyrics scroll at a set speed (${speedLabel(songSpeed(d))}) and the words aren't highlighted.`}</div>
+      ${ST.doneSpeed ? speedControlHTML(d) : `<div class="row" style="gap:10px"><button class="btn btn-dark btn-sm" data-act="doneSkipSync">Skip sync</button><button class="btn btn-outline btn-sm" data-act="doneLater">Later</button></div>`}
+    </div>` : ''}
+    <div style="display:flex;flex-direction:column;align-items:center;gap:12px;margin-top:24px">
       <a class="link link-muted" data-act="openPicker" data-kind="playlist">Add to playlist</a>
       <a class="link link-muted" data-act="openPicker" data-kind="gig">Add to a gig</a>
       <a class="link" style="color:${d.isPublic?'#1b1b1b':'#6f6f6f'}" data-act="togglePublic">${d.isPublic?'Public · anyone can copy it':'Make publicly available'}</a>
