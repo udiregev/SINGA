@@ -107,7 +107,7 @@ async function processRecordingFromScratch(songObj, blob, job){
     songObj.title = res.id3Title || fromFile || '';
   }
   songObj.audioDurationSec = res.durationSec;
-  songObj.synced = true;
+  songObj.synced = true; setSongTempo(songObj, { mode:'synced' });
   jobProgress(j, 97, 'Saving a short sample…');
   try{
     const first = songObj.wordTimestamps.length ? songObj.wordTimestamps[0] : 0;
@@ -155,7 +155,7 @@ async function processRecordingBlob(songObj, blob){
     const mapping = alignSequences(refWords, hypWords.map(w=>w.norm));
     songObj.wordTimestamps = fillTimestamps(mapping, hypWords, durationSec);
     songObj.audioDurationSec = durationSec;
-    songObj.synced = true;
+    songObj.synced = true; setSongTempo(songObj, { mode:'synced' });
     // Keep only a short ~5s preview clip from where the singing starts.
     try{
       const startSec = hypWords.length ? hypWords[0].start : 0;
@@ -165,7 +165,7 @@ async function processRecordingBlob(songObj, blob){
   }catch(err){
     console.error('Singa: speech alignment failed, falling back to estimated timing', err);
     toast("Couldn't analyze the audio — using estimated timing instead");
-    songObj.wordTimestamps = null; songObj.audioDurationSec = null; songObj.synced = true;
+    songObj.wordTimestamps = null; songObj.audioDurationSec = null; songObj.synced = true; setSongTempo(songObj, { mode:'synced' });
   }
   finishSong();
   render();
@@ -203,7 +203,7 @@ async function processManualTakeJob(songObj, blob, j){
   const ref = [], refIds = [];
   parseLyrics(songObj.lyrics).forEach((ws,li)=>{ if(!isHeaderLine(ws)) ws.forEach((w,wi)=>{ ref.push(normWord(w)); refIds.push(li+'-'+wi); }); });
   const ts = fillTimestamps(heard.length ? alignSequences(ref, heard.map(h=>h.norm)) : new Array(ref.length).fill(null), heard, dur);
-  songObj.wordTimestamps = ts; songObj.audioDurationSec = dur; songObj.synced = true;
+  songObj.wordTimestamps = ts; songObj.audioDurationSec = dur; songObj.synced = true; setSongTempo(songObj, { mode:'synced' });
   if(!Object.keys(songObj.chords||{}).length){
     const chords = {}; let prev = null;
     (res.sheet.chordTimeline||[]).forEach(seg=>{
