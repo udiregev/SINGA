@@ -41,7 +41,7 @@ function playButtonHTML(playing, act, listening, id){
 }
 // Set-speed songs say how fast they'll scroll, next to Play.
 function speedHintHTML(s){
-  return songMode(s)==='synced' ? '' : `<span style="font-size:12px;color:#8a8a8a;white-space:nowrap">Set speed ${speedLabel(songSpeed(s))}</span>`;
+  return songMode(s)==='synced' ? '' : `<span style="font-size:12px;color:#8a8a8a;white-space:nowrap">Speed ${speedLabel(songSpeed(s))}</span>`;
 }
 // Shared by the song viewer, Practice and the gig player.
 // Portrait: chord diagram above the lyrics (drag ═ to resize it).
