@@ -126,6 +126,11 @@ body.chord-dragging,body.chord-dragging *{cursor:grabbing !important;-webkit-use
    where the still lyrics did */
 .lyr-area.live{justify-content:flex-start}
 .lyr-win{margin-top:20px}
+/* performers see the whole song scrolling (only the audience view is 4 lines) */
+.lyr-area.live .lyr-win{height:auto !important;flex:1 1 auto;min-height:0}
+.spchips{display:flex;flex-wrap:wrap;justify-content:center;gap:8px}
+.spchip{height:40px;padding:0 16px;border-radius:999px;border:1.5px solid #d6d6d6;background:#fff;font-size:15px;font-weight:700;color:#6f6f6f;white-space:nowrap}
+.spchip.on{border-color:#1b1b1b;background:#1b1b1b;color:#fff}
 /* the current chord + its diagram sit dead centre; the next chord hangs
    beside it (portrait) or above it (landscape) */
 .diagram-row > div{position:relative}
@@ -296,6 +301,16 @@ function lyricsMissing(d){
   if(n<3) return 'Add at least 3 words of lyrics to continue';
   return '';
 }
+// Typing the title / lyrics never re-renders the screen (that would close
+// the on-screen keyboard after every key): only the hint, Next and the step
+// tabs are updated in place.
+function refreshLyricsGate(){
+  const d = D.songs[ST.editId]; if(!d) return;
+  const ok = lyricsReady(d);
+  const m = document.getElementById('lyricsMissing'); if(m) m.textContent = lyricsMissing(d);
+  const b = document.getElementById('lyricsNextBtn'); if(b){ b.classList.toggle('btn-dark', ok); b.classList.toggle('btn-disabled', !ok); }
+  document.querySelectorAll('.steptabs button').forEach(t=>{ if(!t.classList.contains('on') && t.dataset.id!=='lyrics') t.classList.toggle('off', !ok); });
+}
 function renderManualLyrics(d){
   const hasLyrics = lyricsReady(d), missing = lyricsMissing(d);
   return `<div style="width:100%;flex:1;display:flex;flex-direction:column;gap:14px;margin-top:28px;max-width:640px;margin-left:auto;margin-right:auto">
@@ -306,10 +321,10 @@ function renderManualLyrics(d){
     <input class="ipt" style="height:64px" placeholder="Sub title — artist, version" value="${esc(d.sub)}" data-bind="draftSub">
     <textarea class="ipt" style="min-height:300px;font-size:18px" placeholder="Type or paste lyrics, one line per row" data-bind="draftLyrics">${esc(d.lyrics)}</textarea>
     ${confirmFootnote()}
-    ${missing ? `<div style="text-align:center;font-size:13px;color:#2f8fe0">${missing}</div>` : ''}
-    ${ST.editing ? `<div class="row" style="align-self:center"><button class="btn ${hasLyrics?'btn-dark':'btn-disabled'}" style="width:220px;height:48px" data-act="editDone">Done</button></div>` : `<div class="row" style="gap:12px;align-self:center">
+    <div id="lyricsMissing" style="text-align:center;font-size:13px;color:#2f8fe0;min-height:16px">${missing}</div>
+    ${ST.editing ? `<div class="row" style="align-self:center"><button id="lyricsNextBtn" class="btn ${hasLyrics?'btn-dark':'btn-disabled'}" style="width:220px;height:48px" data-act="editDone">Done</button></div>` : `<div class="row" style="gap:12px;align-self:center">
       <button class="btn btn-outline" style="width:170px;height:48px" data-act="abortCreate">Abort</button>
-      <button class="btn ${hasLyrics?'btn-dark':'btn-disabled'}" style="width:170px;height:48px" data-act="lyricsNext">Next</button>
+      <button id="lyricsNextBtn" class="btn ${hasLyrics?'btn-dark':'btn-disabled'}" style="width:170px;height:48px" data-act="lyricsNext">Next</button>
     </div>`}
   </div>`;
 }
