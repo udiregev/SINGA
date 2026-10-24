@@ -44,6 +44,11 @@ input.field{height:50px;border:1.5px solid var(--line);border-radius:12px;paddin
 .lword.cur .ltext{color:var(--fg);font-weight:700}
 .lline.lheader{opacity:.5;font-style:italic;font-size:13px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--muted)}
 .lword.done .ltext{color:var(--muted);opacity:.6}
+.lword.line .ltext{color:var(--fg)}
+/* the audience sees 4 lines at a time (phone or a big monitor) */
+.lyr4{flex:1;min-height:0;overflow:hidden;padding:14px 22px;display:flex;flex-direction:column;align-items:flex-start}
+.lyr4 .lyrics-wrap{gap:18px}
+@media(min-width:900px){#app:has(.lyr4){max-width:none}.lyr4{padding:3vh 6vw;justify-content:center}.lyr4 .lword .ltext{font-size:clamp(28px,3.6vw,64px)}.lyr4 .lword .lchord{font-size:clamp(14px,1.5vw,26px);height:1.4em}.lyr4 .lline{column-gap:clamp(10px,1.1vw,20px)}.lyr4 .lyrics-wrap{max-width:none;gap:3vh}}
 .empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;padding:40px 24px;color:var(--muted)}
 .empty h2{font-size:18px;color:var(--fg);margin:0}
 /* ---- Tabs ---- */
@@ -107,11 +112,20 @@ function parseLyrics(text){ return (text||'').split('\n').map(l=>l.trim()).filte
 function isHeaderLine(ws){ if(!ws || !ws.length) return false; return /^[\[(]/.test(ws[0]) && /[\])]$/.test(ws[ws.length-1]); }
 function timing(s){
   const lines = parseLyrics(s && s.lyrics); const words = [];
-  lines.forEach((ws,li)=>{ if(isHeaderLine(ws)) return; ws.forEach((w,wi)=>words.push({li,wi,t:1+li*4+wi*(3.2/ws.length)})); });
+  // same x1 pace as the app: ~2.2 sung words a second + a breath per line
+  let tt = 1;
+  lines.forEach((ws,li)=>{ if(isHeaderLine(ws)) return; ws.forEach((w,wi)=>{ words.push({li,wi,t:tt}); tt += 0.45; }); tt += 1; });
   const realTs = s && s.word_timestamps;
   if(realTs && realTs.length===words.length){ words.forEach((w,i)=>{ if(typeof realTs[i]==='number' && isFinite(realTs[i])) w.t = realTs[i]; }); }
-  const total = (s && typeof s.audio_duration_sec==='number') ? s.audio_duration_sec : (1+lines.length*4+1.5);
+  const total = (s && typeof s.audio_duration_sec==='number') ? s.audio_duration_sec : (tt+1);
   return { lines, words, total };
+}
+// The song's tempo (set in the app): a recorded tempo highlights the words in
+// time; a set speed (x0.5–x2.5, default x1) just scrolls the lyrics.
+function songTempo(s){
+  const t = (s && s.notes && s.notes._tempo) || {};
+  const synced = !!(s && s.synced) && (t.mode ? t.mode==='synced' : true);
+  return { synced, speed: synced ? 1 : (+t.speed || 1) };
 }
 function curWord(tm,t){ let i=-1; for(let k=0;k<tm.words.length;k++){ if(tm.words[k].t<=t) i=k; else break; } return i; }
 
@@ -207,19 +221,25 @@ function renderLyricsTab(){
   if(live.vcd>0){ return `<div class="empty"><h2>Starting in ${Math.max(1,Math.ceil(live.vcd))}…</h2></div>`; }
   if(!s.lyrics || !s.lyrics.trim()){ return `<div class="empty"><h2>No synced lyrics for this song yet</h2></div>`; }
 
-  const tm = timing(s);
-  const elapsed = live.playing ? (performance.now() - ST.receivedAt) / 1000 : 0;
+  const tm = timing(s), tempo = songTempo(s);
+  const elapsed = live.playing ? (performance.now() - ST.receivedAt) / 1000 * tempo.speed : 0;
   const t = Math.min(tm.total, (live.t||0) + elapsed);
   const ci = curWord(tm, t);
+  const curLi = ci>=0 ? tm.words[ci].li : 0;
+  // only 4 lines at a time: the one before, the current one and the next two
+  const first = Math.max(0, curLi-1);
   let k=-1;
   const html = tm.lines.map((ws,li)=>{
-    if(isHeaderLine(ws)) return `<div class="lline lheader">${esc(ws.join(' '))}</div>`;
-    const wordsHTML = ws.map((w,wi)=>{
+    const header = isHeaderLine(ws);
+    let wordsHTML = '';
+    if(!header) wordsHTML = ws.map((w,wi)=>{
       k++;
       const chord = (s.chords||{})[li+'-'+wi];
-      const cls = k===ci?'cur':(k<ci?'done':'');
+      const cls = !tempo.synced ? 'line' : (k===ci?'cur':(k<ci?'done':''));
       return `<div class="lword ${cls}">${chord?`<div class="lchord">${esc(chord)}</div>`:'<div class="lchord"></div>'}<div class="ltext">${esc(w)}</div></div>`;
     }).join('');
+    if(li<first || li>=first+4) return '';
+    if(header) return `<div class="lline lheader">${esc(ws.join(' '))}</div>`;
     return `<div class="lline">${wordsHTML}</div>`;
   }).join('');
   const statusLine = live.listening ? 'Listening for the performer to start singing…' : (!live.playing ? 'Paused' : '');
@@ -228,7 +248,7 @@ function renderLyricsTab(){
       <div style="font-size:16px;font-weight:700;margin-top:2px">${esc(s.title||'Untitled song')}</div>
       ${statusLine?`<div style="font-size:12px;color:var(--muted);margin-top:2px">${statusLine}</div>`:''}
     </div>
-    <div style="flex:1;min-height:0;overflow:auto;padding:14px 22px 30%;display:flex;flex-direction:column;align-items:flex-start">
+    <div class="lyr4">
       <div class="lyrics-wrap">${html}</div>
     </div>`;
 }
