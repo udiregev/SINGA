@@ -102,33 +102,34 @@ function renderSongBody(d){
   </div>`;
 }
 
-// Tempo step: Set speed (default x1 — the lyrics scroll at that speed, no
-// highlighting) or Audio synced (record / upload a take — every word
-// highlighted as it's sung).
+// Tempo step: the speed the lyrics scroll at. x1 is the pace of an average
+// song; pick x0.5–x2.5, Practice to try it, or set your own tempo by
+// recording (or uploading) yourself singing it — then the words are also
+// highlighted in time with you.
+const SPEEDS = [0.5, 1, 1.5, 2, 2.5];
 function tempoPanelHTML(d){
-  const tab = ST.tempoTab || songMode(d);
-  const testing = ST.ctx==='syncpreview' && ST.playing && ST.testSpeed;
-  const previewPlaying = ST.ctx==='syncpreview' && ST.playing && !ST.testSpeed;
-  const seg = `<div class="seg">${[['speed','Set speed'],['synced','Audio synced']].map(([k,l])=>`<button class="${k===tab?'on':''}" data-act="setTempoTab" data-id="${k}">${l}</button>`).join('')}</div>`;
-  const speed = `${speedControlHTML(d)}
-    <div class="row" style="gap:12px;flex-wrap:wrap;justify-content:center">
-      <button class="btn btn-grey" style="width:150px" data-act="testSpeed">${testing?'Stop':'Test'}</button>
-      <button class="btn btn-accent" style="min-width:230px;padding:0 20px;white-space:nowrap" data-act="recordTempo">Record your own tempo</button>
-    </div>
-    <div class="tempo-note">The lyrics scroll at this speed in the song viewer, without highlighting the words. Record your own tempo to have every word follow your take.</div>`;
-  const synced = `<div style="display:flex;flex-direction:column;align-items:center;gap:12px;width:100%;max-width:340px">
-    ${ST.autoChords?`<div style="font-size:13px;color:#2f8fe0;text-align:center;line-height:1.45">Chords will be detected from the instruments in your recording. No need to wait for it — we'll let you know when the song is ready.</div>`:''}
-    ${d.synced ? `<button class="btn btn-dark" style="width:100%" data-act="syncPreviewPlay">${previewPlaying?'Pause':'Play your synced take'}</button>` : ''}
-    <button class="btn btn-grey" style="width:100%" data-act="practiceDraft">Practice</button>
-    <button class="btn btn-accent" style="width:100%" data-act="startRecord">Record</button>
-    <a class="link" style="text-decoration:underline;margin-top:2px" data-act="startUpload">Upload</a>
-    <div class="tempo-note">Sing and play it once — Singa lines up every word with your take. The lyrics on the recording screen scroll at ${speedLabel(songSpeed(d))}.</div>
-  </div>`;
-  const foot = ST.editing ? '' : `<div class="row" style="gap:12px;margin-top:4px">
+  const mode = songMode(d), sp = songSpeed(d);
+  const playing = ST.ctx==='syncpreview' && ST.playing;
+  const chip = (id, label, on) => `<button class="spchip${on?' on':''}" data-act="setSpeed" data-id="${id}">${label}</button>`;
+  const chips = (d.synced ? chip('rec', 'Your tempo', mode==='synced') : '') + SPEEDS.map(v=>chip(v, speedLabel(v)+(v===1?' · default':''), mode!=='synced' && sp===v)).join('');
+  const note = mode==='synced'
+    ? 'Using the tempo you recorded — the words light up in time with you.'
+    : (sp===1 ? 'x1 is the pace of an average song (about 4 seconds a line).' : 'The lyrics scroll '+(sp<1?'slower':'faster')+' than an average song.')+' Not sure? Practice to try it.';
+  const foot = ST.editing ? '' : `<div class="row" style="gap:12px;margin-top:6px">
       <button class="btn btn-outline" style="width:150px" data-act="abortCreate">Abort</button>
       <button class="btn btn-dark" style="width:150px" data-act="finishCreate">Done</button>
     </div>`;
-  return `<div style="flex:none;display:flex;flex-direction:column;align-items:center;gap:14px;width:100%;max-width:440px;margin:0 auto;padding-bottom:6px">${seg}${tab==='speed'?speed:synced}${foot}</div>`;
+  return `<div style="flex:none;display:flex;flex-direction:column;align-items:center;gap:14px;width:100%;max-width:460px;margin:0 auto;padding-bottom:6px">
+    ${ST.autoChords?`<div style="font-size:13px;color:#2f8fe0;text-align:center;line-height:1.45">Record or upload yourself playing it and Singa will detect the chords too — we'll let you know when the song is ready.</div>`:''}
+    <div class="spchips">${chips}</div>
+    <div class="tempo-note">${note}</div>
+    <div style="display:flex;flex-direction:column;gap:10px;width:100%;max-width:340px">
+      <button class="btn btn-grey" style="width:100%" data-act="practiceTempo">${playing?'Stop':'Practice'}</button>
+      <button class="btn btn-accent" style="width:100%" data-act="startRecord">Set your tempo — record</button>
+      <button class="btn btn-outline" style="width:100%" data-act="startUpload">Set your tempo — upload audio</button>
+    </div>
+    ${foot}
+  </div>`;
 }
 // Lyrics / Chords / Markings / Tempo — the same tabs when creating and editing.
 function stepTabsHTML(d){
@@ -254,11 +255,6 @@ function renderDone(){
     <svg class="mascot" style="height:280px" viewBox="0 0 160 160" fill="none" aria-hidden="true"><circle cx="80" cy="80" r="74" fill="var(--accent)"/><path d="M50 83l19 19 41-46" stroke="#fff" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/><circle cx="18" cy="34" r="6" fill="var(--accent)"/><circle cx="142" cy="46" r="5" fill="#2a9d6b"/><circle cx="136" cy="124" r="7" fill="#4169c7"/><circle cx="16" cy="118" r="5" fill="#8e4fd6"/></svg>
     <div style="font-size:64px;font-weight:800;letter-spacing:-0.03em;margin-top:12px">Congrats!</div>
     <div style="font-size:22px;text-align:center;line-height:1.4;margin-top:4px">${esc(d.title||'Your song')}<br>was added</div>
-    ${songMode(d)!=='synced' && !ST.doneNoticeHidden ? `<div style="margin-top:22px;width:100%;max-width:420px;border:1.5px solid #e6e6e6;border-radius:16px;padding:16px 18px;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center">
-      <div style="font-size:15px;font-weight:700">No audio sync for this song</div>
-      <div style="font-size:13px;color:#6f6f6f;line-height:1.45">${ST.doneSpeed ? 'The lyrics will scroll at this speed — set it here, or later from Edit → Tempo.' : `Without a recorded take, the lyrics scroll at a set speed (${speedLabel(songSpeed(d))}) and the words aren't highlighted.`}</div>
-      ${ST.doneSpeed ? speedControlHTML(d) : `<div class="row" style="gap:10px"><button class="btn btn-dark btn-sm" data-act="doneSkipSync">Skip sync</button><button class="btn btn-outline btn-sm" data-act="doneLater">Later</button></div>`}
-    </div>` : ''}
     <div style="display:flex;flex-direction:column;align-items:center;gap:12px;margin-top:24px">
       <a class="link link-muted" data-act="openPicker" data-kind="playlist">Add to playlist</a>
       <a class="link link-muted" data-act="openPicker" data-kind="gig">Add to a gig</a>
