@@ -433,7 +433,11 @@ function isHeaderLine(ws){
 }
 function timing(s){
   const lines = parseLyrics(s && s.lyrics); const words = [];
-  lines.forEach((ws,li)=>{ if(isHeaderLine(ws)) return; ws.forEach((w,wi)=>words.push({li,wi,t:1+li*4+wi*(3.2/ws.length)})); });
+  // x1 (no recorded tempo): the pace of an average song — about 2.2 sung
+  // words a second plus a short breath between lines, i.e. roughly 4 seconds
+  // for a typical 7-word line (two bars at ~110 BPM).
+  let tt = 1;
+  lines.forEach((ws,li)=>{ if(isHeaderLine(ws)) return; ws.forEach((w,wi)=>{ words.push({li,wi,t:tt}); tt += 0.45; }); tt += 1; });
   // If a real recording was captured and force-aligned (see processRecordingBlob),
   // s.wordTimestamps holds one real timestamp per word (seconds into the take) —
   // use those instead of the evenly-spaced estimate above. Falls through to the
@@ -442,7 +446,7 @@ function timing(s){
   if(realTs && realTs.length===words.length){
     words.forEach((w,i)=>{ if(typeof realTs[i]==='number' && isFinite(realTs[i])) w.t = realTs[i]; });
   }
-  const total = (s && typeof s.audioDurationSec==='number') ? s.audioDurationSec : (1+lines.length*4+1.5);
+  const total = (s && typeof s.audioDurationSec==='number') ? s.audioDurationSec : (tt+1);
   return { lines, words, total };
 }
 function curWord(tm,t){ let i=-1; for(let k=0;k<tm.words.length;k++){ if(tm.words[k].t<=t) i=k; else break; } return i; }
