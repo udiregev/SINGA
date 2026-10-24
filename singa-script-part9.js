@@ -235,6 +235,20 @@ const Actions = {
     if(ST.ctx==='syncpreview' && ST.playing && ST.testSpeed){ ST.playing=false; ST.testSpeed=false; ST.t=0; render(); return; }
     ST.ctx='syncpreview'; ST.testSpeed=true; ST.t=0; ST.editorLine=0; ST.playing=true; render();
   },
+  setSpeed(d){
+    const s = D.songs[ST.editId]; if(!s) return;
+    if(ST.ctx==='syncpreview'){ ST.playing=false; ST.testSpeed=false; ST.t=0; }
+    if(d.id==='rec') setSongTempo(s, { mode:'synced' });
+    else setSongTempo(s, { mode:'speed', speed:+d.id });
+    render(); queueSaveSong(s.id);
+  },
+  // Practice: run through the lyrics at the chosen tempo (your recorded one
+  // highlights the words; a set speed just scrolls)
+  practiceTempo(){
+    const s = D.songs[ST.editId]; if(!s) return;
+    if(ST.ctx==='syncpreview' && ST.playing){ ST.playing=false; ST.testSpeed=false; ST.t=0; render(); return; }
+    ST.ctx='syncpreview'; ST.testSpeed = songMode(s)!=='synced'; ST.t=0; ST.editorLine=0; ST.playing=true; render();
+  },
   recordTempo(){ ST.playing=false; ST.testSpeed=false; ST.tempoTab='synced'; Actions.startRecord(); },
   // Done on the Tempo step: the song is added (set speed if there's no take)
   finishCreate(){
