@@ -15,6 +15,8 @@ const Binds = {
   ceName(v){ ST.collabEdit.name=v; },
   ceEmail(v){ ST.collabEdit.email=v; },
   gigMsgDraft(v){ ST.gigMsgDraft=v; },
+  // the Embed link box: only the → button lights up, no re-render
+  linkDraft(v){ ST.linkDraft=v; document.querySelectorAll('.tp-go').forEach(b=>b.classList.toggle('on', !!v.trim())); },
   // the speed slider moves the speedometer in place (no re-render mid-drag)
   songSpeed(v){
     const s = D.songs[ST.editId]; if(!s) return;
