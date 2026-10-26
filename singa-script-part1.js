@@ -454,6 +454,19 @@ function chordAt(s,tm,i){ let c=null; for(let k=0;k<=i&&k<tm.words.length;k++){ 
 function chordSeq(s){ const tm=timing(s); const seq=[]; tm.words.forEach((w,k)=>{ const ch=s.chords[w.li+'-'+w.wi]; if(ch) seq.push({k,ch}); }); return seq; }
 function liveChord(s, tm, t){
   const seq = chordSeq(s), ci = curWord(tm, t);
+  // still in the instrumental intro: the diagram follows the intro's chords
+  if(ci<0 && typeof introInfo==='function'){
+    const it = introInfo(s, tm);
+    if(it && it.end>0 && it.chords.length){
+      let k = -1; it.chords.forEach((c,i)=>{ if(c.t<=t) k = i; });
+      if(k>=0){
+        const cur = it.chords[k], nx = it.chords.slice(k+1).find(c=>c.ch!==cur.ch);
+        const nextCh = nx ? nx.ch : ((seq.find(x=>x.ch!==cur.ch)||{}).ch || null);
+        const t1 = nx ? nx.t : it.end;
+        return { chord: cur.ch, next: nextCh, progress: t1>cur.t ? Math.max(0, Math.min(1, (t-cur.t)/(t1-cur.t))) : null, ci };
+      }
+    }
+  }
   let cur = null; seq.forEach(x=>{ if(x.k<=ci) cur = x; });
   const chord = cur ? cur.ch : (seq[0]||{}).ch;
   const nxt = seq.find(x=>x.k>ci && x.ch!==chord);
