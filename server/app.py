@@ -26,6 +26,17 @@ Endpoint:
   Response 4xx/5xx JSON:
     { "error": "human-readable message" }
 
+  POST /fetch-audio
+    JSON { "url": "https://www.youtube.com/watch?v=..." } — any page yt-dlp
+    understands (YouTube, SoundCloud, Vimeo, a direct .mp3 link, ...).
+    Response 200: the audio file itself (m4a/mp3/...), with the track's
+    title in the X-Title header (URL-encoded). Errors come back as JSON
+    { "error": "..." }. Used by the app's "Embed link" box: the browser
+    can't download from YouTube itself, so the server fetches the audio and
+    the app analyses it exactly like an uploaded file.
+    Optional env var YTDLP_COOKIES: the contents of a cookies.txt (Netscape
+    format) for when YouTube asks the server to "confirm you're not a bot".
+
 Run locally:
     pip install -r requirements.txt
     uvicorn app:app --host 0.0.0.0 --port 8000
@@ -35,18 +46,20 @@ Then test:
 """
 import collections
 import collections.abc
+import glob
 import os
 import subprocess
 import tempfile
+import urllib.parse
 
 # madmom (last released 2018) still references these pre-3.10 aliases.
 collections.MutableSequence = collections.abc.MutableSequence
 collections.Iterable = collections.abc.Iterable
 collections.MutableMapping = collections.abc.MutableMapping
 
-from fastapi import FastAPI, File, UploadFile
+from fastapi import Body, FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 app = FastAPI(title="Singa chord recognition")
 
@@ -55,8 +68,9 @@ app = FastAPI(title="Singa chord recognition")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_methods=["POST"],
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
+    expose_headers=["X-Title"],
 )
 
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024  # 25MB — generous for a few minutes of audio
@@ -125,6 +139,71 @@ async def analyze_chords(file: UploadFile = File(...)):
             return JSONResponse(status_code=500, content={"error": "Chord recognition failed: " + str(e)})
 
     return {"chords": chords}
+
+
+AUDIO_TYPES = {".m4a": "audio/mp4", ".mp4": "audio/mp4", ".mp3": "audio/mpeg", ".webm": "audio/webm",
+               ".opus": "audio/ogg", ".ogg": "audio/ogg", ".wav": "audio/wav", ".aac": "audio/aac"}
+
+
+def _yt_dlp_error(stderr: str) -> str:
+    low = stderr.lower()
+    if "confirm you" in low and "bot" in low:
+        return "YouTube is asking the server to prove it isn't a bot. Add YouTube cookies (YTDLP_COOKIES) to the server, or upload the audio file instead."
+    if "private video" in low or "sign in" in low:
+        return "That video is private or needs a sign-in."
+    if "unsupported url" in low:
+        return "That link isn't a page with audio Singa can read."
+    if "does not pass filter" in low:
+        return "That track is longer than 10 minutes."
+    if "file is larger" in low or "max-filesize" in low:
+        return "That track is too large (max 25MB of audio)."
+    lines = [l for l in stderr.strip().splitlines() if l.strip()]
+    return (lines[-1] if lines else "Couldn't download the audio from that link.")[-300:]
+
+
+@app.post("/fetch-audio")
+def fetch_audio(payload: dict = Body(...)):
+    url = str((payload or {}).get("url") or "").strip()
+    if not url.lower().startswith(("http://", "https://")):
+        return JSONResponse(status_code=400, content={"error": "Send a link that starts with https://"})
+    with tempfile.TemporaryDirectory() as tmp:
+        cmd = [
+            "yt-dlp", "--no-playlist", "--no-progress", "--no-warnings",
+            "-f", "bestaudio[ext=m4a]/bestaudio/best",
+            "-x", "--audio-format", "m4a",
+            "--match-filter", "duration <=? %d" % MAX_DURATION_S,
+            "--max-filesize", str(MAX_UPLOAD_BYTES),
+            "--no-simulate", "--print", "after_move:TITLE:%(title)s",
+            "-o", os.path.join(tmp, "audio.%(ext)s"),
+        ]
+        cookies = os.environ.get("YTDLP_COOKIES", "").strip()
+        if cookies:
+            cpath = os.path.join(tmp, "cookies.txt")
+            with open(cpath, "w") as f:
+                f.write(cookies + "\n")
+            cmd += ["--cookies", cpath]
+        cmd.append(url)
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=240)
+        except subprocess.TimeoutExpired:
+            return JSONResponse(status_code=504, content={"error": "Fetching that link took too long."})
+        except FileNotFoundError:
+            return JSONResponse(status_code=500, content={"error": "yt-dlp isn't installed on the server."})
+        files = [p for p in glob.glob(os.path.join(tmp, "audio.*")) if not p.endswith((".part", ".ytdl", ".json"))]
+        if result.returncode != 0 or not files:
+            return JSONResponse(status_code=422, content={"error": _yt_dlp_error(result.stderr or result.stdout or "")})
+        title = ""
+        for line in (result.stdout or "").splitlines():
+            if line.startswith("TITLE:"):
+                title = line[6:].strip()
+        path = max(files, key=os.path.getsize)
+        if os.path.getsize(path) > MAX_UPLOAD_BYTES:
+            return JSONResponse(status_code=413, content={"error": "That track is too large (max 25MB of audio)."})
+        with open(path, "rb") as f:
+            data = f.read()
+    ext = os.path.splitext(path)[1].lower()
+    return Response(content=data, media_type=AUDIO_TYPES.get(ext, "application/octet-stream"),
+                    headers={"X-Title": urllib.parse.quote(title[:200])})
 
 
 @app.get("/")

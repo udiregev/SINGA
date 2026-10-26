@@ -18,6 +18,13 @@ RUN pip install --no-cache-dir \
     fastapi==0.115.0 "uvicorn[standard]==0.30.6" python-multipart==0.0.9
 RUN pip install --no-cache-dir --no-build-isolation madmom==0.16.1
 
+# "Embed link" (POST /fetch-audio): yt-dlp downloads the audio from YouTube
+# and most other sites. Left unpinned on purpose — sites change and yt-dlp
+# ships fixes often, so every rebuild picks up the latest. YouTube also needs
+# a JavaScript runtime for yt-dlp, which is what Deno is here for.
+RUN pip install --no-cache-dir -U "yt-dlp[default]"
+COPY --from=denoland/deno:bin /deno /usr/local/bin/deno
+
 COPY app.py .
 
 ENV PORT=8000
