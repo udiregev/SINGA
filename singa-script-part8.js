@@ -119,56 +119,67 @@ async function processRecordingFromScratch(songObj, blob, job){
   return true;
 }
 
-// Recording / upload. In the "From Recording" flow (or with no lyrics typed
-// yet) the take goes through Audio import 01 above.
-// With lyrics already typed (the manual flow's Sync step) the take is
-// transcribed and force-aligned against those lyrics, word for word.
+// Recording / upload / link. Nothing makes you wait: the take is analysed in
+// the background and you land on the "we'll let you know" screen.
+//  · From audio track, or a song with no lyrics typed: Audio import 01 above
+//    writes the lyrics and finds the chords.
+//  · Lyrics already typed (the manual flow's Tempo step, or editing): the
+//    take gives every word its time, and chords are found if there are none.
 async function processRecordingBlob(songObj, blob){
-  const hadManualLyrics = !!(songObj.lyrics && songObj.lyrics.trim());
-  if(ST.createMode!=='manual' && !ST.editing){ queueImports([blob]); return; }
-  if(!hadManualLyrics) return processRecordingFromScratch(songObj, blob);
-  // Manual song, "detect chords from a recording": like From Recording, no
-  // waiting around — the take is analysed in the background and you're told
-  // when the song is ready.
-  if(ST.autoChords && !ST.editing){ queueManualTake(songObj, blob); return; }
-  ST.phase='processing'; ST.procPct=5; ST.procNote='Listening back to your take…'; render();
-  try{
-    const { float32, durationSec } = await decodeToFloat32Mono16k(blob);
-    ST.procPct=20; render();
-    ST.procNote='Loading the speech model (first time only)…'; render();
-    const { pipeline } = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2');
-    ST.procPct=35; render();
-    const transcriber = await pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny.en');
-    ST.procPct=55; ST.procNote='Transcribing your words…'; render();
-    const output = await transcriber(float32, { return_timestamps:'word', chunk_length_s:30, stride_length_s:5 });
-    ST.procPct=82; ST.procNote='Lining up every word…'; render();
-    const hypWords = (output.chunks||[]).map(c=>({
-      text: (c.text||'').trim(),
-      norm: normWord(c.text),
-      start: (c.timestamp && typeof c.timestamp[0]==='number') ? c.timestamp[0] : 0,
-    })).filter(w=>w.norm);
-    const refWords = [];
-    // Structural labels ("[Verse 2]") are never sung, so they're excluded
-    // here too — keeps this index-for-index aligned with timing()'s word
-    // list, which skips them the same way.
-    parseLyrics(songObj.lyrics).forEach(ws=>{ if(!isHeaderLine(ws)) ws.forEach(w=>refWords.push(normWord(w))); });
-    const mapping = alignSequences(refWords, hypWords.map(w=>w.norm));
-    songObj.wordTimestamps = fillTimestamps(mapping, hypWords, durationSec);
-    songObj.audioDurationSec = durationSec;
-    songObj.synced = true; setSongTempo(songObj, { mode:'synced' });
-    // Keep only a short ~5s preview clip from where the singing starts.
-    try{
-      const startSec = hypWords.length ? hypWords[0].start : 0;
-      await uploadSampleClip(songObj, float32, startSec);
-    }catch(e){ console.error('Singa: sample clip upload failed', e); toast('Saved the take, but the Play Sample clip failed to upload — make sure the "song-samples" Storage bucket exists and is public'); }
-    ST.procPct=100; ST.procNote='Done'; render();
-  }catch(err){
-    console.error('Singa: speech alignment failed, falling back to estimated timing', err);
-    toast("Couldn't analyze the audio — using estimated timing instead");
-    songObj.wordTimestamps = null; songObj.audioDurationSec = null; songObj.synced = true; setSongTempo(songObj, { mode:'synced' });
+  if((ST.createMode!=='manual' && !ST.editing) || !hasLyrics(songObj)){ leaveCreateForQueue(); queueImports([blob]); return; }
+  queueManualTake(songObj, blob);
+}
+function leaveCreateForQueue(){
+  stopPracticeFollow(); ST.playing=false; ST.testSpeed=false;
+  ST.editing=false; ST.editReturn=null; ST.autoChords=false; ST.abortArm=0;
+}
+
+// Embed link → the Singa server fetches the audio (YouTube and most sites
+// with a player) and hands it back as a file, which then goes through the
+// same analysis as an upload.
+const LINK_SERVER = 'https://singa-production-e6f3.up.railway.app';
+async function fetchLinkAudio(url, j){
+  jobProgress(j, 2, 'Fetching the track from the link…');
+  let r;
+  try{ r = await fetch(LINK_SERVER+'/fetch-audio', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ url }) }); }
+  catch(e){ throw new Error("couldn't reach the Singa server — check your connection"); }
+  if(!r.ok){
+    let msg = ''; try{ msg = (await r.json()).error || ''; }catch(e){}
+    if(r.status===404 || r.status===405) msg = 'the Singa server hasn\'t been updated to accept links yet';
+    throw new Error(msg || ('the server answered '+r.status));
   }
-  finishSong();
+  const blob = await r.blob();
+  if(!blob.size) throw new Error('the link gave back no audio');
+  let title = ''; try{ title = decodeURIComponent(r.headers.get('X-Title')||''); }catch(e){}
+  const type = blob.type || 'audio/mp4';
+  const ext = /mpeg|mp3/.test(type) ? 'mp3' : /webm/.test(type) ? 'webm' : /ogg|opus/.test(type) ? 'ogg' : /wav/.test(type) ? 'wav' : 'm4a';
+  const name = ((title||'Linked track').replace(/[\\/:*?"<>|]+/g,' ').trim() || 'Linked track')+'.'+ext;
+  try{ return new File([blob], name, { type }); }catch(e){ blob.name = name; return blob; }
+}
+function queueLinkImport(url){
+  askNotify();
+  const draft = ST.screen==='create' ? D.songs[ST.editId] : null;
+  const manualTake = !!(draft && hasLyrics(draft) && (ST.createMode==='manual' || ST.editing));
+  let songObj = draft;
+  if(!manualTake && !(draft && !hasLyrics(draft) && !draft.synced)){
+    const id = 'n'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
+    songObj = { id, title:'', sub:'', lyrics:'', chords:{}, notes:{}, synced:false, isPublic:false, plays:0, added:Date.now(), mine:true };
+    D.songs[id] = songObj;
+  }
+  const label = (songObj.title||'').trim() || 'The linked track';
+  const j = newJob(songObj.id, label, true); j.target = ST.addTarget; ST.addTarget = null; j.note = 'Fetching the track…';
+  if(!D.order.includes(songObj.id)) D.order = [songObj.id, ...D.order];
+  const autoPl = (D.playlists||[]).find(p=>p.auto); if(autoPl) autoPl.ids = D.order;
+  leaveCreateForQueue();
+  ST.phase='idle'; ST.selWord=null; ST.queued=[label]; ST.screen='queued';
   render();
+  _importAudioQueue = _importAudioQueue.then(async ()=>{
+    let file;
+    try{ file = await fetchLinkAudio(url, j); }
+    catch(e){ console.error('Singa: link fetch failed', e); jobFailed(j, "Couldn't get the track from that link: "+(e && e.message || e)); return; }
+    if(manualTake) await processManualTakeJob(songObj, file, j);
+    else await processRecordingFromScratch(songObj, file, j);
+  }).catch(e=>{ console.error('Singa: link import failed', e); jobFailed(j, "Couldn't add the linked track"); });
 }
 
 function queueManualTake(songObj, blob){
@@ -176,7 +187,8 @@ function queueManualTake(songObj, blob){
   const label = songObj.title.trim() || 'Your song';
   const j = newJob(songObj.id, label, true); j.target = ST.addTarget; ST.addTarget = null; j.note = 'Waiting…';
   if(!D.order.includes(songObj.id)) D.order = [songObj.id, ...D.order];
-  ST.autoChords=false; ST.phase='idle'; ST.selWord=null; ST.queued=[label]; ST.screen='queued';
+  leaveCreateForQueue();
+  ST.phase='idle'; ST.selWord=null; ST.queued=[label]; ST.screen='queued';
   render();
   _importAudioQueue = _importAudioQueue.then(()=>processManualTakeJob(songObj, blob, j)).catch(e=>{ console.error('Singa: manual take failed', e); jobFailed(j, "Couldn't analyse that take"); });
 }
@@ -204,6 +216,15 @@ async function processManualTakeJob(songObj, blob, j){
   parseLyrics(songObj.lyrics).forEach((ws,li)=>{ if(!isHeaderLine(ws)) ws.forEach((w,wi)=>{ ref.push(normWord(w)); refIds.push(li+'-'+wi); }); });
   const ts = fillTimestamps(heard.length ? alignSequences(ref, heard.map(h=>h.norm)) : new Array(ref.length).fill(null), heard, dur);
   songObj.wordTimestamps = ts; songObj.audioDurationSec = dur; songObj.synced = true; setSongTempo(songObj, { mode:'synced' });
+  // chords heard before the first sung word: the instrumental intro
+  const first = ts.length ? ts[0] : 0, intro = [];
+  (res.sheet.chordTimeline||[]).forEach(seg=>{
+    const name = seg.concert || seg.shown;
+    if(name && seg.start < first - 0.3 && (!intro.length || intro[intro.length-1].ch!==name)) intro.push({ t: Math.round(seg.start*100)/100, ch: name });
+  });
+  const notes = { ...(songObj.notes||{}) };
+  if(intro.length && first >= 2.5) notes._intro = intro; else delete notes._intro;
+  songObj.notes = notes;
   if(!Object.keys(songObj.chords||{}).length){
     const chords = {}; let prev = null;
     (res.sheet.chordTimeline||[]).forEach(seg=>{
