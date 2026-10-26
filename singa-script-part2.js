@@ -17,7 +17,28 @@ function songTempo(s){ const t = (s && s.notes && s.notes._tempo) || {}; return 
 function songMode(s){ const t = songTempo(s); return t.mode==='synced' && s && s.synced ? 'synced' : 'speed'; }
 function songSpeed(s){ return songTempo(s).speed; }
 function setSongTempo(s, patch){ if(!s) return; const t = { ...songTempo(s), ...patch }; s.notes = { ...(s.notes||{}), _tempo: { mode:t.mode, speed:t.speed } }; }
-function markCount(s){ return Object.keys((s && s.notes) || {}).filter(k=>k!=='_tempo').length; }
+function markCount(s){ return Object.keys((s && s.notes) || {}).filter(k=>k!=='_tempo' && k!=='_intro').length; }
+// An instrumental intro before the first sung word: either an "[Intro: C G]"
+// line (songs captured from an audio track) or, for a recorded take of typed
+// lyrics, the chords heard before the singing starts (notes._intro, with
+// their times). Returns { li, chords:[{t,ch}], end } or null.
+function introInfo(s, tm){
+  if(!s || !tm.words.length) return null;
+  const end = tm.words[0].t, synced = songMode(s)==='synced';
+  for(let li=0; li<tm.words[0].li; li++){
+    const ws = tm.lines[li];
+    if(!isHeaderLine(ws)) continue;
+    const raw = ws.join(' ').replace(/^[\[(]\s*/,'').replace(/\s*[\])]$/,'');
+    const m = /^intro\b:?\s*(.*)$/i.exec(raw);
+    if(!m) continue;
+    const names = m[1].split(/\s+/).filter(x=>/^[A-G]/.test(x));
+    return { li, chords: names.map((ch,i)=>({ ch, t: synced ? end*i/Math.max(1,names.length) : 0 })), end: synced ? end : 0 };
+  }
+  if(!synced) return null;
+  const ic = (s.notes && Array.isArray(s.notes._intro)) ? s.notes._intro.filter(x=>x && x.ch) : [];
+  if(end < 2.5 || (!ic.length && end < 4)) return null;
+  return { li:-1, chords: ic.map(x=>({ ch:x.ch, t:+x.t||0 })), end };
+}
 function speedLabel(v){ return 'x'+(+v).toFixed(2).replace(/\.?0+$/,''); }
 // A speedometer: x0.5 at the far left, x4 at the far right.
 function speedometerHTML(v){
@@ -48,9 +69,22 @@ function buildLines(s, mode, opt){
   const ci = opt.t!=null ? curWord(tm, opt.t) : -1;
   const cw = ci>=0 ? tm.words[ci] : null;
   let curChordK = -1; if(ci>=0) for(let k=0;k<=ci;k++){ const w=tm.words[k]; if(s.chords[w.li+'-'+w.wi]) curChordK=k; }
-  const notes = { ...(s.notes||{}), ...(opt.extraNotes||{}) }; delete notes._tempo;
+  const notes = { ...(s.notes||{}), ...(opt.extraNotes||{}) }; delete notes._tempo; delete notes._intro;
+  // the instrumental intro gets its own line in the players (not the editors)
+  const intro = (mode==='play' || mode==='scroll' || mode==='view') ? introInfo(s, tm) : null;
+  let introLine = null;
+  if(intro){
+    const t = opt.t;
+    const live = t!=null && intro.end>0;
+    const on = live && t < intro.end;
+    let ci2 = -1; if(live) intro.chords.forEach((c,i)=>{ if(c.t<=t) ci2 = i; });
+    introLine = { li: intro.li, intro:true, header:false, words:[], chords: intro.chords.map(c=>c.ch), curIdx: on ? ci2 : -1,
+      progress: live ? Math.max(0, Math.min(1, t/intro.end)) : 0, live, done: live && !on, end: intro.end,
+      hideChords: !!opt.hideChords, cur: on, scale:1, op: (live && !on) ? 0.6 : 1, padTop:0, mb:0 };
+  }
   let g = 0;
-  return tm.lines.map((ws,li)=>{
+  const out = tm.lines.map((ws,li)=>{
+    if(introLine && introLine.li===li) return introLine;
     const header = isHeaderLine(ws);
     const curLine = cw && cw.li===li, last = ws.length-1;
     const w2 = ws.map((w,wi)=>{
@@ -65,7 +99,7 @@ function buildLines(s, mode, opt){
       if(header){
         // Never interactive, never chorded/marked.
       } else if(mode==='chords'){
-        o.col='#a8a8a8'; o.weight=500; o.chordCol='#1b1b1b'; o.chip=true; o.drop=id;
+        o.col='#a8a8a8'; o.weight=400; o.chordCol='#1b1b1b'; o.chip=true; o.drop=id;
       } else if(mode==='markings'){
         o.cursor='pointer'; o.clickAct='pickMarkWord'; o.clickId=id;
       } else if(mode==='view'){
@@ -99,6 +133,21 @@ function buildLines(s, mode, opt){
     // (no extra margins on the current line, so starting playback never shifts the lyrics)
     return { li, words:w2, header, padTop: 0, mb: 0, scale: on?1.08:1, op: (!header && isPlay && cw && li<cw.li) ? 0.75:1, cur: on || (mode==='scroll' && !header && !!curLine) };
   });
+  if(introLine && introLine.li<0) out.unshift(introLine);
+  // during the intro no sung line is current yet
+  if(introLine && introLine.cur) out.forEach(l=>{ if(l!==introLine) l.cur = false; });
+  return out;
+}
+// ♪ Intro · C  G  Am — the chord being played lights up and a thin bar
+// fills until the first sung word.
+function introLineHTML(l, big){
+  const fszc = big ? 'font-size:22px' : 'font-size:19px';
+  const chords = l.hideChords ? '' : l.chords.map((c,i)=>`<span class="ich${i===l.curIdx?' on':''}" style="${fszc}${i===l.curIdx?';'+(animStyle('introChord', i, 'chordPop', 450)||''):''}">${esc(c)}</span>`).join('');
+  const secs = l.end>0 ? `<span class="itime">${Math.max(1, Math.round(l.end - (l.live ? l.progress*l.end : 0)))}s</span>` : '';
+  return `<div class="lline lintro${l.cur?' on':''}" style="opacity:${l.op}"${l.cur?' data-cur="1"':''}>
+    <div class="irow"><span class="ilabel">${icon('music_note',18)}Intro</span>${chords}${l.live&&l.cur?secs:(l.live?'':secs)}</div>
+    ${l.end>0 ? `<div class="ibar"><div style="width:${Math.round(l.progress*100)}%"></div></div>` : ''}
+  </div>`;
 }
 // A short-lived CSS animation that survives the app's 100ms full re-renders:
 // remembers when `val` last changed for `key`, and while the animation is
@@ -138,6 +187,7 @@ function headerLineHTML(l){
 }
 function linesHTML(lines, big){
   return `<div class="lyrics-wrap">` + lines.map(l=>{
+    if(l.intro) return introLineHTML(l, big);
     if(l.header) return headerLineHTML(l);
     const style = `margin-top:${l.padTop}px;margin-bottom:${l.mb}px;transform:scale(${l.scale});transform-origin:left center;opacity:${l.op}`;
     const hasTop = l.words.some(w=>w.mark && w.markSide==='top');
