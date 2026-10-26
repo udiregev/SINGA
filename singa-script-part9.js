@@ -1,6 +1,6 @@
 "use strict";
 function computeModeSegShown(){
-  return ST.phase==='idle' && (ST.createMode!=='manual' || ST.step==='lyrics');
+  return ST.phase==='idle';
 }
 // Collapses/expands the Manual/From Recording/From File toggle with a real
 // CSS transition around a step change that crosses in or out of the Lyrics
@@ -164,21 +164,32 @@ const Actions = {
   toggleNotif(d){ if(!canSync()) return; ST.notif[d.id] = !ST.notif[d.id]; syncProfile(); render(); },
   toggleCollabInGig(d){ const i = +d.id; const cg = D.gigs.find(g=>g.id===ST.collabFor); if(!cg) return; const c = D.collabs[i]; const inGig = c.gigs.includes(cg.id); c.gigs = inGig ? c.gigs.filter(x=>x!==cg.id) : [...c.gigs, cg.id]; render(); toast(inGig ? c.name+' removed from '+cg.title : c.name+' added to '+cg.title); },
 
-  setCreateMode(d){ ST.createMode=d.id; ST.phase='idle'; ST.step='lyrics'; ST.editorLine=0; render(); },
+  setCreateMode(d){ if(ST.ctx==='syncpreview'){ ST.playing=false; ST.testSpeed=false; } ST.createMode=d.id; ST.phase='idle'; ST.step='lyrics'; ST.editorLine=0; ST.abortArm=0; render(); },
   abortCreate(){
+    // first tap turns the button red; a second tap (within 3s) aborts
+    if(!(ST.abortArm && Date.now() - ST.abortArm < 3000)){
+      ST.abortArm = Date.now(); render();
+      clearTimeout(ST._abortT); ST._abortT = setTimeout(()=>{ ST.abortArm = 0; render(); }, 3000);
+      return;
+    }
+    ST.abortArm = 0; clearTimeout(ST._abortT);
+    ST.playing=false; ST.testSpeed=false;
     const s = D.songs[ST.editId];
     if(s && !s.synced){ delete D.songs[ST.editId]; D.order = D.order.filter(x=>x!==ST.editId); }
     stopOnsetListening(); stopPracticeFollow(); ST.phase='idle'; ST.selWord=null; ST.screen='home'; render();
   },
   createBack(){ if(ST.editing){ Actions.editDone(); return; } exitCreate(); },
   goCreateStep(d){
-    const s = D.songs[ST.editId]; const hasLyrics = !!(s && s.lyrics.trim());
+    const s = D.songs[ST.editId];
     if(ST.phase!=='idle') return;
     if(!lyricsReady(s) && d.id!=='lyrics'){ toast(lyricsMissing(s)); return; }
-    withModeSegTransition(()=>{ ST.step=d.id; ST.selWord=null; ST.editorLine=0; ST.tempoTab=null; ST.testSpeed=false; });
+    if((d.id==='chords' || d.id==='markings') && !hasLyrics(s)){ toast('Add lyrics first — or capture them from a recording on the Tempo step'); return; }
+    if(ST.ctx==='syncpreview'){ ST.playing=false; }
+    withModeSegTransition(()=>{ ST.step=d.id; ST.selWord=null; ST.editorLine=0; ST.tempoTab=null; ST.tempoView=null; ST.speedOpen=false; ST.testSpeed=false; ST.abortArm=0; });
   },
-  createNextStep(){ withModeSegTransition(()=>{ const order=['lyrics','chords','markings','sync']; const i=order.indexOf(ST.step); ST.step=order[Math.min(3,i+1)]; ST.selWord=null; ST.editorLine=0; ST.tempoTab=null; ST.testSpeed=false; }); },
-  lyricsNext(){ const s = D.songs[ST.editId]; if(!lyricsReady(s)){ toast(lyricsMissing(s)); return; } Actions.createNextStep(); },
+  createNextStep(){ withModeSegTransition(()=>{ const order=['lyrics','chords','markings','sync']; const i=order.indexOf(ST.step); ST.step=order[Math.min(3,i+1)]; ST.selWord=null; ST.editorLine=0; ST.tempoTab=null; ST.tempoView=null; ST.speedOpen=false; ST.testSpeed=false; ST.abortArm=0; }); },
+  // no lyrics typed: straight to Tempo, where a recording / upload / link captures them
+  lyricsNext(){ const s = D.songs[ST.editId]; if(!lyricsReady(s)){ toast(lyricsMissing(s)); return; } if(!hasLyrics(s)){ withModeSegTransition(()=>{ ST.step='sync'; ST.tempoView=null; ST.speedOpen=false; ST.abortArm=0; }); return; } Actions.createNextStep(); },
   async openSimilar(){
     const d = D.songs[ST.editId];
     ST.similar=true; ST.similarLoading=true; ST.similarResults=[]; render();
@@ -217,6 +228,8 @@ const Actions = {
     const s = D.songs[ST.editId];
     const li = +String(d.id).split('-')[0]; if(!isNaN(li)) ST.editorLine = li;
     ST.selWord = d.id; ST.noteDraft = (s.notes||{})[d.id] || ''; render();
+    const ip = document.querySelector('.sticky-ipt');
+    if(ip){ try{ ip.focus({ preventScroll:true }); const n = ip.value.length; ip.setSelectionRange(n, n); }catch(e){} }
   },
   saveNote(){ const s = D.songs[ST.editId]; const n = {...s.notes}; if(ST.noteDraft.trim()) n[ST.selWord]=ST.noteDraft.trim(); else delete n[ST.selWord]; s.notes=n; ST.selWord=null; render(); queueSaveSong(ST.editId); },
   removeNote(){ const s = D.songs[ST.editId]; const n = {...s.notes}; delete n[ST.selWord]; s.notes=n; ST.selWord=null; ST.noteDraft=''; render(); queueSaveSong(ST.editId); },
@@ -240,7 +253,28 @@ const Actions = {
     if(ST.ctx==='syncpreview'){ ST.playing=false; ST.testSpeed=false; ST.t=0; }
     if(d.id==='rec') setSongTempo(s, { mode:'synced' });
     else setSongTempo(s, { mode:'speed', speed:+d.id });
+    ST.speedOpen = false;
     render(); queueSaveSong(s.id);
+  },
+  toggleSpeedList(){ ST.speedOpen = !ST.speedOpen; render(); },
+  // Sync (record / upload / link) ⇄ Set Speed
+  setTempoView(d){
+    const s = D.songs[ST.editId]; if(!s) return;
+    if(ST.ctx==='syncpreview'){ ST.playing=false; ST.testSpeed=false; ST.t=0; }
+    ST.tempoView = d.id; ST.speedOpen = false;
+    if(d.id==='speed') setSongTempo(s, { mode:'speed' });
+    else if(s.synced) setSongTempo(s, { mode:'synced' });
+    render(); queueSaveSong(s.id);
+  },
+  // Embed link: fetch the track from YouTube (or any page with audio) and
+  // treat it like an uploaded file
+  submitLink(){
+    if(!canSync()) return;
+    const url = (ST.linkDraft||'').trim();
+    if(!url){ const ip = document.querySelector('[data-bind="linkDraft"]'); if(ip) ip.focus(); toast('Paste a link to the song first'); return; }
+    if(!/^https?:\/\/\S+\.\S+/i.test(url)){ toast("That doesn't look like a link — it should start with https://"); return; }
+    ST.linkDraft = '';
+    queueLinkImport(url);
   },
   // Practice: run through the lyrics at the chosen tempo (your recorded one
   // highlights the words; a set speed just scrolls)
@@ -254,7 +288,8 @@ const Actions = {
   finishCreate(){
     const s = D.songs[ST.editId]; if(!s) return;
     if(!lyricsReady(s)){ ST.step='lyrics'; render(); toast(lyricsMissing(s)); return; }
-    stopPracticeFollow(); ST.playing=false; ST.testSpeed=false; ST.phase='idle';
+    if(!hasLyrics(s) && !s.synced){ toast('Record, upload or paste a link so Singa can capture the lyrics'); return; }
+    stopPracticeFollow(); ST.playing=false; ST.testSpeed=false; ST.phase='idle'; ST.abortArm=0;
     if(!s.synced) setSongTempo(s, { mode:'speed' });
     finalizeSong(s); ST.songId = s.id; ST.autoChords=false;
     ST.doneSpeed=false; ST.doneNoticeHidden=false; ST.screen='done'; render();
@@ -391,8 +426,8 @@ const Actions = {
   // song viewer: a song without a take / without chords
   addSync(){ Actions.editSong(); if(ST.screen==='create'){ ST.step='sync'; render(); } },
   addChords(){ Actions.editSong(); },
-  removeMarkings(){ const s = song(ST.songId); if(!s || s.id==='none') return; s.notes = s.notes && s.notes._tempo ? { _tempo: s.notes._tempo } : {}; ST.menu=false; render(); toast('Markings removed'); queueSaveSong(s.id); },
-  editSong(){ if(!canSync()) return; stopOnsetListening(); ST.editReturn = ST.screen==='gigplayer' ? 'gigplayer' : null; ST.playing=false; ST.vcd=0; ST.editId = ST.songId; ST.editing=true; ST.addTarget=null; ST.screen='create'; ST.createMode='manual'; ST.step='chords'; ST.phase='idle'; ST.menu=false; ST.selWord=null; ST.editorLine=0; render(); },
+  removeMarkings(){ const s = song(ST.songId); if(!s || s.id==='none') return; const keep = {}; if(s.notes && s.notes._tempo) keep._tempo = s.notes._tempo; if(s.notes && s.notes._intro) keep._intro = s.notes._intro; s.notes = keep; ST.menu=false; render(); toast('Markings removed'); queueSaveSong(s.id); },
+  editSong(){ if(!canSync()) return; stopOnsetListening(); ST.editReturn = ST.screen==='gigplayer' ? 'gigplayer' : null; ST.playing=false; ST.vcd=0; ST.editId = ST.songId; ST.editing=true; ST.addTarget=null; ST.screen='create'; ST.createMode='manual'; ST.step=hasLyrics(song(ST.songId))?'chords':'sync'; ST.phase='idle'; ST.menu=false; ST.selWord=null; ST.editorLine=0; ST.tempoView=null; ST.speedOpen=false; ST.linkDraft=''; render(); },
   deleteSong(){
     if(!canSync()) return; stopOnsetListening();
     const delId=ST.songId, fromGig = ST.screen==='gigplayer';
