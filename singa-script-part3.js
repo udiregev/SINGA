@@ -147,6 +147,47 @@ body.chord-dragging,body.chord-dragging *{cursor:grabbing !important;-webkit-use
 .steptabs button.on{font-weight:700;color:#1b1b1b;border-bottom-color:#1b1b1b}
 .steptabs button.off{color:#c8c8c8}
 @media(max-width:520px){.steptabs button{width:auto;padding:0 12px}}
+/* ---- Abort: second tap confirms ---- */
+.btn-danger{background:#e5372a;color:#fff;border:1.5px solid #e5372a}
+/* ---- lyrics sit in the same centred place on every create step ---- */
+.ce-wrap{display:grid;grid-template-columns:104px minmax(0,1fr) 104px;grid-template-rows:minmax(0,1fr);gap:24px;max-width:960px}
+.ce-spacer{width:104px}
+.ce-lyrics.lyr-step{align-items:stretch}
+.lyr-step .lyrics-wrap{width:fit-content;max-width:100%;margin:0 auto}
+.lword .lchord.chip{margin-right:-7px}
+.lyr-step .lword.editable{margin:0 -2px}
+.lchord-row{position:relative}
+.chip-x{position:absolute;top:-8px;left:calc(100% + 2px);margin:0;width:16px;height:16px;font-size:14px;background:#fff;z-index:1}
+@media(max-width:700px){.ce-wrap{grid-template-columns:96px minmax(0,1fr);gap:16px}.ce-spacer{display:none}}
+/* ---- Tempo step ---- */
+.tp-panel{flex:none;display:flex;flex-direction:column;align-items:center;gap:16px;width:100%;max-width:640px;margin:16px auto 0;padding-bottom:6px}
+.tp-row{display:flex;align-items:center;justify-content:center;gap:16px;flex-wrap:wrap;width:100%}
+.tp-rec{width:142px;height:52px;font-size:15px;font-weight:600;letter-spacing:.04em}
+.tp-up{width:128px;height:52px;font-size:15px;font-weight:600;letter-spacing:.04em}
+.tp-link{position:relative;flex:1 1 240px;max-width:300px;height:52px;border-radius:12px;background:#f2f2f2;display:flex;align-items:center}
+.tp-link input{flex:1;min-width:0;height:100%;border:0;background:transparent;padding:0 46px 0 16px;font-size:15px;letter-spacing:.04em;outline:none;border-radius:12px;color:#1b1b1b}
+.tp-link input::placeholder{color:#9a9a9a}
+.tp-go{position:absolute;right:6px;top:6px;width:40px;height:40px;border:0;border-radius:10px;background:transparent;color:#c4c4c4;display:flex;align-items:center;justify-content:center;transition:background .2s,color .2s}
+.tp-go.on{background:#1b1b1b;color:#fff}
+.tp-switch{font-size:14px;font-weight:600;text-decoration:underline;text-underline-offset:3px;color:#1b1b1b}
+.tp-speed{display:flex;align-items:center;height:52px;border:1.5px solid #1b1b1b;border-radius:12px;padding-left:6px;gap:2px;background:#fff}
+.tp-sp{height:100%;border:0;background:transparent;padding:0 13px;font-size:14px;font-weight:500;letter-spacing:.06em;color:#a8a8a8;white-space:nowrap}
+.tp-sp.on{color:#1b1b1b;font-weight:700}
+.tp-play{width:68px;height:52px;margin:-1.5px -1.5px -1.5px 4px;border:0;border-radius:12px;background:#f24822;display:flex;align-items:center;justify-content:center;flex:none}
+.tp-synced{display:flex;align-items:center;gap:12px;font-size:14px;color:#6f6f6f}
+.tp-synced .tp-play{margin:0;width:52px;height:44px}
+@media(max-width:560px){.tp-link{flex-basis:100%;max-width:none}}
+/* ---- instrumental intro line ---- */
+.lline.lintro{display:flex;flex-direction:column;align-items:flex-start;gap:8px;min-width:200px}
+.lintro .irow{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+.lintro .ilabel{display:inline-flex;align-items:center;gap:4px;font-size:13px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#9a9a9a}
+.lintro .ich{font-weight:800;color:#c4c4c4;display:inline-block;transform-origin:left bottom}
+.lintro.on .ich{color:#8a8a8a}
+.lintro .ich.on{color:#f24822}
+.lintro .itime{font-size:12px;font-weight:700;color:#b0b0b0;font-variant-numeric:tabular-nums}
+.lintro .ibar{width:100%;min-width:200px;height:4px;border-radius:2px;background:#ececec;overflow:hidden}
+.lintro .ibar>div{height:100%;background:#f24822;border-radius:2px;transition:width .12s linear}
+.lintro:not(.on) .ibar>div{background:#cfcfcf}
 `;
   document.head.appendChild(st);
 })();
@@ -290,41 +331,47 @@ function practiceBlock(){
     <button class="btn btn-outline" style="width:170px" data-act="stopPractice">Stop</button>
   </div>`;
 }
-// A song needs a title (at least one word) and at least 3 sung words of
-// lyrics before you can move on from the Lyrics step.
+// A song needs a title. Lyrics are optional: leave them blank and they're
+// captured from a recording (Tempo step) — but typed lyrics need at least 3
+// sung words. Chords and Markings need lyrics to work on.
 function lyricWordCount(d){ return parseLyrics(d && d.lyrics).filter(ws=>!isHeaderLine(ws)).reduce((n,ws)=>n+ws.length,0); }
-function lyricsReady(d){ return !!(d && (d.title||'').trim()) && lyricWordCount(d) >= 3; }
+function hasLyrics(d){ return lyricWordCount(d) >= 3; }
+function lyricsReady(d){ const n = lyricWordCount(d); return !!(d && (d.title||'').trim()) && (n===0 || n>=3); }
 function lyricsMissing(d){
   const t = !(d.title||'').trim(), n = lyricWordCount(d);
-  if(t && n<3) return 'Add a title and at least 3 words of lyrics to continue';
   if(t) return 'Add a title to continue';
-  if(n<3) return 'Add at least 3 words of lyrics to continue';
+  if(n>0 && n<3) return 'Add at least 3 words of lyrics (or clear them) to continue';
   return '';
+}
+// The Abort button needs a second tap: the first one turns it red.
+function abortBtnHTML(w, h){
+  const armed = ST.abortArm && Date.now() - ST.abortArm < 3000;
+  return `<button class="btn ${armed?'btn-danger':'btn-outline'}" style="width:${w}px${h?';height:'+h+'px':''}" data-act="abortCreate">${armed?'Confirm abort':'Abort'}</button>`;
 }
 // Typing the title / lyrics never re-renders the screen (that would close
 // the on-screen keyboard after every key): only the hint, Next and the step
 // tabs are updated in place.
 function refreshLyricsGate(){
   const d = D.songs[ST.editId]; if(!d) return;
-  const ok = lyricsReady(d);
+  const ok = lyricsReady(d), lyr = hasLyrics(d);
   const m = document.getElementById('lyricsMissing'); if(m) m.textContent = lyricsMissing(d);
   const b = document.getElementById('lyricsNextBtn'); if(b){ b.classList.toggle('btn-dark', ok); b.classList.toggle('btn-disabled', !ok); }
-  document.querySelectorAll('.steptabs button').forEach(t=>{ if(!t.classList.contains('on') && t.dataset.id!=='lyrics') t.classList.toggle('off', !ok); });
+  document.querySelectorAll('.steptabs button').forEach(t=>{ if(t.classList.contains('on') || t.dataset.id==='lyrics') return; t.classList.toggle('off', !ok || (t.dataset.id!=='sync' && !lyr)); });
 }
 function renderManualLyrics(d){
-  const hasLyrics = lyricsReady(d), missing = lyricsMissing(d);
-  return `<div style="width:100%;flex:1;display:flex;flex-direction:column;gap:14px;margin-top:28px;max-width:640px;margin-left:auto;margin-right:auto">
+  const ok = lyricsReady(d), missing = lyricsMissing(d);
+  return `<div class="lyr-form" style="width:100%;flex:1;display:flex;flex-direction:column;gap:14px;margin-top:28px;max-width:640px;margin-left:auto;margin-right:auto">
     <div class="row" style="gap:14px">
       <input class="ipt" style="height:64px;font-size:18px;font-weight:600" placeholder="Title" value="${esc(d.title)}" data-bind="draftTitle">
       <button class="icon-btn" title="Find similar titles" style="width:48px;height:48px" data-act="openSimilar">${icon('search',26)}</button>
     </div>
     <input class="ipt" style="height:64px" placeholder="Sub title — artist, version" value="${esc(d.sub)}" data-bind="draftSub">
-    <textarea class="ipt" style="min-height:300px;font-size:18px" placeholder="Type or paste lyrics, one line per row" data-bind="draftLyrics">${esc(d.lyrics)}</textarea>
+    <textarea class="ipt" style="min-height:300px;font-size:18px" placeholder="Add lyrics, one line per row — or leave blank to capture them from a recording" data-bind="draftLyrics">${esc(d.lyrics)}</textarea>
     ${confirmFootnote()}
     <div id="lyricsMissing" style="text-align:center;font-size:13px;color:#2f8fe0;min-height:16px">${missing}</div>
-    ${ST.editing ? `<div class="row" style="align-self:center"><button id="lyricsNextBtn" class="btn ${hasLyrics?'btn-dark':'btn-disabled'}" style="width:220px;height:48px" data-act="editDone">Done</button></div>` : `<div class="row" style="gap:12px;align-self:center">
-      <button class="btn btn-outline" style="width:170px;height:48px" data-act="abortCreate">Abort</button>
-      <button id="lyricsNextBtn" class="btn ${hasLyrics?'btn-dark':'btn-disabled'}" style="width:170px;height:48px" data-act="lyricsNext">Next</button>
+    ${ST.editing ? `<div class="row" style="align-self:center"><button id="lyricsNextBtn" class="btn ${ok?'btn-dark':'btn-disabled'}" style="width:220px;height:48px" data-act="editDone">Done</button></div>` : `<div class="row" style="gap:12px;align-self:center">
+      ${abortBtnHTML(170, 48)}
+      <button id="lyricsNextBtn" class="btn ${ok?'btn-dark':'btn-disabled'}" style="width:170px;height:48px" data-act="lyricsNext">Next</button>
     </div>`}
   </div>`;
 }
