@@ -247,19 +247,17 @@ function stepLyricWindow(){
 // widest left mark, and keep right marks inside the visible area — so all
 // lines keep one left edge and no line is pushed by its own mark.
 function fitMarkGutters(){
+  // the same room on both sides, so the lyrics stay centred in exactly the
+  // same place on every step (Chords, Markings, Tempo)
   document.querySelectorAll('#screen .lyrics-wrap').forEach(w=>{
     const ls = w.querySelectorAll('.mside-abs.l'), rs = w.querySelectorAll('.mside-abs.r');
     if(!ls.length && !rs.length) return;
     const box = w.parentElement; if(!box) return;
     const bw = box.clientWidth;
     let L = 0; ls.forEach(m=>{ L = Math.max(L, m.offsetWidth + 10); });
-    w.style.paddingLeft = Math.min(L, Math.round(bw*0.3))+'px';
-    for(let pass=0; pass<2 && rs.length; pass++){
-      const right = box.getBoundingClientRect().right - 6;
-      let over = 0; rs.forEach(m=>{ over = Math.max(over, m.getBoundingClientRect().right - right); });
-      if(over <= 0.5) break;
-      w.style.paddingRight = Math.min(Math.round(bw*0.25), (parseFloat(w.style.paddingRight)||0) + over)+'px';
-    }
+    let R = 0; rs.forEach(m=>{ R = Math.max(R, m.offsetWidth + 10); });
+    const pad = Math.min(Math.max(L, R), Math.round(bw*0.25));
+    w.style.paddingLeft = pad+'px'; w.style.paddingRight = pad+'px';
   });
 }
 // Chord diagrams scale to their box (the resize handle sets the size) but
@@ -592,6 +590,7 @@ function newSongDraft(){
   D.songs[id] = { id, title:'', sub:'', lyrics:'', chords:{}, notes:{}, synced:false, isPublic:false, plays:0, added:Date.now(), mine:true };
   D.order = [id, ...D.order];
   ST.editId = id; ST.screen='create'; ST.createMode='manual'; ST.step='lyrics'; ST.phase='idle'; ST.selWord=null; ST.similar=false; ST.menu=false; ST.sortOpen=false; ST.editorLine=0;
+  ST.tempoView=null; ST.speedOpen=false; ST.linkDraft=''; ST.abortArm=0; ST.autoChords=false;
 }
 // Leaving Create (back chevron or the Singa logo): a running capture keeps
 // going in the background; an untouched empty draft is thrown away.
