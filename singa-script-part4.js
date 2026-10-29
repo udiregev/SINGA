@@ -67,6 +67,9 @@ function renderSongBody(d){
   const liveT = ST.phase==='recording' ? ST.recT*songSpeed(d) : ST.phase==='practicing' ? ST.recT : (previewPlaying ? ST.t : null);
   const lines = buildLines(d, editMode, liveT!=null ? {t:liveT} : null);
   const opacity = (ST.phase==='countdown'||ST.phase==='processing') ? 0.12 : 1;
+  // Tempo step: while a take records / you practise / it plays back, the
+  // lyrics slide up smoothly (see syncLyricWindow)
+  const syncWin = ST.step==='sync' && (ST.phase==='recording' || ST.phase==='practicing' || (ST.ctx==='syncpreview' && (ST.playing || ST.t>0)));
   return `<div style="width:100%;flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;margin-top:10px;position:relative">
     <div style="opacity:${opacity};flex:none;display:flex;flex-direction:column;align-items:center;width:100%">
       <div class="cs-title" style="font-size:32px;font-weight:800;letter-spacing:-0.02em;text-align:center">${esc(d.title||'Untitled song')}</div>
@@ -79,7 +82,7 @@ function renderSongBody(d){
         <div id="editorLyricsScroll" class="sheet-edit ce-lyrics lyr-step">${linesHTML(lines)}</div>
       </div>
       <div class="ce-spacer"></div>
-    </div>` : `<div id="editorLyricsScroll" class="sheet-edit lyr-step" style="opacity:${opacity};${ST.step==='sync'?'flex:none;max-height:260px;':'flex:1;min-height:200px;'}width:100%;overflow-y:auto;margin-top:18px;display:flex;flex-direction:column;align-items:center">
+    </div>` : `<div id="editorLyricsScroll" class="sheet-edit lyr-step"${syncWin?` data-win="sync-${esc(d.id)}"`:''} style="opacity:${opacity};${ST.step==='sync'?'flex:none;max-height:260px;':'flex:1;min-height:200px;'}width:100%;overflow-y:auto;margin-top:18px;display:flex;flex-direction:column;align-items:center">
       ${linesHTML(lines)}
     </div>`}
     ${ST.step==='sync' ? '<div style="flex:1"></div>' : ''}
@@ -111,7 +114,8 @@ function tempoView(d){
   if(ST.tempoView) return ST.tempoView;
   if(!hasLyrics(d)) return 'sync';
   if(d.synced) return songMode(d)==='synced' ? 'sync' : 'speed';
-  return songSpeed(d)!==1 ? 'speed' : 'sync';
+  // a new song starts on Set Speed; syncing to a recording is offered below
+  return 'speed';
 }
 function tempoPanelHTML(d){
   const view = tempoView(d), sp = songSpeed(d), lyr = hasLyrics(d);
@@ -123,7 +127,7 @@ function tempoPanelHTML(d){
       ? SPEEDS.map(v=>`<button class="tp-sp${v===sp?' on':''}" data-act="setSpeed" data-id="${v}">${speedLabel(v)}</button>`).join('')
       : `<button class="tp-sp on" data-act="toggleSpeedList" title="Change the speed">${speedLabel(sp)}</button>`;
     main = `<div class="tp-speed">${opts}${playBtn}</div>
-      <a class="link tp-switch" data-act="setTempoView" data-id="sync">Sync</a>`;
+      <a class="link tp-switch" data-act="setTempoView" data-id="sync">Sync to a recording instead</a>`;
   } else {
     main = `${d.synced && lyr ? `<div class="tp-synced">${playBtn}<span>Your tempo is set from your recording</span></div>` : ''}
       <div class="tp-row">
