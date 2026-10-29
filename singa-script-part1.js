@@ -431,13 +431,33 @@ function isHeaderLine(ws){
   if(!ws || !ws.length) return false;
   return /^[\[(]/.test(ws[0]) && /[\])]$/.test(ws[ws.length-1]);
 }
+// "[instrumental]" (also "[Intro: C G]", "[Instrumental: Am F]", "[Solo]",
+// "[Outro]"…) on its own line is a stretch with no singing: the players show
+// it as a row of ticks that fill in as it plays. Returns its chords, or null.
+const INSTR_SEC = 4;   // one typed [instrumental] line lasts ~4s at speed x1
+function instrLine(ws){
+  if(!isHeaderLine(ws)) return null;
+  const raw = ws.join(' ').replace(/^[\[(]\s*/,'').replace(/\s*[\])]$/,'');
+  const m = /^(instrumental|intro|outro|solo|interlude|break)\b:?\s*(.*)$/i.exec(raw);
+  if(!m) return null;
+  return { kind: m[1].toLowerCase(), chords: m[2].split(/\s+/).filter(x=>/^[A-G]/.test(x)) };
+}
 function timing(s){
-  const lines = parseLyrics(s && s.lyrics); const words = [];
+  const lines = parseLyrics(s && s.lyrics); const words = [], instr = {};
   // x1 (no recorded tempo): the pace of an average song — about 2.2 sung
   // words a second plus a short breath between lines, i.e. roughly 4 seconds
-  // for a typical 7-word line (two bars at ~110 BPM).
-  let tt = 1;
-  lines.forEach((ws,li)=>{ if(isHeaderLine(ws)) return; ws.forEach((w,wi)=>{ words.push({li,wi,t:tt}); tt += 0.45; }); tt += 1; });
+  // for a typical 7-word line (two bars at ~110 BPM). Each instrumental line
+  // takes INSTR_SEC.
+  let tt = 1, lastB = null;   // lastB: end of the instrumental line just before
+  lines.forEach((ws,li)=>{
+    if(isHeaderLine(ws)){
+      const il = instrLine(ws);
+      if(il){ const a = lastB!=null ? lastB : (words.length ? tt-0.5 : 0); instr[li] = { a, b: a+INSTR_SEC, chords: il.chords, kind: il.kind }; lastB = a+INSTR_SEC; tt = lastB + 1; }
+      return;
+    }
+    lastB = null;
+    ws.forEach((w,wi)=>{ words.push({li,wi,t:tt}); tt += 0.45; }); tt += 1;
+  });
   // If a real recording was captured and force-aligned (see processRecordingBlob),
   // s.wordTimestamps holds one real timestamp per word (seconds into the take) —
   // use those instead of the evenly-spaced estimate above. Falls through to the
@@ -447,30 +467,42 @@ function timing(s){
     words.forEach((w,i)=>{ if(typeof realTs[i]==='number' && isFinite(realTs[i])) w.t = realTs[i]; });
   }
   const total = (s && typeof s.audioDurationSec==='number') ? s.audioDurationSec : (tt+1);
-  return { lines, words, total };
+  // from a recording: an instrumental line spans the whole gap between the
+  // singing around it (one row, however long); several in a row share it
+  if(realTs && realTs.length===words.length){
+    const ils = Object.keys(instr).map(Number).sort((x,y)=>x-y);
+    let i = 0;
+    while(i<ils.length){
+      const li0 = ils[i];
+      const prev = words.filter(w=>w.li<li0).pop(), next = words.find(w=>w.li>li0);
+      const run = ils.filter(li=>{ const p = words.filter(w=>w.li<li).pop(); return p===prev; });
+      const a = prev ? prev.t+0.6 : 0, b = next ? Math.max(next.t, a+0.5) : Math.max(total, a+0.5);
+      run.forEach((li,k)=>{ instr[li].a = a+(b-a)*k/run.length; instr[li].b = a+(b-a)*(k+1)/run.length; });
+      i += run.length;
+    }
+  }
+  return { lines, words, total, instr };
 }
 function curWord(tm,t){ let i=-1; for(let k=0;k<tm.words.length;k++){ if(tm.words[k].t<=t) i=k; else break; } return i; }
 function chordAt(s,tm,i){ let c=null; for(let k=0;k<=i&&k<tm.words.length;k++){ const w=tm.words[k]; const ch=s.chords[w.li+'-'+w.wi]; if(ch) c=ch; } return c; }
 function chordSeq(s){ const tm=timing(s); const seq=[]; tm.words.forEach((w,k)=>{ const ch=s.chords[w.li+'-'+w.wi]; if(ch) seq.push({k,ch}); }); return seq; }
+// Every chord change in time order: chords over words, plus the chords of
+// instrumental lines (spread across them) and a recorded intro.
+function chordEvents(s, tm){
+  const ev = [];
+  tm.words.forEach(w=>{ const ch = s.chords[w.li+'-'+w.wi]; if(ch) ev.push({ t:w.t, ch }); });
+  Object.keys(tm.instr||{}).forEach(li=>{ const it = tm.instr[li], n = it.chords.length; it.chords.forEach((ch,i)=>ev.push({ t: it.a+(it.b-it.a)*i/n, ch })); });
+  const io = typeof introInfo==='function' ? introInfo(s, tm) : null;
+  if(io) io.chords.forEach(c=>ev.push({ t:c.t, ch:c.ch }));
+  return ev.sort((x,y)=>x.t-y.t);
+}
 function liveChord(s, tm, t){
-  const seq = chordSeq(s), ci = curWord(tm, t);
-  // still in the instrumental intro: the diagram follows the intro's chords
-  if(ci<0 && typeof introInfo==='function'){
-    const it = introInfo(s, tm);
-    if(it && it.end>0 && it.chords.length){
-      let k = -1; it.chords.forEach((c,i)=>{ if(c.t<=t) k = i; });
-      if(k>=0){
-        const cur = it.chords[k], nx = it.chords.slice(k+1).find(c=>c.ch!==cur.ch);
-        const nextCh = nx ? nx.ch : ((seq.find(x=>x.ch!==cur.ch)||{}).ch || null);
-        const t1 = nx ? nx.t : it.end;
-        return { chord: cur.ch, next: nextCh, progress: t1>cur.t ? Math.max(0, Math.min(1, (t-cur.t)/(t1-cur.t))) : null, ci };
-      }
-    }
-  }
-  let cur = null; seq.forEach(x=>{ if(x.k<=ci) cur = x; });
-  const chord = cur ? cur.ch : (seq[0]||{}).ch;
-  const nxt = seq.find(x=>x.k>ci && x.ch!==chord);
-  const t0 = cur ? tm.words[cur.k].t : 0, t1 = nxt ? tm.words[nxt.k].t : null;
+  const ev = chordEvents(s, tm), ci = curWord(tm, t);
+  let k = -1; ev.forEach((x,i)=>{ if(x.t<=t) k = i; });
+  const cur = k>=0 ? ev[k] : null;
+  const chord = cur ? cur.ch : (ev[0]||{}).ch;
+  const nxt = ev.slice(k+1).find(x=>x.ch!==chord);
+  const t0 = cur ? cur.t : 0, t1 = nxt ? nxt.t : null;
   const progress = t1!=null && t1>t0 ? Math.max(0, Math.min(1, (t-t0)/(t1-t0))) : null;
   return { chord, next: nxt ? nxt.ch : null, progress, ci };
 }
