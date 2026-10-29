@@ -18,22 +18,14 @@ function songMode(s){ const t = songTempo(s); return t.mode==='synced' && s && s
 function songSpeed(s){ return songTempo(s).speed; }
 function setSongTempo(s, patch){ if(!s) return; const t = { ...songTempo(s), ...patch }; s.notes = { ...(s.notes||{}), _tempo: { mode:t.mode, speed:t.speed } }; }
 function markCount(s){ return Object.keys((s && s.notes) || {}).filter(k=>k!=='_tempo' && k!=='_intro').length; }
-// An instrumental intro before the first sung word: either an "[Intro: C G]"
-// line (songs captured from an audio track) or, for a recorded take of typed
-// lyrics, the chords heard before the singing starts (notes._intro, with
-// their times). Returns { li, chords:[{t,ch}], end } or null.
+// For a recorded take of typed lyrics: the chords heard before the singing
+// starts (notes._intro, with their times) — an instrumental intro row above
+// the lyrics. ("[Intro: C G]" lines typed or captured from an audio track are
+// instrumental lines; see instrLine.) Returns { li:-1, chords:[{t,ch}], end } or null.
 function introInfo(s, tm){
   if(!s || !tm.words.length) return null;
   const end = tm.words[0].t, synced = songMode(s)==='synced';
-  for(let li=0; li<tm.words[0].li; li++){
-    const ws = tm.lines[li];
-    if(!isHeaderLine(ws)) continue;
-    const raw = ws.join(' ').replace(/^[\[(]\s*/,'').replace(/\s*[\])]$/,'');
-    const m = /^intro\b:?\s*(.*)$/i.exec(raw);
-    if(!m) continue;
-    const names = m[1].split(/\s+/).filter(x=>/^[A-G]/.test(x));
-    return { li, chords: names.map((ch,i)=>({ ch, t: synced ? end*i/Math.max(1,names.length) : 0 })), end: synced ? end : 0 };
-  }
+  if(Object.keys(tm.instr||{}).some(li=>+li < tm.words[0].li)) return null;
   if(!synced) return null;
   const ic = (s.notes && Array.isArray(s.notes._intro)) ? s.notes._intro.filter(x=>x && x.ch) : [];
   if(end < 2.5 || (!ic.length && end < 4)) return null;
@@ -70,24 +62,25 @@ function buildLines(s, mode, opt){
   const cw = ci>=0 ? tm.words[ci] : null;
   let curChordK = -1; if(ci>=0) for(let k=0;k<=ci;k++){ const w=tm.words[k]; if(s.chords[w.li+'-'+w.wi]) curChordK=k; }
   const notes = { ...(s.notes||{}), ...(opt.extraNotes||{}) }; delete notes._tempo; delete notes._intro;
-  // the instrumental intro gets its own line in the players (not the editors)
-  const intro = (mode==='play' || mode==='scroll' || mode==='view') ? introInfo(s, tm) : null;
-  let introLine = null;
-  if(intro){
-    const t = opt.t;
-    const live = t!=null && intro.end>0;
-    const on = live && t < intro.end;
-    let ci2 = -1; if(live) intro.chords.forEach((c,i)=>{ if(c.t<=t) ci2 = i; });
-    introLine = { li: intro.li, intro:true, header:false, words:[], chords: intro.chords.map(c=>c.ch), curIdx: on ? ci2 : -1,
-      progress: live ? Math.max(0, Math.min(1, t/intro.end)) : 0, live, done: live && !on, end: intro.end,
-      hideChords: !!opt.hideChords, cur: on, scale:1, op: (live && !on) ? 0.6 : 1, padTop:0, mb:0 };
-  }
+  // Instrumental stretches are rows of ticks in the players (in the editors
+  // they stay plain labels); the ticks fill in black as the stretch plays.
+  const ticks = mode==='play' || mode==='scroll' || mode==='view' || mode==='static';
+  const instrRow = (li, a, b, chords)=>{
+    const t = opt.t, live = t!=null;
+    const on = live && t>=a && t<b;
+    const prog = live ? Math.max(0, Math.min(1, (t-a)/Math.max(0.01, b-a))) : 0;
+    let curC = -1; if(on) chords.forEach((c,i)=>{ if(c.p<=prog) curC = i; });
+    return { li, instr:true, header:false, words:[], t0:a, chords: chords.map((c,i)=>({ ch:c.ch, p:c.p, on:i===curC })),
+      progress: prog, live, cur: on, hideChords: !!opt.hideChords, scale:1, op: (live && t>=b) ? 0.6 : 1, padTop:0, mb:0 };
+  };
+  const intro = ticks ? introInfo(s, tm) : null;
+  const introLine = intro ? instrRow(-1, 0, intro.end, intro.chords.map(c=>({ ch:c.ch, p: intro.end>0 ? c.t/intro.end : 0 }))) : null;
   let g = 0;
   // when each sung line starts (the players scroll smoothly between these)
   const lineT0 = {}; tm.words.forEach(w=>{ if(lineT0[w.li]==null) lineT0[w.li] = w.t; });
-  if(introLine) introLine.t0 = 0;
   const out = tm.lines.map((ws,li)=>{
-    if(introLine && introLine.li===li) return introLine;
+    const it = tm.instr && tm.instr[li];
+    if(it && ticks) return instrRow(li, it.a, it.b, it.chords.map((ch,i)=>({ ch, p: i/Math.max(1,it.chords.length) })));
     const header = isHeaderLine(ws);
     const curLine = cw && cw.li===li, last = ws.length-1;
     const w2 = ws.map((w,wi)=>{
@@ -136,20 +129,25 @@ function buildLines(s, mode, opt){
     // (no extra margins on the current line, so starting playback never shifts the lyrics)
     return { li, t0: lineT0[li], words:w2, header, padTop: 0, mb: 0, scale: on?1.08:1, op: (!header && isPlay && cw && li<cw.li) ? 0.75:1, cur: on || (mode==='scroll' && !header && !!curLine) };
   });
-  if(introLine && introLine.li<0) out.unshift(introLine);
-  // during the intro no sung line is current yet
-  if(introLine && introLine.cur) out.forEach(l=>{ if(l!==introLine) l.cur = false; });
+  if(introLine) out.unshift(introLine);
+  // during an instrumental stretch no sung line is current
+  const curInstr = out.find(l=>l.instr && l.cur);
+  if(curInstr) out.forEach(l=>{ if(l!==curInstr) l.cur = false; });
   return out;
 }
-// ♪ Intro · C  G  Am — the chord being played lights up and a thin bar
-// fills until the first sung word.
-function introLineHTML(l, big){
-  const fszc = big ? 'font-size:22px' : 'font-size:19px';
-  const chords = l.hideChords ? '' : l.chords.map((c,i)=>`<span class="ich${i===l.curIdx?' on':''}" style="${fszc}${i===l.curIdx?';'+(animStyle('introChord', i, 'chordPop', 450)||''):''}">${esc(c)}</span>`).join('');
-  const secs = l.end>0 ? `<span class="itime">${Math.max(1, Math.round(l.end - (l.live ? l.progress*l.end : 0)))}s</span>` : '';
-  return `<div class="lline lintro${l.cur?' on':''}" style="opacity:${l.op}"${l.cur?' data-cur="1"':''}>
-    <div class="irow"><span class="ilabel">${icon('music_note',18)}Intro</span>${chords}${l.live&&l.cur?secs:(l.live?'':secs)}</div>
-    ${l.end>0 ? `<div class="ibar"><div style="width:${Math.round(l.progress*100)}%"></div></div>` : ''}
+// ♪ |||||||||||| — an instrumental stretch where the lyrics would be: the
+// ticks turn black as it plays, so you can see when the singing comes back.
+// Its chords sit above the ticks, where they're played.
+const INSTR_TICKS = 32;
+function instrLineHTML(l, big){
+  const done = l.live ? Math.round(l.progress*INSTR_TICKS) : 0;
+  let ticks = '';
+  for(let i=0;i<INSTR_TICKS;i++) ticks += `<i class="${i<done?'on':''}" style="height:${i%4===0?(big?26:22):(big?18:15)}px"></i>`;
+  const fszc = big ? 'font-size:15px;font-weight:700' : 'font-size:14px;font-weight:600';
+  const chords = l.hideChords ? '' : l.chords.map(c=>`<span class="ich${c.on?' on':''}" style="left:${(c.p*100).toFixed(1)}%;${fszc}${c.on?';'+(animStyle('instrChord'+l.li, c.ch+c.p, 'chordPop', 450)||''):''}">${esc(c.ch)}</span>`).join('');
+  return `<div class="lline linstr${l.cur?' on':''}" style="opacity:${l.op}"${l.cur?' data-cur="1"':''} data-t0="${(+l.t0||0).toFixed(3)}">
+    <span class="msi inote" style="font-size:${big?24:20}px">music_note</span>
+    <div class="itrack"><div class="ichords">${chords}</div><div class="iticks">${ticks}</div></div>
   </div>`;
 }
 // A short-lived CSS animation that survives the app's 100ms full re-renders:
@@ -190,7 +188,7 @@ function headerLineHTML(l){
 }
 function linesHTML(lines, big){
   return `<div class="lyrics-wrap">` + lines.map(l=>{
-    if(l.intro) return introLineHTML(l, big);
+    if(l.instr) return instrLineHTML(l, big);
     if(l.header) return headerLineHTML(l);
     const style = `margin-top:${l.padTop}px;margin-bottom:${l.mb}px;transform:scale(${l.scale});transform-origin:left center;opacity:${l.op}`;
     const hasTop = l.words.some(w=>w.mark && w.markSide==='top');
@@ -264,14 +262,16 @@ function jobBarHTML(s){
   const j = songJob(s); if(!j) return '';
   return `<div class="jobbar" style="margin-top:6px;max-width:240px"><div id="jobbar-${j.id}" style="width:${Math.round(j.pct)}%"></div></div><div id="jobnote-${j.id}" style="font-size:11px;color:#8a8a8a;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px">${esc(j.note||'Waiting…')}</div>`;
 }
+function songSubLine(s){ return s.failed ? "Couldn't be added — tap to try again" : (s.sub || (s.synced?'':'Draft')); }
 function songBadge(s){
   if(songJob(s)) return ['IN PROGRESS','#2f8fe0'];
+  if(s.failed) return ['FAILED','#e5372a'];
   if(s.needsReview) return ['REVIEW','#2f8fe0'];
   return s.synced ? ['SYNCED','#1b1b1b'] : ['NO TAKE','#b0b0b0'];
 }
 function songRowHome(s){
   const j = songJob(s);
-  return `<div class="list-row" data-act="openSongFrom" data-id="${s.id}" data-from="home" style="border-bottom:1px solid var(--b2)"><div style="min-width:0;flex:1"><div class="t">${esc(songTitle(s))}</div>${j ? jobBarHTML(s) : `<div class="s">${esc(s.sub || (s.synced?'':'Draft'))}</div>`}</div>${(()=>{ const b=songBadge(s); return b[0]==='SYNCED'||b[0]==='NO TAKE' ? '' : `<span style="font-size:11px;font-weight:800;letter-spacing:.05em;color:${b[1]}">${b[0]}</span>`; })()}</div>`;
+  return `<div class="list-row" data-act="openSongFrom" data-id="${s.id}" data-from="home" style="border-bottom:1px solid var(--b2)"><div style="min-width:0;flex:1"><div class="t">${esc(songTitle(s))}</div>${j ? jobBarHTML(s) : `<div class="s"${s.failed?' style="color:#e5372a"':''}>${esc(songSubLine(s))}</div>`}</div>${(()=>{ const b=songBadge(s); return b[0]==='SYNCED'||b[0]==='NO TAKE' ? '' : `<span style="font-size:11px;font-weight:800;letter-spacing:.05em;color:${b[1]}">${b[0]}</span>`; })()}</div>`;
 }
 
 function renderHome(){
@@ -331,7 +331,7 @@ function rowActHTML(kind, id){
 }
 function songRowList(id, badgeText, badgeCol, from, rowAct){
   const s = song(id);
-  return `<div class="list-row has-act" data-act="openSongFrom" data-id="${id}" data-from="${from}"><div style="min-width:0;flex:1"><div class="t">${esc(songTitle(s))}</div>${songJob(s) ? jobBarHTML(s) : `<div class="s">${esc(s.sub || (s.synced?'':'Draft'))}</div>`}</div><div class="row" style="gap:12px"><span style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:${badgeCol}">${esc(badgeText)}</span>${rowAct ? rowActHTML(rowAct, id) : ''}${icon('chevron_right',22)}</div></div>`;
+  return `<div class="list-row has-act" data-act="openSongFrom" data-id="${id}" data-from="${from}"><div style="min-width:0;flex:1"><div class="t">${esc(songTitle(s))}</div>${songJob(s) ? jobBarHTML(s) : `<div class="s"${s.failed?' style="color:#e5372a"':''}>${esc(songSubLine(s))}</div>`}</div><div class="row" style="gap:12px"><span style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:${badgeCol}">${esc(badgeText)}</span>${rowAct ? rowActHTML(rowAct, id) : ''}${icon('chevron_right',22)}</div></div>`;
 }
 function gigRowList(g){
   const sub = g.date+' · '+g.setlist.length+' songs'+(g.mine?'':' · by '+g.by);
