@@ -56,6 +56,22 @@ function renderConfirmModal(){
     </div>
   </div></div>`;
 }
+// A song that couldn't be added: why, and Try again / Delete.
+function renderFailedModal(){
+  const s = D.songs[ST.failedOpen];
+  if(!s || !s.failed){ ST.failedOpen = null; return ''; }
+  const can = !!s.failed.src;
+  return `<div class="modal-backdrop" data-act="closeFailed"><div class="modal" style="max-width:440px;gap:14px" onclick="modalClick(event)">
+    <div class="mhead"><span style="font-size:21px;font-weight:700">Couldn't add this song</span><span class="icon-btn" data-act="closeFailed">${icon('close',22)}</span></div>
+    <div style="font-size:15px;font-weight:600">${esc(s.title||'Your song')}</div>
+    <div style="font-size:14px;line-height:1.5;color:#b3261e">${esc(s.failed.msg||'Something went wrong')}</div>
+    ${can ? '' : `<div style="font-size:13px;color:#6f6f6f">The file isn't available any more — upload it again to retry.</div>`}
+    <div class="row" style="gap:12px;margin-top:6px">
+      <button class="btn btn-outline" style="flex:1" data-act="failedDelete">Delete</button>
+      <button class="btn btn-dark" style="flex:1" data-act="${can?'failedRetry':'failedReupload'}">${can?'Try again':'Upload again'}</button>
+    </div>
+  </div></div>`;
+}
 function modalClick(e){
   // Let clicks on any actionable element inside the modal (the X button,
   // Save/Create, etc.) bubble up to the document's delegated handler;
@@ -76,6 +92,7 @@ function renderModals(){
   if(ST.verifyModal) html += renderVerifyModal();
   if(ST.accountOpen) html += renderAccountPanel();
   if(ST.confirm) html += renderConfirmModal();
+  if(ST.failedOpen) html += renderFailedModal();
   // The chord/markings-step note editor now floats as a modal popup (over
   // the lyrics, not squeezed in below them) instead of being part of the
   // normal in-flow layout.
@@ -159,7 +176,7 @@ function render(){
   // Modals and the toast are redrawn on every 100ms tick during playback and
   // recording; only play their entrance animation when they first appear,
   // otherwise it restarts every tick and flickers.
-  const modalKey = [ST.gigSettings,ST.upgrade,!!(ST.pick||ST.songPick),!!ST.newItem,!!ST.collabEdit,ST.editNick!=null,ST.verifyModal,ST.accountOpen,ST.selWord,!!ST.confirm].join('|');
+  const modalKey = [ST.gigSettings,ST.upgrade,!!(ST.pick||ST.songPick),!!ST.newItem,!!ST.collabEdit,ST.editNick!=null,ST.verifyModal,ST.accountOpen,ST.selWord,!!ST.confirm,!!ST.failedOpen].join('|');
   if(modalKey===_prevModalKey) document.querySelectorAll('#modalLayer .modal-backdrop, #modalLayer .modal, #modalLayer .sidepanel, #modalLayer .sidepanel-backdrop').forEach(el=>{ el.style.animation='none'; });
   _prevModalKey = modalKey;
   // a failed import stays on screen (with the reason) until it's closed
@@ -245,7 +262,7 @@ function lyricKeyframes(el){
   if(!lines.length) return null;
   const base = lines[0].offsetTop;
   const max = Math.max(0, el.scrollHeight - el.clientHeight);
-  const timed = lines.filter(l=>l.hasAttribute('data-t0') && !l.classList.contains('lintro')).map(l=>({ t:+l.getAttribute('data-t0'), y:Math.min(max, l.offsetTop-base) }));
+  const timed = lines.filter(l=>l.hasAttribute('data-t0')).map(l=>({ t:+l.getAttribute('data-t0'), y:Math.min(max, l.offsetTop-base) }));
   const kf = [{ t:0, y:0 }];
   const add = (t, y)=>{ const p = kf[kf.length-1]; if(isFinite(t) && t>p.t && y>=p.y) kf.push({ t, y }); };
   if(timed.length){
@@ -728,8 +745,12 @@ function jobFinished(j, songObj){
 function jobFailed(j, msg){
   const wasFg = endJob(j);
   const s = D.songs[j.songId];
+  // A new song that couldn't be added stays in your songs marked FAILED;
+  // tap it to try again (the file / link is kept for this session).
   if(s && !(s.lyrics||'').trim() && !s.synced){
-    delete D.songs[s.id]; D.order = D.order.filter(x=>x!==s.id);
+    if(!s.title.trim()){ s.title = j.label || 'Your song'; s.autoTitle = true; }
+    s.failed = { msg, src: j.src || null, target: j.target || null };
+    if(!D.order.includes(s.id)) D.order = [s.id, ...D.order];
     const autoPl = (D.playlists||[]).find(p=>p.auto); if(autoPl) autoPl.ids = D.order;
   }
   // several failures stay listed together (newest last) until closed
@@ -788,14 +809,41 @@ function queueImports(files){
     const label = songObj.title.trim() || base || 'Your recording';
     const j = newJob(songObj.id, label, true); j.target = target; j.note = 'Waiting…';
     labels.push(label);
-    if(f.name && isSheetFile(f)) importSheetJob(songObj, f, j).catch(e=>console.error('Singa: import failed', e));
-    else _importAudioQueue = _importAudioQueue.then(()=>processRecordingFromScratch(songObj, f, j)).catch(e=>console.error('Singa: audio import failed', e));
+    runImportJob(songObj, { kind: (f.name && isSheetFile(f)) ? 'sheet' : 'audio', file: f }, j);
   });
   const autoPl = (D.playlists||[]).find(p=>p.auto); if(autoPl) autoPl.ids = D.order;
   if(skipped) toast(skipped===files.length ? "Singa can't read that file — use audio, a PDF, Word (.docx) or a .txt file" : 'Some files were skipped — Singa reads audio, PDF, Word (.docx) and .txt files');
   if(!labels.length){ render(); return; }
   ST.phase='idle'; ST.selWord=null; ST.queued = labels; ST.screen='queued';
   render();
+}
+// Runs (or re-runs) the work for one imported song: a document, an audio
+// file / recording, or a link.
+function runImportJob(songObj, src, j){
+  j.src = src;
+  if(src.kind==='sheet'){ importSheetJob(songObj, src.file, j).catch(e=>console.error('Singa: import failed', e)); return; }
+  if(src.kind==='link'){
+    _importAudioQueue = _importAudioQueue.then(async ()=>{
+      let file;
+      try{ file = await fetchLinkAudio(src.url, j); }
+      catch(e){ console.error('Singa: link fetch failed', e); jobFailed(j, "Couldn't get the track from that link: "+(e && e.message || e)); return; }
+      await processRecordingFromScratch(songObj, file, j);
+    }).catch(e=>{ console.error('Singa: link import failed', e); jobFailed(j, "Couldn't add the linked track"); });
+    return;
+  }
+  _importAudioQueue = _importAudioQueue.then(()=>processRecordingFromScratch(songObj, src.file, j)).catch(e=>{ console.error('Singa: audio import failed', e); jobFailed(j, "Couldn't analyse that audio: "+(e && e.message || e)); });
+}
+// Try a failed song again.
+function retryFailedSong(id){
+  const s = D.songs[id]; if(!s || !s.failed) return;
+  const f = s.failed;
+  if(!f.src){ toast('Upload the file again to retry'); return; }
+  delete s.failed;
+  if(s.autoTitle){ s.title = ''; delete s.autoTitle; }
+  const label = (f.src.file && f.src.file.name || '').replace(/\.[^.]+$/, '').replace(/_+/g,' ').trim() || (f.src.kind==='link' ? 'The linked track' : 'Your song');
+  const j = newJob(s.id, s.title.trim() || label, true); j.target = f.target; j.note = 'Waiting…';
+  runImportJob(s, f.src, j);
+  render(); toast('Trying again — we\'ll let you know when it\'s ready');
 }
 function askNotify(){
   try{ if('Notification' in window && Notification.permission==='default') Notification.requestPermission().catch(()=>{}); }catch(e){}
@@ -813,6 +861,7 @@ function openSongOrIncomplete(id, from){
   stopOnsetListening();
   const s = song(id);
   if(ST.jobs.some(j=>j.songId===id)){ toast('Still being added — we\'ll let you know when it\'s ready'); return; }
+  if(s.failed){ ST.failedOpen = id; return; }
   if(s.needsReview){ ST.editId = id; ST.screen='review'; ST.back = from || 'home'; return; }
   const ok = s.lyrics && s.lyrics.trim();
   ST.songId = id; ST.viewBy=null; ST.viewChord=null; ST.menu=false; ST.instMenu=false; ST.ctx='view'; ST.t=0; ST.playing=false; ST.vcd=0; ST.listening=false; ST.sortOpen=false;
