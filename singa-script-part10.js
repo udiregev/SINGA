@@ -155,16 +155,17 @@ document.getElementById('fileInput').addEventListener('change', function(e){
   const files = Array.from(e.target.files||[]);
   if(!files.length) return;
   e.target.value = '';
-  // From File / From Recording, or several files at once: each file becomes
-  // its own song, added in the background (see queueImports).
+  // From text doc / From audio track, or several files at once: each file
+  // becomes its own song, added in the background (see queueImports).
   if(files.length > 1 || (ST.screen==='create' && ST.createMode!=='manual' && !ST.editing)){ queueImports(files); return; }
   const file = files[0];
   const s = D.songs[ST.editId];
-  if(/\.docx?$/i.test(file.name)){
-    toast("Word files aren't supported — save it as a PDF or .txt and upload that");
+  if(/\.doc$/i.test(file.name)){
+    toast("Old Word (.doc) files can't be read — save it as .docx, PDF or .txt and upload that");
     return;
   }
-  if(isSheetFile(file)){ queueImports([file]); return; }
+  if(isSheetFile(file) && !isAudioFile(file)){ queueImports([file]); return; }
+  if(!isAudioFile(file)){ toast("That isn't an audio file Singa can read — try an mp3, m4a, wav or a video"); return; }
   processRecordingBlob(s, file);
 });
 

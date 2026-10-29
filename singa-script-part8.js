@@ -86,7 +86,7 @@ async function processRecordingFromScratch(songObj, blob, job){
   jobProgress(j, 3, 'Listening back to your take…');
   let res;
   try{
-    if(!audioImportMod) audioImportMod = await import('./audio-import.js?v=1');
+    if(!audioImportMod) audioImportMod = await importFresh('./audio-import.js?v=2');
     res = await audioImportMod.analyzeAudio(blob, {
       fileName: blob.name || 'recording.webm',
       onProgress: ({pct,note})=>jobProgress(j, pct, note)
@@ -199,7 +199,7 @@ async function processManualTakeJob(songObj, blob, j){
   jobProgress(j, 3, 'Listening back to your take…');
   let res;
   try{
-    if(!audioImportMod) audioImportMod = await import('./audio-import.js?v=1');
+    if(!audioImportMod) audioImportMod = await importFresh('./audio-import.js?v=2');
     res = await audioImportMod.analyzeAudio(blob, { fileName: blob.name || 'recording.webm', onProgress: ({pct,note})=>jobProgress(j, Math.min(95,pct), note) });
   }catch(err){
     console.error('Singa: take analysis failed', err);
