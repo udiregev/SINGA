@@ -108,6 +108,10 @@ function renderSongBody(d){
 // song has none). "Set Speed" instead scrolls the lyrics at a fixed pace:
 // x1 is an average song, x0.5–x2.5 slower/faster; the play button tries it.
 const SPEEDS = [0.5, 1, 1.5, 2, 2.5];
+// The "Embed link (YouTube…)" box is switched off for now (YouTube blocks
+// the server). The code behind it (submitLink, queueLinkImport, the server's
+// /fetch-audio) is all still there: set this to true to bring it back.
+const LINK_IMPORT = false;
 const PLAY_SVG = '<svg width="22" height="24" viewBox="0 0 22 24" aria-hidden="true"><path d="M3 2.5v19L20 12z" fill="#fff"/></svg>';
 const STOP_SVG = '<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><rect x="2" y="2" width="16" height="16" rx="2.5" fill="#fff"/></svg>';
 function tempoView(d){
@@ -131,10 +135,10 @@ function tempoPanelHTML(d){
       <div class="tp-row">
         <button class="btn btn-accent tp-rec" data-act="startRecord">Record</button>
         <button class="btn btn-outline tp-up" data-act="startUpload">Upload</button>
-        <div class="tp-link"><input placeholder="Embed link (YouTube…)" value="${esc(ST.linkDraft||'')}" data-bind="linkDraft" data-key="submitLink" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false"><button class="tp-go${(ST.linkDraft||'').trim()?' on':''}" data-act="submitLink" title="Get the track from this link">${icon('arrow_forward',22)}</button></div>
+        ${LINK_IMPORT ? `<div class="tp-link"><input placeholder="Embed link (YouTube…)" value="${esc(ST.linkDraft||'')}" data-bind="linkDraft" data-key="submitLink" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false"><button class="tp-go${(ST.linkDraft||'').trim()?' on':''}" data-act="submitLink" title="Get the track from this link">${icon('arrow_forward',22)}</button></div>` : ''}
       </div>
       ${lyr ? `<a class="link tp-switch" data-act="setTempoView" data-id="speed">Set Speed</a>`
-        : `<div class="tempo-note">No lyrics yet — record, upload or link the song and Singa will write them down (and find the chords).</div>`}`;
+        : `<div class="tempo-note">No lyrics yet — ${LINK_IMPORT?'record, upload or link the song':'record or upload the song'} and Singa will write them down (and find the chords).</div>`}`;
   }
   const foot = ST.editing ? '' : `<div class="row" style="gap:12px;margin-top:22px">
       ${abortBtnHTML(170)}
@@ -221,7 +225,7 @@ function renderCreate(){
           <button class="btn btn-accent tp-rec" data-act="startRecord">Record</button>
           <button class="btn btn-outline tp-up" data-act="startUpload">Upload</button>
         </div>
-        <div class="tp-link" style="flex:none;width:100%;max-width:420px"><input placeholder="Embed link (YouTube…)" value="${esc(ST.linkDraft||'')}" data-bind="linkDraft" data-key="submitLink" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false"><button class="tp-go${(ST.linkDraft||'').trim()?' on':''}" data-act="submitLink" title="Get the track from this link">${icon('arrow_forward',22)}</button></div>
+        ${LINK_IMPORT ? `<div class="tp-link" style="flex:none;width:100%;max-width:420px"><input placeholder="Embed link (YouTube…)" value="${esc(ST.linkDraft||'')}" data-bind="linkDraft" data-key="submitLink" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false"><button class="tp-go${(ST.linkDraft||'').trim()?' on':''}" data-act="submitLink" title="Get the track from this link">${icon('arrow_forward',22)}</button></div>` : ''}
         <div style="font-size:13px;color:#6f6f6f;text-align:center;max-width:420px;line-height:1.5">No lyrics needed. Singa transcribes your words and detects the chords from the recording. You can correct them afterwards.</div>
         <div style="font-size:12px;color:#8a8a8a">You hereby confirm that you have permission to reproduce these lyrics</div>
       </div>`;
