@@ -26,6 +26,21 @@ export async function decodeTo16kMono(blob){
   } finally { ctx.close().catch(()=>{}); }
 }
 
+// A format this browser can't decode itself (e.g. .ogg/.opus/.wma on an iPad):
+// the Singa server converts it to a 16kHz WAV, which every browser decodes.
+export async function decodeAnyAudio(blob, fileName, serverUrl, report){
+  try{ return await decodeTo16kMono(blob); }
+  catch(err){
+    report && report(4, 'Converting the audio so this device can read it…');
+    const form = new FormData(); form.append('file', blob, fileName || blob.name || 'audio');
+    let res;
+    try{ res = await fetch(serverUrl.replace(/\/+$/,'')+'/convert-audio', { method:'POST', body:form }); }
+    catch(e){ throw new Error("this device can't read that audio format and the Singa server couldn't be reached to convert it"); }
+    if(!res.ok){ let d=''; try{ d=(await res.json()).error||''; }catch(_e){} throw new Error(d || "this device can't read that audio format"); }
+    return await decodeTo16kMono(await res.blob());
+  }
+}
+
 // ---------------- title from mp3 tags ----------------
 export async function readId3Title(blob){
   try{
@@ -127,7 +142,7 @@ export async function analyzeAudio(blob, { fileName='', model=DEFAULT_LYRICS_MOD
   const report = (pct, note)=>{ try{ onProgress && onProgress({ pct, note }); }catch(_e){} };
   report(4, 'Listening back to your take…');
   const id3Title = await readId3Title(blob);
-  const { pcm16k, durationSec } = await decodeTo16kMono(blob);
+  const { pcm16k, durationSec } = await decodeAnyAudio(blob, fileName, serverUrl, report);
 
   // chords and lyrics run side by side
   let rawChords=null, chordSource='', chordError='';
