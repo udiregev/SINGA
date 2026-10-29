@@ -294,7 +294,7 @@ document.addEventListener('scroll', function(e){
     if(!id) return;
     show(id, 'pv', true);
     const s = D.songs[ST.editId];
-    if(s && !/t/.test(id)){
+    if(s && !drag.from && !/t/.test(id)){
       const [li, wi] = id.split('-').map(Number);
       repeatSpots(s, li, wi).forEach(r=>{ if(r!==drag.from) show(r, 'pv-fill', false); });
     }
