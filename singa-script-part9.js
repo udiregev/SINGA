@@ -178,6 +178,16 @@ const Actions = {
     render();
   },
   closeAlert(){ ST.alert=null; render(); },
+  // a song marked FAILED
+  closeFailed(){ ST.failedOpen=null; render(); },
+  failedRetry(){ const id = ST.failedOpen; ST.failedOpen=null; retryFailedSong(id); },
+  failedDelete(){ const id = ST.failedOpen; ST.failedOpen=null; if(id && D.songs[id]) deleteSongEverywhere(id); render(); toast('Song deleted'); },
+  failedReupload(){
+    const id = ST.failedOpen, s = D.songs[id]; ST.failedOpen=null;
+    const kind = s && s.failed && s.failed.src ? s.failed.src.kind : 'audio';
+    if(id && D.songs[id]){ delete D.songs[id]; D.order = D.order.filter(x=>x!==id); const autoPl=D.playlists.find(p=>p.auto); if(autoPl) autoPl.ids=D.order; }
+    Actions.newSong(); Actions.setCreateMode({ id: kind==='sheet' ? 'file' : 'recording' });
+  },
   toggleSort(){ ST.sortOpen = !ST.sortOpen; render(); },
   setSort(d){ ST.sort = d.id; ST.sortOpen=false; render(); },
 
@@ -219,10 +229,10 @@ const Actions = {
     if(ST.phase!=='idle') return;
     if(!lyricsReady(s) && d.id!=='lyrics'){ toast(lyricsMissing(s)); return; }
     if((d.id==='chords' || d.id==='markings') && !hasLyrics(s)){ toast('Add lyrics first — or capture them from a recording on the Tempo step'); return; }
-    if(ST.ctx==='syncpreview'){ ST.playing=false; }
+    if(ST.ctx==='syncpreview'){ ST.playing=false; ST.t=0; }
     withModeSegTransition(()=>{ ST.step=d.id; ST.selWord=null; ST.editorLine=0; ST.tempoTab=null; ST.tempoView=null; ST.speedOpen=false; ST.testSpeed=false; ST.abortArm=0; });
   },
-  createNextStep(){ withModeSegTransition(()=>{ const order=['lyrics','chords','markings','sync']; const i=order.indexOf(ST.step); ST.step=order[Math.min(3,i+1)]; ST.selWord=null; ST.editorLine=0; ST.tempoTab=null; ST.tempoView=null; ST.speedOpen=false; ST.testSpeed=false; ST.abortArm=0; }); },
+  createNextStep(){ if(ST.ctx==='syncpreview'){ ST.playing=false; ST.t=0; } withModeSegTransition(()=>{ const order=['lyrics','chords','markings','sync']; const i=order.indexOf(ST.step); ST.step=order[Math.min(3,i+1)]; ST.selWord=null; ST.editorLine=0; ST.tempoTab=null; ST.tempoView=null; ST.speedOpen=false; ST.testSpeed=false; ST.abortArm=0; }); },
   // no lyrics typed: straight to Tempo, where a recording / upload / link captures them
   lyricsNext(){ const s = D.songs[ST.editId]; if(!lyricsReady(s)){ toast(lyricsMissing(s)); return; } if(!hasLyrics(s)){ withModeSegTransition(()=>{ ST.step='sync'; ST.tempoView=null; ST.speedOpen=false; ST.abortArm=0; }); return; } Actions.createNextStep(); },
   async openSimilar(){
@@ -315,8 +325,11 @@ const Actions = {
   // highlights the words; a set speed just scrolls)
   practiceTempo(){
     const s = D.songs[ST.editId]; if(!s) return;
-    if(ST.ctx==='syncpreview' && ST.playing){ ST.playing=false; ST.testSpeed=false; ST.t=0; render(); return; }
-    ST.ctx='syncpreview'; ST.testSpeed = songMode(s)!=='synced'; ST.t=0; ST.editorLine=0; ST.playing=true; render();
+    // stopping and playing again carries on from the same point
+    if(ST.ctx==='syncpreview' && ST.playing){ ST.playing=false; render(); return; }
+    const tot = timing(s).total;
+    const resumeAt = (ST.ctx==='syncpreview' && ST.t>0 && ST.t<tot) ? ST.t : 0;
+    ST.ctx='syncpreview'; ST.testSpeed = songMode(s)!=='synced'; ST.t=resumeAt; if(!resumeAt) ST.editorLine=0; ST.playing=true; render();
   },
   recordTempo(){ ST.playing=false; ST.testSpeed=false; ST.tempoTab='synced'; Actions.startRecord(); },
   // Done on the Tempo step: the song is added (set speed if there's no take)
@@ -491,8 +504,8 @@ const Actions = {
   setViewChord(d){ ST.viewChord = d.id; render(); },
   viewPlay(){
     const s = song(ST.songId); const tm = timing(s);
-    // Stop: back to the start of the song
-    if(ST.playing || ST.vcd>0){ ST.playing=false; ST.vcd=0; ST.t=0; render(); return; }
+    // Stop: Play carries on from here (scroll the lyrics to pick another point)
+    if(ST.playing || ST.vcd>0){ ST.playing=false; ST.vcd=0; render(); return; }
     if(ST.listening){ stopOnsetListening(); ST.listening=false; render(); return; }
     const t = ST.t < tm.total ? ST.t : 0;
     ST.t = t;
