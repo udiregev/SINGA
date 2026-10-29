@@ -70,7 +70,7 @@ function buildLines(s, mode, opt){
     const on = live && t>=a && t<b;
     const prog = live ? Math.max(0, Math.min(1, (t-a)/Math.max(0.01, b-a))) : 0;
     let curC = -1; if(on) chords.forEach((c,i)=>{ if(c.p<=prog) curC = i; });
-    return { li, instr:true, header:false, words:[], t0:a, chords: chords.map((c,i)=>({ ch:c.ch, p:c.p, on:i===curC })),
+    return { li, instr:true, header:false, words:[], t0:a, chords: chords.map((c,i)=>({ ch:c.ch, p:c.p, id:c.id, on:i===curC })),
       progress: prog, live, cur: on, hideChords: !!opt.hideChords, scale:1, op: (live && t>=b) ? 0.6 : 1, padTop:0, mb:0 };
   };
   const intro = ticks ? introInfo(s, tm) : null;
@@ -80,7 +80,9 @@ function buildLines(s, mode, opt){
   const lineT0 = {}; tm.words.forEach(w=>{ if(lineT0[w.li]==null) lineT0[w.li] = w.t; });
   const out = tm.lines.map((ws,li)=>{
     const it = tm.instr && tm.instr[li];
-    if(it && ticks) return instrRow(li, it.a, it.b, it.chords.map((ch,i)=>({ ch, p: i/Math.max(1,it.chords.length) })));
+    if(it && ticks) return instrRow(li, it.a, it.b, it.chords);
+    // Chords step: the instrumental row is a strip of spots to drop chords on
+    if(it && mode==='chords') return { li, instr:true, edit:true, header:false, words:[], chords: it.chords, scale:1, op:1, padTop:0, mb:0 };
     const header = isHeaderLine(ws);
     const curLine = cw && cw.li===li, last = ws.length-1;
     const w2 = ws.map((w,wi)=>{
@@ -140,6 +142,7 @@ function buildLines(s, mode, opt){
 // Its chords sit above the ticks, where they're played.
 const INSTR_TICKS = 32;
 function instrLineHTML(l, big){
+  if(l.edit) return instrEditHTML(l);
   const done = l.live ? Math.round(l.progress*INSTR_TICKS) : 0;
   let ticks = '';
   for(let i=0;i<INSTR_TICKS;i++) ticks += `<i class="${i<done?'on':''}" style="height:${i%4===0?(big?26:22):(big?18:15)}px"></i>`;
@@ -148,6 +151,21 @@ function instrLineHTML(l, big){
   return `<div class="lline linstr${l.cur?' on':''}" style="opacity:${l.op}"${l.cur?' data-cur="1"':''} data-t0="${(+l.t0||0).toFixed(3)}">
     <span class="msi inote" style="font-size:${big?24:20}px">music_note</span>
     <div class="itrack"><div class="ichords">${chords}</div><div class="iticks">${ticks}</div></div>
+  </div>`;
+}
+// Chords step: the same ♪ ||||| row, split into INSTR_SLOTS drop spots, so a
+// chord can go anywhere along the instrumental (drag it on, move it, × it off).
+function instrEditHTML(l){
+  const by = {}; l.chords.forEach(c=>{ by[c.slot] = c; });
+  let cells = '';
+  for(let k=0;k<INSTR_SLOTS;k++){
+    const c = by[k], id = l.li+'-i'+k;
+    const chip = c ? `<span class="lchord chip" data-drag-chord="${esc(c.ch)}" data-from="${esc(c.id)}">${esc(c.ch)}</span><span class="chip-x" data-act="removeChord" data-id="${esc(c.id)}" title="Remove chord">×</span>` : `<span class="lchord"></span>`;
+    cells += `<span class="lword islot" data-drop="${id}"><span class="lchord-row">${chip}</span><span class="itk"><i style="height:${k%2===0?22:15}px"></i><i style="height:15px"></i></span></span>`;
+  }
+  return `<div class="lline linstr iedit">
+    <span class="msi inote" style="font-size:20px">music_note</span>
+    <div class="islots">${cells}</div>
   </div>`;
 }
 // A short-lived CSS animation that survives the app's 100ms full re-renders:
