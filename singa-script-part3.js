@@ -194,6 +194,16 @@ body.chord-dragging,body.chord-dragging *{cursor:grabbing !important;-webkit-use
 .lintro .ibar{width:100%;min-width:200px;height:4px;border-radius:2px;background:#ececec;overflow:hidden}
 .lintro .ibar>div{height:100%;background:#f24822;border-radius:2px;transition:width .12s linear}
 .lintro:not(.on) .ibar>div{background:#cfcfcf}
+/* ---- instrumental stretch: a row of ticks that fill in as it plays ---- */
+.lline.linstr{display:flex;align-items:flex-end;gap:8px;padding-top:4px}
+.linstr .inote{color:#1b1b1b;line-height:1;margin-bottom:2px}
+.linstr .itrack{display:flex;flex-direction:column;gap:3px}
+.linstr .ichords{position:relative;height:18px}
+.linstr .ich{position:absolute;bottom:0;color:#9a9a9a;white-space:nowrap;line-height:1;display:inline-block;transform-origin:left bottom}
+.linstr .ich.on{color:#f24822}
+.linstr .iticks{display:flex;align-items:flex-end;gap:3px;height:28px}
+.linstr .iticks i{display:block;flex:none;width:2px;border-radius:1px;background:#c8c8c8}
+.linstr .iticks i.on{background:#1b1b1b}
 /* ---- delete / remove on a song row: on hover, always on touch screens ---- */
 .row-act{width:36px;height:36px;border:0;border-radius:50%;background:transparent;color:#b0b0b0;display:inline-flex;align-items:center;justify-content:center;flex:none;opacity:0;transition:opacity .15s,background .15s,color .15s}
 .list-row.has-act:hover .row-act,.row-act:focus-visible{opacity:1}
@@ -382,7 +392,8 @@ function renderManualLyrics(d){
       <button class="icon-btn" title="Find similar titles" style="width:48px;height:48px" data-act="openSimilar">${icon('search',26)}</button>
     </div>
     <input class="ipt" style="height:64px" placeholder="Sub title — artist, version" value="${esc(d.sub)}" data-bind="draftSub">
-    <textarea class="ipt" style="min-height:300px;font-size:18px" placeholder="Add lyrics, one line per row — or leave blank to capture them from a recording" data-bind="draftLyrics">${esc(d.lyrics)}</textarea>
+    <textarea class="ipt" style="min-height:300px;font-size:18px" placeholder="Add lyrics, one line per row — or leave blank to capture them from a recording&#10;Type [instrumental] to add an instrumental line" data-bind="draftLyrics">${esc(d.lyrics)}</textarea>
+    <div style="text-align:center;font-size:13px;color:#6f6f6f">Type <b>[instrumental]</b> to add an instrumental line — type it again on the next line to make it longer</div>
     ${confirmFootnote()}
     <div id="lyricsMissing" style="text-align:center;font-size:13px;color:#2f8fe0;min-height:16px">${missing}</div>
     ${ST.editing ? `<div class="row" style="align-self:center"><button id="lyricsNextBtn" class="btn ${ok?'btn-dark':'btn-disabled'}" style="width:220px;height:48px" data-act="editDone">Done</button></div>` : `<div class="row" style="gap:12px;align-self:center">
