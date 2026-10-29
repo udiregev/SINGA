@@ -44,6 +44,18 @@ function renderVerifyModal(){
   </div></div>`;
 }
 
+// "Are you sure?" before deleting a song / removing it from a playlist or gig.
+function renderConfirmModal(){
+  const c = ST.confirm;
+  return `<div class="modal-backdrop" data-act="confirmCancel"><div class="modal" style="max-width:400px;gap:14px" onclick="modalClick(event)">
+    <div class="mhead"><span style="font-size:21px;font-weight:700">Are you sure?</span><span class="icon-btn" data-act="confirmCancel">${icon('close',22)}</span></div>
+    <div style="font-size:15px;line-height:1.5;color:#444">${esc(c.text)}<br><b>This action cannot be undone.</b></div>
+    <div class="row" style="gap:12px;margin-top:6px">
+      <button class="btn btn-outline" style="flex:1" data-act="confirmCancel">Cancel</button>
+      <button class="btn btn-danger" style="flex:1" data-act="confirmOk">${esc(c.ok)}</button>
+    </div>
+  </div></div>`;
+}
 function modalClick(e){
   // Let clicks on any actionable element inside the modal (the X button,
   // Save/Create, etc.) bubble up to the document's delegated handler;
@@ -63,6 +75,7 @@ function renderModals(){
   if(ST.editNick!=null) html += renderNickModal();
   if(ST.verifyModal) html += renderVerifyModal();
   if(ST.accountOpen) html += renderAccountPanel();
+  if(ST.confirm) html += renderConfirmModal();
   // The chord/markings-step note editor now floats as a modal popup (over
   // the lyrics, not squeezed in below them) instead of being part of the
   // normal in-flow layout.
@@ -146,10 +159,12 @@ function render(){
   // Modals and the toast are redrawn on every 100ms tick during playback and
   // recording; only play their entrance animation when they first appear,
   // otherwise it restarts every tick and flickers.
-  const modalKey = [ST.gigSettings,ST.upgrade,!!(ST.pick||ST.songPick),!!ST.newItem,!!ST.collabEdit,ST.editNick!=null,ST.verifyModal,ST.accountOpen,ST.selWord].join('|');
+  const modalKey = [ST.gigSettings,ST.upgrade,!!(ST.pick||ST.songPick),!!ST.newItem,!!ST.collabEdit,ST.editNick!=null,ST.verifyModal,ST.accountOpen,ST.selWord,!!ST.confirm].join('|');
   if(modalKey===_prevModalKey) document.querySelectorAll('#modalLayer .modal-backdrop, #modalLayer .modal, #modalLayer .sidepanel, #modalLayer .sidepanel-backdrop').forEach(el=>{ el.style.animation='none'; });
   _prevModalKey = modalKey;
-  document.getElementById('toastBox').innerHTML = ST.toast ? `<div class="toast" style="${animStyle('toast', ST.toast, 'toastUp', 350) || 'animation:none'}">${esc(ST.toast)}</div>` : '';
+  // a failed import stays on screen (with the reason) until it's closed
+  document.getElementById('toastBox').innerHTML = (ST.alert ? `<div class="toast toast-alert" style="${animStyle('alert', ST.alert, 'toastUp', 350) || 'animation:none'}"><span>${esc(ST.alert)}</span><button data-act="closeAlert" aria-label="Close">×</button></div>` : '')
+    + (ST.toast ? `<div class="toast" style="${animStyle('toast', ST.toast, 'toastUp', 350) || 'animation:none'}">${esc(ST.toast)}</div>` : '');
   if(sameScreen){
     const scrEl = document.querySelector('#screen .scr');
     if(scrEl) scrEl.style.animation = 'none';
@@ -409,14 +424,133 @@ function parseChordSheetText(text){
    chords kept, page numbers dropped, lyric lines split across a page break
    re-joined to their chords, and title + artist read from the header.
    ============================================================ */
+// Documents Singa reads: .txt/.md/.pdf (the Text import 01 engine), plus
+// .rtf, Word .docx, OpenDocument and Apple Pages files, which are turned into
+// plain text (or, for Pages, the PDF preview inside the file) and then read
+// exactly the same way.
+const SHEET_EXT = /\.(txt|md|text|pdf|rtf|docx|pages|odt)$/i;
 function isSheetFile(file){
-  return /\.(txt|md|pdf)$/i.test(file.name||'') || /^text\//.test(file.type||'') || file.type==='application/pdf';
+  const t = (file.type||'').toLowerCase();
+  return SHEET_EXT.test(file.name||'') || /^text\//.test(t) || t==='application/pdf' || t==='application/rtf'
+    || /wordprocessingml|opendocument\.text|x-iwork-pages/.test(t);
+}
+// Audio / video Singa can analyse (a format the browser can't decode is
+// converted on the Singa server first).
+const AUDIO_EXT = /\.(mp3|m4a|m4b|aac|wav|wave|aif|aiff|aifc|caf|flac|ogg|oga|opus|webm|weba|wma|amr|3gp|3g2|mp4|m4v|mov|mkv|avi|mpeg|mpg|mp2)$/i;
+function isAudioFile(file){ const t=(file.type||'').toLowerCase(); return /^(audio|video)\//.test(t) || AUDIO_EXT.test(file.name||''); }
+// iPhone / iPad: a file picker with an "accept" list greys out files whose
+// type iOS doesn't recognise, so there the picker allows everything and the
+// file is checked once it's chosen.
+function isIOSDevice(){ return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1); }
+// Same-origin module import that tries once more with a fresh URL if the
+// first attempt fails (a flaky connection, or a stale copy in a cache).
+async function importFresh(path){
+  try{ return await import(path); }
+  catch(e){ console.warn('Singa: retrying import of', path, e); return await import(path+(path.includes('?')?'&':'?')+'r='+Date.now()); }
 }
 let sheetImportMod = null;
 async function readSheetFile(file, onLog){
-  if(!sheetImportMod) sheetImportMod = await import('./sheet-import.js?v=1');
-  return sheetImportMod.importSheetFile(file, { onLog });
+  // pdf.js needs Promise.withResolvers, which older iPad Safari doesn't have
+  if(typeof Promise.withResolvers !== 'function'){
+    Promise.withResolvers = function(){ let resolve, reject; const promise = new Promise((a,b)=>{ resolve=a; reject=b; }); return { promise, resolve, reject }; };
+  }
+  if(!sheetImportMod) sheetImportMod = await importFresh('./sheet-import.js?v=2');
+  const prepared = await prepareSheetFile(file, onLog);
+  return sheetImportMod.importSheetFile(prepared, { onLog });
 }
+// ---- turning other document types into something the engine reads ----
+async function prepareSheetFile(file, onLog){
+  const name = file.name || 'document';
+  const base = name.replace(/\.[^.]+$/, '');
+  const t = (file.type||'').toLowerCase();
+  if(/\.docx$/i.test(name) || /wordprocessingml/.test(t)){
+    onLog && onLog('Reading the Word document…');
+    const xml = await zipEntryText(file, 'word/document.xml');
+    if(!xml) throw new Error("couldn't find the text inside that Word file");
+    return new File([docxXmlToText(xml)], base+'.txt', { type:'text/plain' });
+  }
+  if(/\.odt$/i.test(name) || /opendocument\.text/.test(t)){
+    const xml = await zipEntryText(file, 'content.xml');
+    if(!xml) throw new Error("couldn't find the text inside that document");
+    return new File([odtXmlToText(xml)], base+'.txt', { type:'text/plain' });
+  }
+  if(/\.pages$/i.test(name) || /x-iwork-pages/.test(t)){
+    onLog && onLog('Reading the Pages document…');
+    const pdf = await zipEntryBytes(file, n=>/(^|\/)preview\.pdf$/i.test(n));
+    if(!pdf) throw new Error('this Pages file has no preview inside — in Pages, choose Share › Export › PDF and upload that');
+    return new File([pdf], base+'.pdf', { type:'application/pdf' });
+  }
+  if(/\.rtf$/i.test(name) || t==='application/rtf' || t==='text/rtf'){
+    return new File([rtfToText(await readTextAnyEncoding(file))], base+'.txt', { type:'text/plain' });
+  }
+  if(/\.pdf$/i.test(name) || t==='application/pdf') return file;
+  // plain text: cope with UTF-16 / Windows-encoded files too
+  const text = await readTextAnyEncoding(file);
+  return new File([text], /\.(txt|md)$/i.test(name) ? name : base+'.txt', { type:'text/plain' });
+}
+async function readTextAnyEncoding(file){
+  const b = new Uint8Array(await file.arrayBuffer());
+  if(b[0]===0xFF && b[1]===0xFE) return new TextDecoder('utf-16le').decode(b.subarray(2));
+  if(b[0]===0xFE && b[1]===0xFF) return new TextDecoder('utf-16be').decode(b.subarray(2));
+  let txt = new TextDecoder('utf-8').decode(b);
+  if(txt.includes('�')){ try{ txt = new TextDecoder('windows-1252').decode(b); }catch(e){} }
+  return txt.replace(/^﻿/, '');
+}
+function xmlUnescape(s){ return s.replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&#(\d+);/g,(m,n)=>String.fromCharCode(+n)).replace(/&amp;/g,'&'); }
+// Word: one line per paragraph / line break, spaces kept (chord sheets line
+// chords up with spaces), a tab as 4 spaces.
+function docxXmlToText(xml){
+  const body = xml.replace(/<w:tab\/>/g,'\u0001').replace(/<w:(?:br|cr)\b[^>]*\/>/g,'\u0002');
+  return body.split(/<\/w:p>/).map(p=>{
+    let out = '';
+    p.replace(/<w:t(?:\s[^>]*)?>([^<]*)<\/w:t>|\u0001|\u0002/g, (m, txt)=>{ out += m==='\u0001' ? '    ' : (m==='\u0002' ? '\n' : xmlUnescape(txt)); return m; });
+    return out;
+  }).join('\n').replace(/\n{3,}/g,'\n\n').trim();
+}
+function odtXmlToText(xml){
+  return xml.split(/<\/text:(?:p|h)>/).map(p=>xmlUnescape(p.replace(/<text:s(?:\s+text:c="(\d+)")?\s*\/>/g,(m,n)=>' '.repeat(+n||1)).replace(/<text:tab\/>/g,'    ').replace(/<text:line-break\/>/g,'\n').replace(/<[^>]+>/g,''))).join('\n').trim();
+}
+function rtfToText(rtf){
+  // a backslash at the end of a line is a line break (TextEdit / Pages);
+  // other raw newlines in RTF mean nothing
+  let s = rtf.replace(/\\\r?\n/g,'\\par ').replace(/\r?\n/g,'')
+    .replace(/\{\\\*[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g,'')
+    .replace(/\{\\(?:fonttbl|colortbl|stylesheet|info)(?:[^{}]|\{[^{}]*\})*\}/g,'')
+    .replace(/\\par[d]?\b ?|\\line\b ?/g,'\n').replace(/\\tab\b ?/g,'    ')
+    .replace(/\\'([0-9a-f]{2})/gi,(m,h)=>String.fromCharCode(parseInt(h,16)))
+    .replace(/\\u(-?\d+)\??/g,(m,n)=>String.fromCharCode(n<0?+n+65536:+n))
+    .replace(/\\[a-z]+-?\d* ?/gi,'').replace(/\\([{}\\])/g,'$1').replace(/[{}]/g,'');
+  return s.replace(/\r/g,'').replace(/\n{3,}/g,'\n\n').trim();
+}
+// A tiny ZIP reader (docx / pages / odt are ZIP files): finds one entry and
+// inflates it with the browser's own DecompressionStream.
+async function zipFind(file, test){
+  const buf = new Uint8Array(await file.arrayBuffer()), dv = new DataView(buf.buffer);
+  let eocd = -1;
+  for(let i=buf.length-22; i>=Math.max(0, buf.length-70000); i--){ if(dv.getUint32(i,true)===0x06054b50){ eocd=i; break; } }
+  if(eocd<0) throw new Error("that file isn't a readable document");
+  const n = dv.getUint16(eocd+10,true); let p = dv.getUint32(eocd+16,true);
+  for(let k=0;k<n;k++){
+    if(dv.getUint32(p,true)!==0x02014b50) break;
+    const method = dv.getUint16(p+10,true), csize = dv.getUint32(p+20,true);
+    const nlen = dv.getUint16(p+28,true), xlen = dv.getUint16(p+30,true), clen = dv.getUint16(p+32,true), lho = dv.getUint32(p+42,true);
+    const name = new TextDecoder().decode(buf.subarray(p+46, p+46+nlen));
+    if(typeof test==='string' ? name===test : test(name)){
+      const start = lho + 30 + dv.getUint16(lho+26,true) + dv.getUint16(lho+28,true);
+      const data = buf.subarray(start, start+csize);
+      if(method===0) return data;
+      if(method===8){
+        if(typeof DecompressionStream==='undefined') throw new Error('this browser is too old to open that file — export it as PDF or .txt');
+        return new Uint8Array(await new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer());
+      }
+      throw new Error('unsupported compression in that file');
+    }
+    p += 46 + nlen + xlen + clen;
+  }
+  return null;
+}
+async function zipEntryBytes(file, test){ return zipFind(file, test); }
+async function zipEntryText(file, name){ const b = await zipFind(file, name); return b ? new TextDecoder('utf-8').decode(b) : null; }
 // Turns the engine's blocks into Singa's song shape: one lyrics line per
 // sung line, section names as "[Verse 1]" header lines, chords keyed by
 // "line-word", and end-of-line chords as "line-t0", "line-t1"…
@@ -500,8 +634,9 @@ function jobFailed(j, msg){
     delete D.songs[s.id]; D.order = D.order.filter(x=>x!==s.id);
     const autoPl = (D.playlists||[]).find(p=>p.auto); if(autoPl) autoPl.ids = D.order;
   }
+  // several failures stay listed together (newest last) until closed
+  ST.alert = ST.alert && !ST.alert.split('\n').includes(msg) ? ST.alert.split('\n').slice(-2).concat(msg).join('\n') : msg;
   render();
-  toast(msg);
   return wasFg;
 }
 // "Add songs" from a gig or playlist remembers where the new song should go.
@@ -541,7 +676,8 @@ function queueImports(files){
   const labels = [];
   let skipped = 0;
   files.forEach(f=>{
-    if(/\.docx?$/i.test(f.name||'')){ skipped++; return; }
+    if(/\.doc$/i.test(f.name||'')){ skipped++; return; }
+    if(!isSheetFile(f) && !isAudioFile(f)){ skipped++; return; }
     let songObj;
     if(draft && !labels.length && !(draft.lyrics||'').trim() && !draft.synced) songObj = draft;   // keep a title you already typed
     else {
@@ -558,7 +694,7 @@ function queueImports(files){
     else _importAudioQueue = _importAudioQueue.then(()=>processRecordingFromScratch(songObj, f, j)).catch(e=>console.error('Singa: audio import failed', e));
   });
   const autoPl = (D.playlists||[]).find(p=>p.auto); if(autoPl) autoPl.ids = D.order;
-  if(skipped) toast("Word files aren't supported — save them as PDF or .txt");
+  if(skipped) toast(skipped===files.length ? "Singa can't read that file — use audio, a PDF, Word (.docx) or a .txt file" : 'Some files were skipped — Singa reads audio, PDF, Word (.docx) and .txt files');
   if(!labels.length){ render(); return; }
   ST.phase='idle'; ST.selWord=null; ST.queued = labels; ST.screen='queued';
   render();
