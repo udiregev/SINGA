@@ -101,22 +101,47 @@ function chordsInBrowser(pcm){
 
 // ---------------- lyrics: Whisper in a Web Worker ----------------
 const WORKER_SRC = `
-import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2';
+import { pipeline, env, AutoModelForSpeechSeq2Seq } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2';
 env.allowLocalModels = false;
 let pipe=null, loaded=null;
+// If the chosen model can't load on this device (an iPad / Safari running out
+// of memory or storage is the usual reason), fall back to lighter models
+// instead of giving up on the lyrics.
+const LIGHTER = ['Xenova/whisper-base.en','Xenova/whisper-tiny.en'];
+async function load(model, noCache){
+  env.useBrowserCache = !noCache;
+  return pipeline('automatic-speech-recognition', model, { progress_callback: p=>{ if(p && p.status==='progress') self.postMessage({type:'progress', file:p.file, progress:p.progress}); } });
+}
+// pipeline() hides the real reason behind "Unsupported model type: whisper"
+async function realError(model, msg){
+  if(!/unsupported model type/i.test(msg)) return msg;
+  try{ await AutoModelForSpeechSeq2Seq.from_pretrained(model, { quantized:true }); return msg; }
+  catch(e){ return String(e && e.message || e); }
+}
 self.onmessage = async (e)=>{
   const { pcm, model, chunked } = e.data;
   try{
-    if(!pipe || loaded!==model){
-      pipe = await pipeline('automatic-speech-recognition', model, { progress_callback: p=>{ if(p && p.status==='progress') self.postMessage({type:'progress', file:p.file, progress:p.progress}); } });
-      loaded = model;
+    if(!pipe){
+      const tries = [[model,false]].concat(LIGHTER.filter(m=>m!==model).map(m=>[m,false]), [[LIGHTER[LIGHTER.length-1],true]]);
+      const errs = [];
+      for(const [m, noCache] of tries){
+        try{
+          pipe = await load(m, noCache); loaded = m;
+          if(m!==model) self.postMessage({type:'note', text:'Using a lighter lyrics model on this device'});
+          break;
+        }catch(err){
+          const msg = String(err && err.message || err);
+          errs.push(m.replace('Xenova/','')+': '+(errs.length ? msg : await realError(m, msg)));
+        }
+      }
+      if(!pipe) throw new Error("the lyrics model couldn't load on this device ("+errs.join(' | ').slice(0,300)+')');
     }
     self.postMessage({type:'status', text:'transcribing'});
     const opts = { return_timestamps:'word' };
     if(chunked){ opts.chunk_length_s=30; opts.stride_length_s=5; }
     const out = await pipe(pcm, opts);
     const words = (out.chunks||[]).map(c=>({ text:c.text, start:c.timestamp[0], end:c.timestamp[1] }));
-    self.postMessage({type:'done', words, text: out.text});
+    self.postMessage({type:'done', words, text: out.text, model: loaded});
   }catch(err){ self.postMessage({type:'error', message:String(err && err.message || err)}); }
 };`;
 let worker=null;
@@ -125,7 +150,7 @@ function transcribe(pcm, model, onMsg, chunked=true){
     if(!worker) worker=new Worker(URL.createObjectURL(new Blob([WORKER_SRC],{type:'text/javascript'})),{type:'module'});
     worker.onmessage=(e)=>{
       const m=e.data;
-      if(m.type==='progress' || m.type==='status') onMsg && onMsg(m);
+      if(m.type==='progress' || m.type==='status' || m.type==='note') onMsg && onMsg(m);
       else if(m.type==='done') resolve(m);
       else if(m.type==='error') reject(new Error(m.message));
     };

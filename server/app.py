@@ -36,6 +36,10 @@ Endpoint:
     the app analyses it exactly like an uploaded file.
     Optional env var YTDLP_COOKIES: the contents of a cookies.txt (Netscape
     format) for when YouTube asks the server to "confirm you're not a bot".
+    Optional env var YTDLP_PROXY: a residential proxy URL, e.g.
+    http://user:pass@gate.example.com:7000 — YouTube blocks most cloud/server
+    IP addresses outright ("confirm you're not a bot"), and sending the
+    download through a home-style IP is what reliably gets past that.
     YouTube is tried with several player clients in turn, since cloud IPs
     are often challenged on some clients but not others.
 
@@ -155,7 +159,9 @@ AUDIO_TYPES = {".m4a": "audio/mp4", ".mp4": "audio/mp4", ".mp3": "audio/mpeg", "
 def _yt_dlp_error(stderr: str) -> str:
     low = stderr.lower()
     if "confirm you" in low and "bot" in low:
-        return "YouTube is asking the server to prove it isn't a bot. Add YouTube cookies (YTDLP_COOKIES) to the server, or upload the audio file instead."
+        if os.environ.get("YTDLP_PROXY", "").strip():
+            return "YouTube blocked the download even through the proxy. Try again in a minute, or upload the audio file instead."
+        return "YouTube blocks downloads from the Singa server (it asks it to prove it isn't a bot). Upload the audio file instead for now."
     if "private video" in low or "sign in" in low:
         return "That video is private or needs a sign-in."
     if "unsupported url" in low:
@@ -190,6 +196,9 @@ def _run_yt_dlp(url: str, tmp: str, client):
     ]
     if client:
         cmd += ["--extractor-args", "youtube:player_client=" + client]
+    proxy = os.environ.get("YTDLP_PROXY", "").strip()
+    if proxy:
+        cmd += ["--proxy", proxy]
     cookies = os.environ.get("YTDLP_COOKIES", "").strip()
     if cookies:
         cpath = os.path.join(tmp, "cookies.txt")
