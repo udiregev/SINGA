@@ -173,12 +173,12 @@ function queueLinkImport(url){
   leaveCreateForQueue();
   ST.phase='idle'; ST.selWord=null; ST.queued=[label]; ST.screen='queued';
   render();
+  if(!manualTake){ runImportJob(songObj, { kind:'link', url }, j); return; }
   _importAudioQueue = _importAudioQueue.then(async ()=>{
     let file;
     try{ file = await fetchLinkAudio(url, j); }
     catch(e){ console.error('Singa: link fetch failed', e); jobFailed(j, "Couldn't get the track from that link: "+(e && e.message || e)); return; }
-    if(manualTake) await processManualTakeJob(songObj, file, j);
-    else await processRecordingFromScratch(songObj, file, j);
+    await processManualTakeJob(songObj, file, j);
   }).catch(e=>{ console.error('Singa: link import failed', e); jobFailed(j, "Couldn't add the linked track"); });
 }
 
