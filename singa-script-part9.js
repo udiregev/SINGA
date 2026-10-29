@@ -29,6 +29,15 @@ function withModeSegTransition(mutate){
     }
   }
 }
+// Deletes a song for good: from your songs, every playlist and gig, and the database.
+function deleteSongEverywhere(delId){
+  delete D.songs[delId]; D.order = D.order.filter(x=>x!==delId);
+  const autoPl=D.playlists.find(p=>p.auto); if(autoPl) autoPl.ids=D.order;
+  D.playlists.forEach(p=>{ if(!p.auto && p.ids.includes(delId)){ p.ids = p.ids.filter(i=>i!==delId); queueSavePlaylist(p.id); } });
+  D.gigs.forEach(g=>{ if(g.setlist.includes(delId)){ g.setlist = g.setlist.filter(i=>i!==delId); queueSaveGig(g.id); } });
+  if(ST.gigCur===delId){ stopOnsetListening(); ST.gigCur=null; ST.t=0; ST.playing=false; ST.gListening=false; }
+  deleteSongRow(delId);
+}
 const Actions = {
   setAuthMode(d){ ST.authMode = d.id; render(); },
   async login(){
@@ -142,7 +151,33 @@ const Actions = {
   openGig(d){ ST.gigId=d.id; ST.screen='gig'; ST.qrOpen=false; render(); },
   openSongFrom(d){ openSongOrIncomplete(d.id, d.from); render(); },
   openList(d){ ST.screen='list'; ST.listKind=d.kind; ST.listPl=null; ST.listQuery=''; ST.sortOpen=false; render(); },
-  listAdd(){ if(ST.listKind==='playlists') Actions.newItem({kind:'playlist'}); else if(ST.listKind==='gigs') Actions.newItem({kind:'gig'}); else { const curPl = ST.listPl ? D.playlists.find(p=>p.id===ST.listPl) : null; ST.songPick = (curPl && !curPl.auto) ? { kind:'playlist', id:curPl.id } : { kind:'all' }; render(); } },
+  // All Songs → straight into creating a new song; a playlist → pick songs to add
+  listAdd(){ if(ST.listKind==='playlists') Actions.newItem({kind:'playlist'}); else if(ST.listKind==='gigs') Actions.newItem({kind:'gig'}); else { const curPl = ST.listPl ? D.playlists.find(p=>p.id===ST.listPl) : null; if(curPl && !curPl.auto){ ST.songPick = { kind:'playlist', id:curPl.id }; render(); } else Actions.newSong(); } },
+  // the delete / remove button on a song row: ask first
+  askRowAction(d, e){
+    if(e) e.stopPropagation();
+    const s = song(d.id), title = '“'+(s.title||'Untitled song')+'”';
+    if(d.kind==='delete') ST.confirm = { act:'delete', id:d.id, ok:'Delete', text: title+' will be deleted from your songs, playlists and gigs.' };
+    else if(d.kind==='plremove'){ const p = D.playlists.find(x=>x.id===ST.listPl); if(!p) return; ST.confirm = { act:'plremove', id:d.id, pl:p.id, ok:'Remove', text: title+' will be removed from '+p.title+'.' }; }
+    else if(d.kind==='gigremove'){ const g = gigObj(); if(!g) return; ST.confirm = { act:'gigremove', id:d.id, gig:g.id, ok:'Remove', text: title+' will be removed from '+g.title+'.' }; }
+    render();
+  },
+  confirmCancel(){ ST.confirm=null; render(); },
+  confirmOk(){
+    const c = ST.confirm; ST.confirm = null; if(!c){ render(); return; }
+    if(!canSync()) return;
+    if(c.act==='delete'){ deleteSongEverywhere(c.id); render(); toast('Song deleted'); return; }
+    if(c.act==='plremove'){ const p = D.playlists.find(x=>x.id===c.pl); if(p){ p.ids = p.ids.filter(i=>i!==c.id); queueSavePlaylist(p.id); } render(); toast('Removed from '+(p?p.title:'the playlist')); return; }
+    if(c.act==='gigremove'){
+      const g = D.gigs.find(x=>x.id===c.gig);
+      if(g){ g.setlist = g.setlist.filter(i=>i!==c.id); queueSaveGig(g.id); }
+      if(ST.gigCur===c.id){ stopOnsetListening(); ST.gigCur=null; ST.t=0; ST.playing=false; ST.gListening=false; ST.vcd=0; }
+      ST.played = (ST.played||[]).filter(i=>i!==c.id);
+      render(); toast('Removed from '+(g?g.title:'the gig')); return;
+    }
+    render();
+  },
+  closeAlert(){ ST.alert=null; render(); },
   toggleSort(){ ST.sortOpen = !ST.sortOpen; render(); },
   setSort(d){ ST.sort = d.id; ST.sortOpen=false; render(); },
 
@@ -334,10 +369,13 @@ const Actions = {
   startUpload(){
     if(!canSync()) return;
     const fi = document.getElementById('fileInput');
-    // From File takes chord sheets / lyrics (several at once); everywhere
-    // else Upload takes one audio or video take.
-    if(ST.createMode==='file'){ fi.accept='.txt,.md,.pdf,text/plain,application/pdf'; fi.multiple=true; }
-    else { fi.accept='audio/*,video/*'; fi.multiple = ST.createMode==='recording' && !ST.editing; }
+    // From text doc takes chord sheets / lyrics (several at once); everywhere
+    // else Upload takes audio or video. On iPhone/iPad the picker isn't
+    // filtered (iOS greys out files it doesn't recognise) — the file is
+    // checked once it's chosen instead.
+    const ios = isIOSDevice();
+    if(ST.createMode==='file'){ fi.accept = ios ? '' : '.txt,.md,.text,.pdf,.rtf,.docx,.odt,.pages,text/plain,text/markdown,application/pdf,application/rtf,application/vnd.openxmlformats-officedocument.wordprocessingml.document'; fi.multiple=true; }
+    else { fi.accept = ios ? '' : 'audio/*,video/*,.mp3,.m4a,.m4b,.aac,.wav,.aif,.aiff,.caf,.flac,.ogg,.oga,.opus,.webm,.wma,.amr,.3gp,.mp4,.m4v,.mov,.mkv'; fi.multiple = ST.createMode==='recording' && !ST.editing; }
     fi.click();
   },
   startCloud(){ toast('Importing from cloud storage is coming soon — use Record or Upload for now'); },
@@ -431,14 +469,11 @@ const Actions = {
   deleteSong(){
     if(!canSync()) return; stopOnsetListening();
     const delId=ST.songId, fromGig = ST.screen==='gigplayer';
-    delete D.songs[delId]; D.order = D.order.filter(x=>x!==delId);
-    const autoPl=D.playlists.find(p=>p.auto); if(autoPl) autoPl.ids=D.order;
-    D.playlists.forEach(p=>{ if(!p.auto && p.ids.includes(delId)){ p.ids = p.ids.filter(i=>i!==delId); queueSavePlaylist(p.id); } });
-    D.gigs.forEach(g=>{ if(g.setlist.includes(delId)){ g.setlist = g.setlist.filter(i=>i!==delId); queueSaveGig(g.id); } });
+    deleteSongEverywhere(delId);
     ST.menu=false;
     if(fromGig){ if(ST.gigCur===delId){ ST.gigCur=null; ST.t=0; ST.playing=false; ST.gListening=false; } if(!gigObj().setlist.length) ST.screen='gig'; }
     else ST.screen='home';
-    render(); toast('Song deleted'); deleteSongRow(delId);
+    render(); toast('Song deleted');
   },
   copySong(){
     if(!canSync()) return;

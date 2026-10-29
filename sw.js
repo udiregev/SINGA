@@ -5,7 +5,7 @@
    and data always go straight to the network.
    Bump CACHE_NAME whenever the shell file list changes, so old caches get
    cleaned up automatically on the next visit. */
-const CACHE_NAME = 'singa-shell-v11';
+const CACHE_NAME = 'singa-shell-v12';
 const SHELL_FILES = [
   'singa-app.html',
   'singa-site.html',
@@ -43,6 +43,10 @@ self.addEventListener('fetch', function(e){
   const url = new URL(e.request.url);
   if(url.origin !== location.origin) return; // never intercept cross-origin (Supabase, fonts, CDN)
   if(e.request.method !== 'GET') return;
+  // only the app pages and their scripts go through here; everything else
+  // (the import engines, test pages, audio) goes straight to the network
+  const isShell = e.request.mode==='navigate' || SHELL_FILES.some(function(f){ return url.pathname.endsWith('/'+f); });
+  if(!isShell) return;
   // revalidate with the server instead of trusting the browser's HTTP cache
   let req;
   try{ req = e.request.mode==='navigate' ? new Request(e.request.url, { cache:'no-cache', credentials:'same-origin' }) : new Request(e.request, { cache:'no-cache' }); }
