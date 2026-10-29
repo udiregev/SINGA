@@ -30,13 +30,15 @@ function renderSongMenu(){
   </div>`;
 }
 
-// The song viewer's Play / Stop capsule (Stop goes back to the start).
+// The song viewer's Play / Stop capsule (Play again carries on from where it
+// stopped; scroll the lyrics up to start from an earlier point).
 // A song with no synced take can't play: it says so and offers to add one.
 function playButtonHTML(playing, act, listening, id){
   const did = id ? ` data-id="${esc(id)}"` : '';
   const counting = ST.vcd>0;
   const label = (playing||counting) ? 'Stop' : (listening ? 'Listening…' : 'Play');
-  const hint = ST.startMode==='countdown' ? '' : (playing||counting ? '' : (listening ? 'Starts the moment you sing — tap to cancel' : 'Starts when you start singing'));
+  const paused = act==='viewPlay' && !playing && !counting && !listening && ST.t>0;
+  const hint = paused ? 'Scroll the lyrics to start from another point' : (ST.startMode==='countdown' ? '' : (playing||counting ? '' : (listening ? 'Starts the moment you sing — tap to cancel' : 'Starts when you start singing')));
   return `<div class="row" style="gap:12px"><button class="playcap${playing||listening||counting?' live':''}" data-act="${act}"${did}>${label}</button>${hint?`<span style="font-size:12px;color:#8a8a8a">${hint}</span>`:''}</div>`;
 }
 // Set-speed songs say how fast they'll scroll, next to Play.
