@@ -320,9 +320,15 @@ function sortDropdown(){
   </div>` : '';
   return `<div style="position:relative"><button class="row" style="border:0;background:transparent;gap:4px;font-size:13px;color:#6f6f6f" data-act="toggleSort">Sort by: <span style="font-weight:600;color:var(--fg)">${label}</span>${icon(ST.sortOpen?'expand_less':'expand_more',18)}</button>${opts}</div>`;
 }
-function songRowList(id, badgeText, badgeCol, from){
+// A row's delete (All Songs) / remove (a playlist or gig) button: shows on
+// hover, always on touch screens; asks before doing anything.
+function rowActHTML(kind, id){
+  const lbl = kind==='delete' ? 'Delete song' : 'Remove';
+  return `<button class="row-act" data-act="askRowAction" data-kind="${kind}" data-id="${esc(id)}" title="${lbl}" aria-label="${lbl}">${icon(kind==='delete'?'delete':'remove_circle',20)}</button>`;
+}
+function songRowList(id, badgeText, badgeCol, from, rowAct){
   const s = song(id);
-  return `<div class="list-row" data-act="openSongFrom" data-id="${id}" data-from="${from}"><div style="min-width:0;flex:1"><div class="t">${esc(songTitle(s))}</div>${songJob(s) ? jobBarHTML(s) : `<div class="s">${esc(s.sub || (s.synced?'':'Draft'))}</div>`}</div><div class="row" style="gap:12px"><span style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:${badgeCol}">${esc(badgeText)}</span>${icon('chevron_right',22)}</div></div>`;
+  return `<div class="list-row has-act" data-act="openSongFrom" data-id="${id}" data-from="${from}"><div style="min-width:0;flex:1"><div class="t">${esc(songTitle(s))}</div>${songJob(s) ? jobBarHTML(s) : `<div class="s">${esc(s.sub || (s.synced?'':'Draft'))}</div>`}</div><div class="row" style="gap:12px"><span style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:${badgeCol}">${esc(badgeText)}</span>${rowAct ? rowActHTML(rowAct, id) : ''}${icon('chevron_right',22)}</div></div>`;
 }
 function gigRowList(g){
   const sub = g.date+' · '+g.setlist.length+' songs'+(g.mine?'':' · by '+g.by);
@@ -340,7 +346,8 @@ function renderList(){
     rows = sortRows(rows);
     title = curPl ? curPl.title : 'Songs';
     titleBadge = srcBadge(curPl);
-    rowsHtml = `<div class="list-row addrow" data-act="listAdd"><div class="t">${icon('add_circle',22)}Add song</div></div>` + rows.map(r=>{ const b=songBadge(r); return songRowList(r.id, b[0], b[1], 'list'); }).join('');
+    const rowAct = (curPl && !curPl.auto) ? (curPl.mine!==false ? 'plremove' : null) : 'delete';
+    rowsHtml = `<div class="list-row addrow" data-act="listAdd"><div class="t">${icon('add_circle',22)}Add song</div></div>` + rows.map(r=>{ const b=songBadge(r); return songRowList(r.id, b[0], b[1], 'list', r.mine!==false || rowAct==='plremove' ? rowAct : null); }).join('');
     empty = false;
   } else if(ST.listKind==='playlists'){
     let rows = D.playlists.slice();
