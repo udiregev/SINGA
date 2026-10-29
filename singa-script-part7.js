@@ -192,7 +192,7 @@ function render(){
   const els = document.getElementById('editorLyricsScroll');
   const editorMoved = _lastEditorLine !== ST.editorLine || !(_keepScreen === _prevScrollScreen);
   _lastEditorLine = ST.editorLine;
-  if(els && editorMoved){
+  if(els && editorMoved && !els.hasAttribute('data-win')){
     const lineEls = els.querySelectorAll('.lline');
     if(lineEls.length){
       const rowH = els.scrollHeight / lineEls.length;
@@ -214,47 +214,137 @@ function render(){
     _histScreen = ST.screen;
   }
 }
-/* While a song plays (song viewer, Practice, gig player) the lyrics show
-   just 4 lines. The highlighted line sits 2nd (1st at the very start, 4th
-   at the very end) and the window glides there smoothly. The screen is
-   rebuilt every 100ms, so the eased position lives here, not in the DOM. */
-const _win = { pos:0, target:0, key:'', raf:0, lineH:0 };
+/* While a song plays (song viewer, Practice, gig player, and the Tempo step
+   of song creation) the lyrics slide up continuously, from the moment Play is
+   pressed until the end of the song — never jumping a line at a time. The
+   scroll position follows the playback time: when line k+1 starts, line k has
+   reached the top (so the line being sung is 2nd), and in between the lyrics
+   glide at a steady pace. It's drawn every frame (not just on the app's 100ms
+   tick), with a transform so the movement is sub-pixel smooth. A paused
+   player can be scrolled to choose where playback carries on from. */
+const _win = { key:'', kf:null, kfKey:'', clock:0, raf:0, last:0, pos:0 };
+function lyricWinSong(){ return ST.screen==='create' ? D.songs[ST.editId] : song(playId()); }
+// where playback is (seconds into the song) and how fast it's moving now
+function lyricWinState(){
+  if(ST.screen==='create' && ST.step==='sync'){
+    const s = D.songs[ST.editId], sp = s ? songSpeed(s) : 1;
+    if(ST.phase==='recording') return { t: ST.recT*sp, rate: sp };
+    if(ST.phase==='practicing') return { t: ST.recT, rate: (ST.pracState==='following' && performance.now()-(ST.pracHeardAt||0) < 1500) ? sp : 0 };
+    return { t: ST.t, rate: ST.playing ? (ST.testSpeed ? sp : 1) : 0 };
+  }
+  if(!ST.playing) return { t: ST.t, rate: 0 };
+  const s = song(playId());
+  return { t: ST.t, rate: songMode(s)==='synced' ? 1 : songSpeed(s) };
+}
+function lyricWinSeekable(){
+  return !ST.playing && !(ST.vcd>0) && !ST.listening && !ST.gListening && !['recording','practicing','countdown','processing'].includes(ST.phase);
+}
+// (time, scroll) keyframes for the current layout
+function lyricKeyframes(el){
+  const lines = Array.from(el.querySelectorAll('.lline'));
+  if(!lines.length) return null;
+  const base = lines[0].offsetTop;
+  const max = Math.max(0, el.scrollHeight - el.clientHeight);
+  const timed = lines.filter(l=>l.hasAttribute('data-t0') && !l.classList.contains('lintro')).map(l=>({ t:+l.getAttribute('data-t0'), y:Math.min(max, l.offsetTop-base) }));
+  const kf = [{ t:0, y:0 }];
+  const add = (t, y)=>{ const p = kf[kf.length-1]; if(isFinite(t) && t>p.t && y>=p.y) kf.push({ t, y }); };
+  if(timed.length){
+    // a long instrumental intro above the first sung line slides away before
+    // the singing starts (a short one just glides along with the rest)
+    if(timed[0].y > 1 && timed[0].t >= 3) add(timed[0].t, timed[0].y);
+    for(let k=2;k<timed.length;k++) add(timed[k].t, timed[k-1].y);
+    const s = lyricWinSong(), total = s ? timing(s).total : 0;
+    const last = timed[timed.length-1];
+    add(Math.max(total, last.t+2), Math.min(max, last.y));
+  }
+  add(kf[kf.length-1].t + 4, max);
+  // smooth curve through the keyframes (monotone cubic), so the pace eases
+  // from line to line instead of changing abruptly
+  const n = kf.length, d = [], m = new Array(n).fill(0);
+  for(let i=0;i<n-1;i++) d.push((kf[i+1].y-kf[i].y)/(kf[i+1].t-kf[i].t));
+  if(n>1){
+    m[0] = d[0]; m[n-1] = d[n-2];
+    for(let i=1;i<n-1;i++) m[i] = (d[i-1]<=0 || d[i]<=0) ? 0 : (d[i-1]+d[i])/2;
+    for(let i=0;i<n-1;i++){
+      if(d[i]===0){ m[i] = 0; m[i+1] = 0; continue; }
+      const a = m[i]/d[i], b = m[i+1]/d[i], q = a*a+b*b;
+      if(q>9){ const tau = 3/Math.sqrt(q); m[i] = tau*a*d[i]; m[i+1] = tau*b*d[i]; }
+    }
+  }
+  kf.forEach((k,i)=>{ k.m = m[i]; });
+  return kf;
+}
+function kfY(kf, t){
+  if(t<=kf[0].t) return kf[0].y;
+  for(let i=1;i<kf.length;i++){
+    const a=kf[i-1], b=kf[i];
+    if(t<=b.t){
+      const h = b.t-a.t, u = (t-a.t)/h, u2 = u*u, u3 = u2*u;
+      return (2*u3-3*u2+1)*a.y + (u3-2*u2+u)*h*a.m + (-2*u3+3*u2)*b.y + (u3-u2)*h*b.m;
+    }
+  }
+  return kf[kf.length-1].y;
+}
+// the time at which the lyrics are scrolled to y (for scrolling a paused player)
+function kfT(kf, y){
+  if(y<=0) return 0;
+  let lo = 0, hi = kf[kf.length-1].t;
+  if(kfY(kf, hi) <= y) return hi;
+  for(let i=0;i<40;i++){ const mid = (lo+hi)/2; if(kfY(kf, mid) < y) lo = mid; else hi = mid; }
+  return hi;
+}
+function applyWinScroll(el, moving){
+  if(!_win.kf) return;
+  const y = kfY(_win.kf, _win.clock);
+  _win.pos = y;
+  const wrap = el.querySelector('.lyrics-wrap');
+  if(moving && wrap){
+    if(el.scrollTop) el.scrollTop = 0;
+    wrap.style.transform = 'translate3d(0,'+(-y).toFixed(2)+'px,0)';
+  } else {
+    if(wrap) wrap.style.transform = '';
+    el.scrollTop = y; _win.pos = el.scrollTop;
+  }
+}
 function syncLyricWindow(){
   const el = document.querySelector('[data-win]');
   if(!el){ _win.key=''; return; }
-  const lines = Array.from(el.querySelectorAll('.lline'));
-  if(!lines.length) return;
   const key = el.getAttribute('data-win');
-  // window height = 4 typical sung lines (measured once per song/layout)
-  const sizeKey = key+'|'+innerWidth+'x'+innerHeight;
-  if(_win.sizeKey !== sizeKey){
-    const sung = lines.filter(l=>!l.classList.contains('lheader'));
-    const hs = sung.map(l=>l.offsetHeight).sort((a,b)=>a-b);
-    const med = hs.length ? hs[Math.floor(hs.length/2)] : 60;
-    const gap = parseFloat(getComputedStyle(el.querySelector('.lyrics-wrap')).rowGap) || 16;
-    _win.lineH = med + gap; _win.sizeKey = sizeKey;
-  }
-  el.style.height = Math.round(_win.lineH*4 + 8)+'px';
-  const ci = lines.findIndex(l=>l.hasAttribute('data-cur'));
-  const base = lines[0].offsetTop;
-  const max = Math.max(0, el.scrollHeight - el.clientHeight);
-  let target = 0;
-  if(ci > 0) target = Math.min(max, lines[ci-1].offsetTop - base);
-  if(ci === lines.length-1) target = max;
-  if(_win.key !== key){ _win.key = key; _win.pos = target; }
-  _win.target = target;
-  el.scrollTop = _win.pos;
-  if(!_win.raf && Math.abs(_win.pos-_win.target) > 0.5) _win.raf = requestAnimationFrame(stepLyricWindow);
+  const kfKey = key+'|'+innerWidth+'x'+innerHeight+'|'+el.clientHeight+'|'+el.scrollHeight+'|'+el.querySelectorAll('.lline').length;
+  if(_win.kfKey !== kfKey){ _win.kf = lyricKeyframes(el); _win.kfKey = kfKey; }
+  const st = lyricWinState();
+  if(_win.key !== key || st.rate<=0 || Math.abs(st.t-_win.clock) > 1){ _win.key = key; _win.clock = st.t; }
+  el.classList.toggle('seekable', st.rate<=0 && lyricWinSeekable());
+  applyWinScroll(el, st.rate>0);
+  if(st.rate>0 && !_win.raf){ _win.last = performance.now(); _win.raf = requestAnimationFrame(stepLyricWindow); }
 }
-function stepLyricWindow(){
+function stepLyricWindow(now){
   _win.raf = 0;
   const el = document.querySelector('[data-win]');
   if(!el) return;
-  const d = _win.target - _win.pos;
-  _win.pos = Math.abs(d) < 0.5 ? _win.target : _win.pos + d*0.12;
-  el.scrollTop = _win.pos;
-  if(_win.pos !== _win.target) _win.raf = requestAnimationFrame(stepLyricWindow);
+  const st = lyricWinState();
+  if(st.rate<=0){ _win.clock = st.t; applyWinScroll(el, false); return; }
+  const dt = Math.max(0, Math.min(0.1, (now - _win.last)/1000)); _win.last = now;
+  _win.clock += dt*st.rate;
+  // stay locked to the app's own clock without ever visibly jumping
+  const err = st.t - _win.clock;
+  if(Math.abs(err) > 1) _win.clock = st.t; else _win.clock += err*0.06;
+  applyWinScroll(el, true);
+  _win.raf = requestAnimationFrame(stepLyricWindow);
 }
+// Paused: scrolling the lyrics moves the point Play will carry on from
+// (scroll all the way up to start again from the top).
+let _seekRenderT = 0;
+document.addEventListener('scroll', function(e){
+  const el = e.target;
+  if(!el || !el.classList || !el.classList.contains('seekable') || !el.hasAttribute('data-win') || !_win.kf) return;
+  if(Math.abs(el.scrollTop - _win.pos) < 1.5) return;   // our own positioning
+  _win.pos = el.scrollTop;
+  const sg = lyricWinSong(), total = sg ? timing(sg).total : 0;
+  const t = Math.max(0, Math.min(kfT(_win.kf, el.scrollTop), total>1 ? total-0.5 : total));
+  ST.t = t; _win.clock = t;
+  clearTimeout(_seekRenderT); _seekRenderT = setTimeout(render, 180);
+}, true);
 // Song viewer / gig player switch between portrait (diagram above the
 // lyrics) and landscape (lyrics left, diagram right) as the window turns.
 // Marks to the left of a line's first word / right of its last word hang
@@ -350,21 +440,29 @@ function repeatLines(s, li){
   const target = ws0.join(' ').toLowerCase();
   return lines.map((ws,i)=>i).filter(i=>i!==li && !isHeaderLine(lines[i]) && lines[i].join(' ').toLowerCase()===target);
 }
+// End-of-line chords are numbered li-t0, li-t1…; keep them without gaps.
+function compactTailChords(s, li){
+  const tails = [];
+  for(let k=0;k<12;k++){ const id = li+'-t'+k; if(s.chords[id]){ tails.push(s.chords[id]); delete s.chords[id]; } }
+  tails.forEach((c,k)=>{ s.chords[li+'-t'+k] = c; });
+}
 function dropChord(chord, from, to){
   const s = D.songs[ST.editId]; if(!s || !chord) return;
   if(from && from===to) return;
   if(from){
+    // moving a chord that's already on the lyrics (or dragging it off them)
+    // touches only that one chord — and the chord it's dropped onto, which
+    // it replaces. Repeats of the line are left alone.
     delete s.chords[from];
-    // moving or removing a chord takes its copies on the repeated lines with it
-    const [fl, fw] = String(from).split('-').map(Number);
-    if(!isNaN(fw)) repeatLines(s, fl).forEach(i=>{ if(s.chords[i+'-'+fw]===chord) delete s.chords[i+'-'+fw]; });
-  }
-  if(to){
+    if(to){ s.chords[to] = chord; recordRecentChord(chord); }
+    compactTailChords(s, String(from).split('-')[0]);
+  } else if(to){
+    // a new chord from the picker also fills the same spot on repeated lines
     s.chords[to] = chord; recordRecentChord(chord);
     const [li, wi] = String(to).split('-').map(Number);
     applyChordPatternToRepeats(s, li, wi, chord);
-    const p = splitChordStr(chord); ST.selRoot = p.root; ST.selSuffix = p.q;
   }
+  if(to){ const p = splitChordStr(chord); ST.selRoot = p.root; ST.selSuffix = p.q; }
   render();
   queueSaveSong(ST.editId);
 }
