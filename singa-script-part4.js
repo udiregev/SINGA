@@ -123,9 +123,7 @@ function tempoPanelHTML(d){
   const playBtn = `<button class="tp-play" data-act="practiceTempo" title="${playing?'Stop':'Play at this tempo'}">${playing?STOP_SVG:PLAY_SVG}</button>`;
   let main;
   if(view==='speed'){
-    const opts = ST.speedOpen
-      ? SPEEDS.map(v=>`<button class="tp-sp${v===sp?' on':''}" data-act="setSpeed" data-id="${v}">${speedLabel(v)}</button>`).join('')
-      : `<button class="tp-sp on" data-act="toggleSpeedList" title="Change the speed">${speedLabel(sp)}</button>`;
+    const opts = SPEEDS.map(v=>`<button class="tp-sp${v===sp?' on':''}" data-act="setSpeed" data-id="${v}">${speedLabel(v)}</button>`).join('');
     main = `<div class="tp-speed">${opts}${playBtn}</div>
       <a class="link tp-switch" data-act="setTempoView" data-id="sync">Sync to a recording instead</a>`;
   } else {
