@@ -188,6 +188,16 @@ body.chord-dragging,body.chord-dragging *{cursor:grabbing !important;-webkit-use
 .lintro .ibar{width:100%;min-width:200px;height:4px;border-radius:2px;background:#ececec;overflow:hidden}
 .lintro .ibar>div{height:100%;background:#f24822;border-radius:2px;transition:width .12s linear}
 .lintro:not(.on) .ibar>div{background:#cfcfcf}
+/* ---- delete / remove on a song row: on hover, always on touch screens ---- */
+.row-act{width:36px;height:36px;border:0;border-radius:50%;background:transparent;color:#b0b0b0;display:inline-flex;align-items:center;justify-content:center;flex:none;opacity:0;transition:opacity .15s,background .15s,color .15s}
+.list-row.has-act:hover .row-act,.row-act:focus-visible{opacity:1}
+.row-act:hover{background:#fdecea;color:#e5372a}
+@media (hover:none){.row-act{opacity:1}}
+/* ---- an import that failed: stays until closed ---- */
+.toast-box{flex-direction:column;align-items:center;gap:8px}
+.toast-alert span{white-space:pre-line}
+.toast-alert{display:flex;align-items:flex-start;gap:12px;background:#b3261e;text-align:left;pointer-events:auto;max-width:min(560px,calc(100vw - 32px))}
+.toast-alert button{border:0;background:transparent;color:#fff;font-size:22px;line-height:1;padding:0 2px;cursor:pointer;flex:none}
 `;
   document.head.appendChild(st);
 })();
