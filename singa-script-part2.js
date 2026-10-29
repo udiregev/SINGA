@@ -83,6 +83,9 @@ function buildLines(s, mode, opt){
       hideChords: !!opt.hideChords, cur: on, scale:1, op: (live && !on) ? 0.6 : 1, padTop:0, mb:0 };
   }
   let g = 0;
+  // when each sung line starts (the players scroll smoothly between these)
+  const lineT0 = {}; tm.words.forEach(w=>{ if(lineT0[w.li]==null) lineT0[w.li] = w.t; });
+  if(introLine) introLine.t0 = 0;
   const out = tm.lines.map((ws,li)=>{
     if(introLine && introLine.li===li) return introLine;
     const header = isHeaderLine(ws);
@@ -131,7 +134,7 @@ function buildLines(s, mode, opt){
     }
     const isPlay = mode==='play', on = !header && isPlay && curLine;
     // (no extra margins on the current line, so starting playback never shifts the lyrics)
-    return { li, words:w2, header, padTop: 0, mb: 0, scale: on?1.08:1, op: (!header && isPlay && cw && li<cw.li) ? 0.75:1, cur: on || (mode==='scroll' && !header && !!curLine) };
+    return { li, t0: lineT0[li], words:w2, header, padTop: 0, mb: 0, scale: on?1.08:1, op: (!header && isPlay && cw && li<cw.li) ? 0.75:1, cur: on || (mode==='scroll' && !header && !!curLine) };
   });
   if(introLine && introLine.li<0) out.unshift(introLine);
   // during the intro no sung line is current yet
@@ -209,7 +212,7 @@ function linesHTML(lines, big){
       const chipX = (w.chip && w.chord) ? `<span class="chip-x" data-act="removeChord" data-id="${esc(w.id)}" title="Remove chord">×</span>` : '';
       return `<span class="lword${w.chip?' editable':''}" style="cursor:${w.cursor};border-radius:5px;${bg}" ${act}${drop}>${hasTop?markRowHTML(w.mark, w.markSide, w.lvl, lift):''}<span class="${rowCls}"><span class="${chordCls}" style="${fszc};color:${w.chordCol};${w.chordAnim||''}"${drag}>${esc(w.chord)}</span>${chipX}${topArrow}</span><span class="ltext" style="${fsz};font-weight:${w.weight};color:${w.col}">${w.w?esc(w.w):'&nbsp;'}${side}</span></span>`;
     }).join('');
-    return `<div class="lline" style="${style}"${l.cur?' data-cur="1"':''}>${words}</div>`;
+    return `<div class="lline" style="${style}"${l.cur?' data-cur="1"':''}${l.t0!=null?' data-t0="'+(+l.t0).toFixed(3)+'"':''}>${words}</div>`;
   }).join('') + `</div>`;
 }
 /* ============================================================
@@ -287,19 +290,19 @@ function renderHome(){
     <div class="home-grid">
       <div style="display:flex;flex-direction:column;gap:48px">
         <div>
-          <div class="row home-h" style="gap:14px;margin-bottom:8px"><span style="font-size:26px;font-weight:700">Playlists</span><span class="icon-btn" style="margin-left:36px" title="New playlist" data-act="newItem" data-kind="playlist">${icon('add',24)}</span></div>
+          <div class="row home-h" style="gap:14px;margin-bottom:8px"><span class="home-title" data-act="openList" data-kind="playlists" title="All playlists">Playlists</span><span class="icon-btn" style="margin-left:36px" title="New playlist" data-act="newItem" data-kind="playlist">${icon('add',24)}</span></div>
           ${playlists}
           <a class="link" style="display:inline-block;margin-top:14px;text-decoration:underline" data-act="openList" data-kind="playlists">All Playlists</a>
         </div>
         <div>
-          <div class="row home-h" style="gap:14px;margin-bottom:8px"><span style="font-size:26px;font-weight:700">Gigs</span><span class="icon-btn" style="margin-left:36px" title="New gig" data-act="newItem" data-kind="gig">${icon('add',24)}</span></div>
+          <div class="row home-h" style="gap:14px;margin-bottom:8px"><span class="home-title" data-act="openList" data-kind="gigs" title="All gigs">Gigs</span><span class="icon-btn" style="margin-left:36px" title="New gig" data-act="newItem" data-kind="gig">${icon('add',24)}</span></div>
           ${gigs}
           <a class="link" style="display:inline-block;margin-top:14px;text-decoration:underline" data-act="openList" data-kind="gigs">All Gigs</a>
         </div>
       </div>
       <div style="display:flex;flex-direction:column;gap:48px">
         <div>
-          <div class="row home-h" style="gap:14px;margin-bottom:8px"><span style="font-size:26px;font-weight:700">Songs</span><span class="icon-btn" style="margin-left:36px" title="Add a song" data-act="newSong">${icon('add',24)}</span></div>
+          <div class="row home-h" style="gap:14px;margin-bottom:8px"><span class="home-title" data-act="openList" data-kind="songs" title="All songs">Songs</span><span class="icon-btn" style="margin-left:36px" title="Add a song" data-act="newSong">${icon('add',24)}</span></div>
           ${recent || '<div style="padding:14px 0;color:#8a8a8a;font-size:14px">No songs yet — tap + to add one.</div>'}
           <a class="link" style="display:inline-block;margin-top:14px;text-decoration:underline" data-act="openList" data-kind="songs">All Songs</a>
         </div>

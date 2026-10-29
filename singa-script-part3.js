@@ -25,6 +25,12 @@
 .mside-abs.r{left:100%;margin-left:8px}
 .mside-abs .mtext{white-space:normal;width:max-content;max-width:min(26vw,220px);min-width:min-content}
 
+/* Home section titles open the full lists */
+.home-title{font-size:26px;font-weight:700;cursor:pointer}
+.home-title:hover{text-decoration:underline;text-underline-offset:4px}
+/* a paused player: scroll the lyrics to choose where to carry on from */
+.lyr-win.seekable{overflow-y:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.lyr-win.seekable::-webkit-scrollbar{display:none}
 /* piano keyboard stands upright (rotated 90deg clockwise) */
 .piano-rot{position:relative;width:96px;height:314px;flex:none}
 .piano-rot .piano{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) rotate(90deg)}
