@@ -522,7 +522,10 @@ function diagram(ch,next,inst){
   return { ...base, isGuitar:true, w:(n-1)*20, nut: shift?1.5:4, hasBase: shift>0, base: shift+1,
     strings: f.map((_,i)=>({k:i,left:i*20})), frets:[1,2,3,4,5].map(j=>({k:j,top:j*24-1})), dots, marks };
 }
+// pressed piano keys: a colour that can't be confused with the black keys
+const PIANO_KEY_ON = '#2f8fe0';
 function diagramHTML(dia, dotColor, vertical){
+  const keyCol = (!dotColor || dotColor==='#1b1b1b') ? PIANO_KEY_ON : dotColor;
   dotColor = dotColor || '#1b1b1b';
   let inner = '';
   if(dia.isGuitar){
@@ -534,11 +537,12 @@ function diagramHTML(dia, dotColor, vertical){
     dia.marks.forEach(x=> inner += `<div style="position:absolute;left:${x.left}px;top:-24px;width:14px;text-align:center;font-size:12px;font-weight:700">${x.txt}</div>`);
     inner += `</div>`;
   } else if(dia.isPiano){
-    // the keyboard stands upright: rotated 90° clockwise
-    inner += `<div class="piano-rot"><div class="piano">`;
-    dia.white.forEach(k=> inner += `<div style="width:22px;height:100%;border-right:1px solid #1b1b1b;background:${k.on?dotColor:'#fff'}"></div>`);
-    dia.black.forEach(k=> inner += `<div style="position:absolute;top:0;left:${k.left}px;width:14px;height:56px;background:${k.on?dotColor:'#1b1b1b'};border-radius:0 0 3px 3px;border:1px solid #1b1b1b"></div>`);
-    inner += `</div></div>`;
+    // portrait screen: the keyboard lies flat; landscape (the diagram's in a
+    // column beside the lyrics): it stands upright, rotated 90° clockwise
+    inner += vertical ? `<div class="piano-rot"><div class="piano">` : `<div class="piano">`;
+    dia.white.forEach(k=> inner += `<div style="width:22px;height:100%;border-right:1px solid #1b1b1b;background:${k.on?keyCol:'#fff'}"></div>`);
+    dia.black.forEach(k=> inner += `<div style="position:absolute;top:0;left:${k.left}px;width:14px;height:56px;background:${k.on?keyCol:'#1b1b1b'};border-radius:0 0 3px 3px;border:1px solid #1b1b1b"></div>`);
+    inner += vertical ? `</div></div>` : `</div>`;
   }
   // On a chord change the "next" chord slides over into the current chord's
   // place (and grows into it); the new next chord fades in behind it.
