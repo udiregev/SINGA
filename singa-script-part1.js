@@ -440,7 +440,37 @@ function instrLine(ws){
   const raw = ws.join(' ').replace(/^[\[(]\s*/,'').replace(/\s*[\])]$/,'');
   const m = /^(instrumental|intro|outro|solo|interlude|break)\b:?\s*(.*)$/i.exec(raw);
   if(!m) return null;
-  return { kind: m[1].toLowerCase(), chords: m[2].split(/\s+/).filter(x=>/^[A-G]/.test(x)) };
+  return { kind: m[1].toLowerCase(), label: m[1], chords: m[2].split(/\s+/).filter(x=>/^[A-G]/.test(x)) };
+}
+// Chords can be dropped anywhere along an instrumental line: it has
+// INSTR_SLOTS spots, stored as li-i0 … li-i15 (spot / INSTR_SLOTS of the way
+// through). Chords typed in the label ("[Intro: C G]") are spread evenly and
+// carry ids li-h0, li-h1… until the song is opened on the Chords step, where
+// instrMigrate turns them into ordinary placed chords (and "[Intro: C G]"
+// becomes "[Intro]"), so they can be moved and removed like any other.
+const INSTR_SLOTS = 16;
+function instrSlotOf(i, n){ return Math.max(0, Math.min(INSTR_SLOTS-1, Math.round(i/Math.max(1,n)*INSTR_SLOTS))); }
+function instrChordList(s, li, il){
+  const ch = (s && s.chords) || {}, out = [], taken = {};
+  for(let k=0;k<INSTR_SLOTS;k++){ const c = ch[li+'-i'+k]; if(c){ out.push({ ch:c, p:k/INSTR_SLOTS, id:li+'-i'+k, slot:k }); taken[k] = 1; } }
+  const n = il.chords.length;
+  il.chords.forEach((c,i)=>{ const k = instrSlotOf(i, n); if(!taken[k]){ out.push({ ch:c, p:i/Math.max(1,n), id:li+'-h'+i, slot:k }); taken[k] = 1; } });
+  return out.sort((a,b)=>a.p-b.p);
+}
+function instrMigrate(s){
+  if(!s) return false;
+  const lines = parseLyrics(s.lyrics), relabel = {};
+  s.chords = s.chords || {};
+  lines.forEach((ws,li)=>{
+    const il = instrLine(ws); if(!il || !il.chords.length) return;
+    const n = il.chords.length;
+    il.chords.forEach((c,i)=>{ const id = li+'-i'+instrSlotOf(i, n); if(!s.chords[id]) s.chords[id] = c; });
+    relabel[li] = '['+il.label+']';
+  });
+  if(!Object.keys(relabel).length) return false;
+  let k = -1;
+  s.lyrics = String(s.lyrics||'').split('\n').map(raw=>{ if(!raw.trim()) return raw; k++; return relabel[k]!=null ? relabel[k] : raw; }).join('\n');
+  return true;
 }
 function timing(s){
   const lines = parseLyrics(s && s.lyrics); const words = [], instr = {};
@@ -452,7 +482,7 @@ function timing(s){
   lines.forEach((ws,li)=>{
     if(isHeaderLine(ws)){
       const il = instrLine(ws);
-      if(il){ const a = lastB!=null ? lastB : (words.length ? tt-0.5 : 0); instr[li] = { a, b: a+INSTR_SEC, chords: il.chords, kind: il.kind }; lastB = a+INSTR_SEC; tt = lastB + 1; }
+      if(il){ const a = lastB!=null ? lastB : (words.length ? tt-0.5 : 0); instr[li] = { a, b: a+INSTR_SEC, chords: instrChordList(s, li, il), kind: il.kind }; lastB = a+INSTR_SEC; tt = lastB + 1; }
       return;
     }
     lastB = null;
@@ -491,7 +521,7 @@ function chordSeq(s){ const tm=timing(s); const seq=[]; tm.words.forEach((w,k)=>
 function chordEvents(s, tm){
   const ev = [];
   tm.words.forEach(w=>{ const ch = s.chords[w.li+'-'+w.wi]; if(ch) ev.push({ t:w.t, ch }); });
-  Object.keys(tm.instr||{}).forEach(li=>{ const it = tm.instr[li], n = it.chords.length; it.chords.forEach((ch,i)=>ev.push({ t: it.a+(it.b-it.a)*i/n, ch })); });
+  Object.keys(tm.instr||{}).forEach(li=>{ const it = tm.instr[li]; it.chords.forEach(c=>ev.push({ t: it.a+(it.b-it.a)*c.p, ch:c.ch })); });
   const io = typeof introInfo==='function' ? introInfo(s, tm) : null;
   if(io) io.chords.forEach(c=>ev.push({ t:c.t, ch:c.ch }));
   return ev.sort((x,y)=>x.t-y.t);
