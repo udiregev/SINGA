@@ -102,6 +102,8 @@ body.chord-dragging,body.chord-dragging *{cursor:grabbing !important;-webkit-use
 .dia-v{display:flex;flex-direction:column;align-items:center;gap:8px}
 .dia-v-next{display:flex;flex-direction:column;align-items:center;gap:4px;min-width:70px}
 .dia-v .diaNext{font-size:26px;font-weight:600}
+/* the current chord's name sits dead centre over its diagram */
+.diaName{text-align:center}
 .dia-v .fretboard{margin-top:26px}
 .song-main{flex:1;min-height:0;min-width:0;display:flex;flex-direction:column;padding:20px clamp(16px,4vw,48px) 0}
 @media(max-width:759px){.songlist .gigplayer-side{max-height:150px;padding:12px 16px}}
@@ -125,6 +127,8 @@ body.chord-dragging,body.chord-dragging *{cursor:grabbing !important;-webkit-use
 .lyr-win .lline{max-width:none}
 .lyr-win .lyrics-wrap{max-width:89%}
 .lyr-win .lyrics-wrap,.lyr-scroll .lyrics-wrap{padding:0 4px}
+/* room below the last line, so a playing song scrolls right to the end */
+[data-win] > .lyrics-wrap{padding-bottom:55vh !important}
 /* playlist / gig viewers: lyrics start in line with the title */
 .lyr-area.al-left,.al-left .lyr-win,.al-left .lyr-scroll{align-items:flex-start}
 .al-left .lyrics-wrap,.lyr-win.al-left .lyrics-wrap{padding:0 !important;max-width:100% !important}
@@ -204,6 +208,14 @@ body.chord-dragging,body.chord-dragging *{cursor:grabbing !important;-webkit-use
 .linstr .iticks{display:flex;align-items:flex-end;gap:3px;height:28px}
 .linstr .iticks i{display:block;flex:none;width:2px;border-radius:1px;background:#c8c8c8}
 .linstr .iticks i.on{background:#1b1b1b}
+.lline.linstr.iedit{width:380px;max-width:100%;align-items:flex-end;padding-top:6px}
+.iedit .islots{flex:1;min-width:0;display:flex;align-items:flex-end;height:60px}
+.iedit .lword.islot{flex:1 1 0;min-width:0;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:flex-start;position:relative;border-radius:5px;margin:0}
+.iedit .islot .lchord-row{position:absolute;left:0;bottom:28px;min-height:22px;white-space:nowrap;z-index:1}
+.iedit .islot .lchord{font-size:16px;font-weight:800;line-height:22px;color:#1b1b1b}
+.iedit .islot .lchord.chip{margin-left:-4px}
+.iedit .itk{display:flex;align-items:flex-end;gap:3px;height:28px;padding-left:1px}
+.iedit .itk i{display:block;flex:none;width:2px;border-radius:1px;background:#c8c8c8}
 /* ---- delete / remove on a song row: on hover, always on touch screens ---- */
 .row-act{width:36px;height:36px;border:0;border-radius:50%;background:transparent;color:#b0b0b0;display:inline-flex;align-items:center;justify-content:center;flex:none;opacity:0;transition:opacity .15s,background .15s,color .15s}
 .list-row.has-act:hover .row-act,.row-act:focus-visible{opacity:1}
@@ -224,7 +236,7 @@ function renderSearch(){
   const plRows = sortRows(D.playlists.filter(match));
   const gigRows = sortRows(D.gigs.filter(match));
   const sections = [];
-  if(songsRows.length) sections.push(`<div><div style="font-size:24px;font-weight:700;padding-bottom:8px;border-bottom:1px solid var(--b2)">Songs</div>${songsRows.map(r=>songRowList(r.id, r.synced?'SYNCED':'NO TAKE', r.synced?'#1b1b1b':'#b0b0b0','search')).join('')}</div>`);
+  if(songsRows.length) sections.push(`<div><div style="font-size:24px;font-weight:700;padding-bottom:8px;border-bottom:1px solid var(--b2)">Songs</div>${songsRows.map(r=>{ const b=songBadge(r); return songRowList(r.id, b[0], b[1], 'search'); }).join('')}</div>`);
   if(plRows.length) sections.push(`<div><div style="font-size:24px;font-weight:700;padding-bottom:8px;border-bottom:1px solid var(--b2)">Playlists</div>${plRows.map(playlistRow).join('')}</div>`);
   if(gigRows.length) sections.push(`<div><div style="font-size:24px;font-weight:700;padding-bottom:8px;border-bottom:1px solid var(--b2)">Gigs</div>${gigRows.map(gigRowList).join('')}</div>`);
   return `<div class="scr">
@@ -321,7 +333,7 @@ function processingBlock(){
     <div style="width:300px;max-width:80vw;height:8px;border-radius:4px;background:#e6e6e6;overflow:hidden"><div style="height:100%;width:${Math.round(ST.procPct)}%;background:#1b1b1b;border-radius:4px;transition:width .4s"></div></div>
     <div style="font-size:14px;color:#6f6f6f;text-align:center;max-width:420px">${esc(ST.procNote) || STAGES[Math.min(3,Math.floor(ST.procPct/25))]}</div>
     ${canBg ? `<button class="btn btn-outline btn-sm" style="margin-top:18px" data-act="continueInBackground">Continue in the background</button>
-    <div style="font-size:12px;color:#8a8a8a;text-align:center">This will add a new song to your library when it's done — you can review it then.</div>` : ''}
+    <div style="font-size:12px;color:#8a8a8a;text-align:center">This will add the new song to your library when it's done.</div>` : ''}
   </div>`;
 }
 function waveformBlock(){
