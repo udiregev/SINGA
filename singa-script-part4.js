@@ -60,6 +60,8 @@ function renderSongBody(d){
   // During live Practice/Record, lyrics scroll in time (karaoke-paced) but
   // no line is bolded yet — that only happens once there's a real take to
   // play back (see syncPreviewPlay), using real forced-alignment timing.
+  // chords typed in an instrumental label become movable chords on the strip
+  if(ST.step==='chords' && instrMigrate(d)) queueSaveSong(d.id);
   const previewPlaying = ST.step==='sync' && ST.ctx==='syncpreview' && ST.playing;
   const following = ST.step==='sync' && ST.phase==='practicing' && ST.pracState==='following';
   const editMode = ST.step==='chords' ? 'chords' : ST.step==='markings' ? 'markings' : (previewPlaying ? (ST.testSpeed ? 'scroll' : 'play') : (following ? 'play' : 'static'));
@@ -239,12 +241,17 @@ function renderCreate(){
     }
   } else if(ST.createMode==='file'){
     if(phaseIdle){
-      body = `<div style="display:flex;flex-direction:column;align-items:center;gap:28px;margin-top:80px">
+      const multi = !!ST.sheetMulti;
+      body = `<div style="display:flex;flex-direction:column;align-items:center;gap:28px;margin-top:56px">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:10px">
+          <div class="seg">${[['0','Single song'],['1','Multiple songs']].map(([v,l])=>`<button class="${(multi?'1':'0')===v?'on':''}" data-act="setSheetMulti" data-id="${v}">${l}</button>`).join('')}</div>
+          <div style="font-size:13px;color:#6f6f6f;text-align:center;max-width:420px;line-height:1.5">${multi ? 'Each file becomes a song — and a file with several songs in it (like a songbook PDF) is split into them.' : 'Everything you pick becomes one song — for example a song spread over several files.'}</div>
+        </div>
         <div class="row" style="gap:28px">
           <button class="btn-outline" style="width:170px;height:150px;border-radius:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px" data-act="startUpload">${icon('upload',36)}<span style="font-size:15px;font-weight:600">Upload</span></button>
           <button class="btn-outline" style="width:170px;height:150px;border-radius:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px" data-act="startCloud">${icon('cloud',36)}<span style="font-size:15px;font-weight:600">Link Cloud</span></button>
         </div>
-        <div style="font-size:13px;color:#6f6f6f;text-align:center;max-width:420px;line-height:1.5">A chord sheet or lyrics file — .txt, .pdf, Word, Pages or .rtf (scanned PDFs work too). Singa reads the title, the lyrics and the chords above each word. Pick several files to add several songs at once.</div>
+        <div style="font-size:13px;color:#6f6f6f;text-align:center;max-width:420px;line-height:1.5">A chord sheet or lyrics file — .txt, .pdf, Word, Pages or .rtf (scanned PDFs work too). Singa reads the title, the lyrics and the chords above each word.</div>
         <div style="font-size:12px;color:#8a8a8a">You hereby confirm that you have permission to reproduce these lyrics</div>
       </div>`;
     } else {
@@ -292,7 +299,7 @@ function renderQueued(){
     <svg class="mascot" style="height:280px" viewBox="0 0 160 160" fill="none" aria-hidden="true"><circle cx="80" cy="80" r="74" fill="var(--accent)"/><path d="M50 83l19 19 41-46" stroke="#fff" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/><circle cx="18" cy="34" r="6" fill="var(--accent)"/><circle cx="142" cy="46" r="5" fill="#2a9d6b"/><circle cx="136" cy="124" r="7" fill="#4169c7"/><circle cx="16" cy="118" r="5" fill="#8e4fd6"/></svg>
     <div style="font-size:64px;font-weight:800;letter-spacing:-0.03em;margin-top:12px">Got it!</div>
     <div style="font-size:22px;text-align:center;line-height:1.4;margin-top:4px">${what}</div>
-    <div style="font-size:15px;color:#6f6f6f;text-align:center;max-width:360px;line-height:1.5;margin-top:14px">No need to wait here. We'll let you know when ${q.length===1?'it\'s':'they\'re'} ready — you'll find ${q.length===1?'it':'them'} in your songs marked <b style="color:#2f8fe0">IN PROGRESS</b>.</div>
+    <div style="font-size:15px;color:#6f6f6f;text-align:center;max-width:360px;line-height:1.5;margin-top:14px">No need to wait here. We'll let you know when ${q.length===1?'it\'s':'they\'re'} ready — you'll find ${q.length===1?'it':'them'} in your songs marked <b style="color:#2f8fe0">PROCESSING</b>.</div>
     <div style="display:flex;flex-direction:column;gap:12px;width:100%;max-width:340px;margin-top:30px">
       <button class="btn btn-grey" style="height:64px" data-act="goHome">Close</button>
       <button class="btn btn-dark" style="height:64px" data-act="newSong">Add Another Song</button>
