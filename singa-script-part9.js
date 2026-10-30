@@ -209,6 +209,7 @@ const Actions = {
   toggleNotif(d){ if(!canSync()) return; ST.notif[d.id] = !ST.notif[d.id]; syncProfile(); render(); },
   toggleCollabInGig(d){ const i = +d.id; const cg = D.gigs.find(g=>g.id===ST.collabFor); if(!cg) return; const c = D.collabs[i]; const inGig = c.gigs.includes(cg.id); c.gigs = inGig ? c.gigs.filter(x=>x!==cg.id) : [...c.gigs, cg.id]; render(); toast(inGig ? c.name+' removed from '+cg.title : c.name+' added to '+cg.title); },
 
+  setSheetMulti(d){ ST.sheetMulti = d.id==='1'; render(); },
   setCreateMode(d){ if(ST.ctx==='syncpreview'){ ST.playing=false; ST.testSpeed=false; } ST.createMode=d.id; ST.phase='idle'; ST.step='lyrics'; ST.editorLine=0; ST.abortArm=0; render(); },
   abortCreate(){
     // first tap turns the button red; a second tap (within 3s) aborts
