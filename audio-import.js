@@ -159,6 +159,48 @@ function transcribe(pcm, model, onMsg, chunked=true){
   });
 }
 
+// ---------------- lyrics: on the Singa server ----------------
+// iPads and iPhones (Safari) can't load Whisper in the browser, so there the
+// lyrics are written down by the Singa server instead (POST /transcribe, the
+// same kind of Whisper model). Anywhere else the server is the fallback when
+// the in-browser model fails.
+const IS_IOS = typeof navigator!=='undefined' && (/iPad|iPhone|iPod/.test(navigator.userAgent||'') || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1));
+let lyricsOnServer = IS_IOS;
+function pcmToWav(pcm, sr=16000){
+  const n = pcm.length, buf = new ArrayBuffer(44 + n*2), v = new DataView(buf);
+  const w = (o, s)=>{ for(let i=0;i<s.length;i++) v.setUint8(o+i, s.charCodeAt(i)); };
+  w(0,'RIFF'); v.setUint32(4, 36+n*2, true); w(8,'WAVE'); w(12,'fmt '); v.setUint32(16,16,true); v.setUint16(20,1,true); v.setUint16(22,1,true);
+  v.setUint32(24, sr, true); v.setUint32(28, sr*2, true); v.setUint16(32,2,true); v.setUint16(34,16,true); w(36,'data'); v.setUint32(40, n*2, true);
+  for(let i=0;i<n;i++){ const x = Math.max(-1, Math.min(1, pcm[i])); v.setInt16(44+i*2, x<0 ? x*0x8000 : x*0x7fff, true); }
+  return new Blob([buf], { type:'audio/wav' });
+}
+async function transcribeOnServer(pcm, serverUrl, onMsg){
+  onMsg && onMsg({ type:'status', text:'transcribing' });
+  const form = new FormData(); form.append('file', pcmToWav(pcm), 'speech.wav');
+  let res;
+  try{ res = await fetch(serverUrl.replace(/\/+$/,'')+'/transcribe', { method:'POST', body:form }); }
+  catch(e){ throw new Error("couldn't reach the Singa server to write down the lyrics — check your connection"); }
+  if(!res.ok){
+    let d=''; try{ d=(await res.json()).error||''; }catch(_e){}
+    if(res.status===404 || res.status===405) d = "the Singa server hasn't been updated to write down lyrics yet";
+    throw new Error(d || ('the Singa server answered '+res.status));
+  }
+  const j = await res.json();
+  return { words: j.words||[], text: j.text||'', model: j.model||'server' };
+}
+async function transcribeAny(pcm, model, onMsg, chunked, serverUrl){
+  if(!lyricsOnServer){
+    try{ return await transcribe(pcm, model, onMsg, chunked); }
+    catch(err){
+      // the in-browser model failed: use the server from now on
+      lyricsOnServer = true;
+      try{ return await transcribeOnServer(pcm, serverUrl, onMsg); }
+      catch(err2){ throw new Error(err.message+' — and on the server: '+err2.message); }
+    }
+  }
+  return await transcribeOnServer(pcm, serverUrl, onMsg);
+}
+
 // ---------------- the whole Audio import 01 flow ----------------
 // onProgress({ pct, note }) is called as each step moves along.
 // Returns { durationSec, pcm16k, rawChords, chordSource:'ai'|'fallback', chordError,
@@ -177,7 +219,7 @@ export async function analyzeAudio(blob, { fileName='', model=DEFAULT_LYRICS_MOD
 
   let lyricsPct=10, creep=null;
   report(lyricsPct, 'Eavesdropping on the chords and loading the lyrics model…');
-  const lyricsP = transcribe(pcm16k, model, m=>{
+  const lyricsP = transcribeAny(pcm16k, model, m=>{
     if(m.type==='progress'){ lyricsPct = 10 + Math.round((m.progress||0)*0.2); report(lyricsPct, 'Downloading the lyrics model (first time only) '+Math.round(m.progress||0)+'%'); }
     else if(m.type==='status'){
       lyricsPct = 32; report(lyricsPct, 'Teaching every word to keep up with you — this takes a few minutes');
@@ -185,7 +227,7 @@ export async function analyzeAudio(blob, { fileName='', model=DEFAULT_LYRICS_MOD
       // clearly still working, without ever claiming to be done.
       creep = setInterval(()=>{ lyricsPct = Math.min(78, lyricsPct + (78-lyricsPct)*0.04); report(lyricsPct, 'Teaching every word to keep up with you — this takes a few minutes'); }, 1500);
     }
-  }).finally(()=>{ if(creep) clearInterval(creep); });
+  }, true, serverUrl).finally(()=>{ if(creep) clearInterval(creep); });
 
   let rawWords=[], rawText='', lyricsError='';
   await Promise.all([chordsP, lyricsP.then(r=>{ rawWords=r.words||[]; rawText=r.text||''; }).catch(err=>{ rawWords=[]; rawText=''; lyricsError=err.message; })]);
@@ -199,7 +241,7 @@ export async function analyzeAudio(blob, { fileName='', model=DEFAULT_LYRICS_MOD
     const clipStart=Math.max(0,g.start-0.5), clipEnd=Math.min(durationSec,g.end+0.5);
     const clip=pcm16k.slice(Math.round(clipStart*16000), Math.round(clipEnd*16000));
     try{
-      const r=await transcribe(clip, model, null, false);
+      const r=await transcribeAny(clip, model, null, false, serverUrl);
       const shifted=(r.words||[]).map(w=>({ text:w.text, start:w.start==null?null:w.start+clipStart, end:w.end==null?null:w.end+clipStart }));
       const keep=acceptGapWords(shifted, g, clipStart);
       if(keep.length){ rawWords=rawWords.concat(keep); secondText+=keep.map(w=>w.text).join(' ')+'\n'; }
