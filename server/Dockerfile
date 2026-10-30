@@ -25,6 +25,11 @@ RUN pip install --no-cache-dir --no-build-isolation madmom==0.16.1
 RUN pip install --no-cache-dir -U "yt-dlp[default]"
 COPY --from=denoland/deno:bin /deno /usr/local/bin/deno
 
+# Lyrics for devices that can't run Whisper in the browser (POST /transcribe):
+# faster-whisper on the CPU. numpy stays at madmom's version; huggingface_hub
+# is pinned because faster-whisper 1.0.3 still imports requests through it.
+RUN pip install --no-cache-dir "faster-whisper==1.0.3" "numpy==1.23.5" "huggingface_hub==0.26.5" requests
+
 COPY app.py .
 
 ENV PORT=8000

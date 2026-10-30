@@ -43,6 +43,16 @@ Endpoint:
     YouTube is tried with several player clients in turn, since cloud IPs
     are often challenged on some clients but not others.
 
+  POST /transcribe
+    multipart/form-data, field "file" — any audio ffmpeg can read (the app
+    sends a 16kHz mono WAV). Response 200 JSON:
+      { "words": [ { "text": " Hello", "start": 1.2, "end": 1.5 }, ... ],
+        "text": "...", "model": "server:small.en" }
+    Speech-to-text with word timings (faster-whisper, English). The app uses
+    it when Whisper can't run inside the browser — iPads/iPhones (Safari)
+    usually can't load the model. Env var WHISPER_MODEL picks the model
+    (default small.en); it downloads once, in the background at start-up.
+
   POST /convert-audio
     multipart/form-data, field "file" — any audio/video ffmpeg can read.
     Response 200: 16kHz mono WAV. The app falls back to this when the
@@ -61,6 +71,7 @@ import glob
 import os
 import subprocess
 import tempfile
+import threading
 import urllib.parse
 
 # madmom (last released 2018) still references these pre-3.10 aliases.
@@ -270,6 +281,66 @@ async def convert_audio(file: UploadFile = File(...)):
         with open(dst, "rb") as f:
             data = f.read()
     return Response(content=data, media_type="audio/wav")
+
+
+# ---------------- lyrics: speech-to-text for devices that can't run it ----------------
+WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "small.en").strip() or "small.en"
+_whisper = None
+_whisper_load_lock = threading.Lock()
+_whisper_run_lock = threading.Lock()   # one transcription at a time keeps memory bounded
+
+
+def _get_whisper():
+    global _whisper
+    with _whisper_load_lock:
+        if _whisper is None:
+            from faster_whisper import WhisperModel
+            _whisper = WhisperModel(WHISPER_MODEL, device="cpu", compute_type="int8")
+    return _whisper
+
+
+def _warm_whisper():
+    try:
+        _get_whisper()
+    except Exception as e:  # noqa: BLE001 — a failed warm-up just means the first request tries again
+        print("Singa: speech model warm-up failed:", e, flush=True)
+
+
+threading.Thread(target=_warm_whisper, daemon=True).start()
+
+
+@app.post("/transcribe")
+def transcribe(file: UploadFile = File(...)):
+    raw = file.file.read()
+    if not raw:
+        return JSONResponse(status_code=400, content={"error": "Empty upload."})
+    if len(raw) > MAX_UPLOAD_BYTES:
+        return JSONResponse(status_code=413, content={"error": "File too large (max 25MB)."})
+    with tempfile.TemporaryDirectory() as tmp:
+        src = os.path.join(tmp, "input" + (os.path.splitext(file.filename or "")[1] or ".bin"))
+        dst = os.path.join(tmp, "speech.wav")
+        with open(src, "wb") as f:
+            f.write(raw)
+        result = subprocess.run(["ffmpeg", "-y", "-i", src, "-vn", "-t", str(MAX_DURATION_S), "-ar", "16000", "-ac", "1",
+                                 "-c:a", "pcm_s16le", dst], capture_output=True, text=True)
+        if result.returncode != 0 or not os.path.exists(dst):
+            return JSONResponse(status_code=400, content={"error": "Couldn't read that file as audio."})
+        try:
+            model = _get_whisper()
+        except Exception as e:  # noqa: BLE001
+            return JSONResponse(status_code=503, content={"error": "The lyrics model isn't ready on the server: " + str(e)})
+        try:
+            with _whisper_run_lock:
+                segments, _info = model.transcribe(dst, language="en", beam_size=5, word_timestamps=True,
+                                                   condition_on_previous_text=False)
+                words, texts = [], []
+                for seg in segments:
+                    texts.append(seg.text)
+                    for w in (seg.words or []):
+                        words.append({"text": w.word, "start": round(float(w.start), 2), "end": round(float(w.end), 2)})
+        except Exception as e:  # noqa: BLE001
+            return JSONResponse(status_code=500, content={"error": "Transcription failed: " + str(e)})
+    return {"words": words, "text": "".join(texts).strip(), "model": "server:" + WHISPER_MODEL}
 
 
 @app.get("/")
