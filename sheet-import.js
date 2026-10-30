@@ -84,7 +84,7 @@ async function pageIsFullPageScan(lib, page){
 // fonts aren't evenly spaced per character) but close enough to tell which
 // word a chord above it is nearest to.
 function reconstructWordLines(content){
-  const items = content.items.map(it=>({ str: it.str, x: it.transform[4], y: it.transform[5], width: it.width||0 }));
+  const items = content.items.map(it=>({ str: it.str, x: it.transform[4], y: it.transform[5], width: it.width||0, size: Math.abs(it.transform[3]) || Math.hypot(it.transform[2]||0, it.transform[3]||0) || 0 }));
   const lines = [];
   items.forEach(it=>{
     let line = lines.find(l=>Math.abs(l.y - it.y) < 2.5);
@@ -103,7 +103,9 @@ function reconstructWordLines(content){
         words.push({ text: m[0], x: it.x + (it.width||0)*frac, xEnd: it.x + (it.width||0)*fracEnd });
       }
     });
-    return { text: words.map(w=>w.text).join(' '), words };
+    // font size: tells a song's title (bigger) from its lyrics on a page
+    const size = Math.max(0, ...l.items.filter(it=>/\S/.test(it.str)).map(it=>it.size||0));
+    return { text: words.map(w=>w.text).join(' '), words, size };
   });
 }
 async function ocrPageWordLines(page){
@@ -383,6 +385,24 @@ async function sniff(file){
 export function isSheetFile(file){
   return /\.(txt|md|pdf)$/i.test(file.name||'') || /^text\//.test(file.type||'') || file.type==='application/pdf';
 }
+async function fileWordLines(file){
+  let kind = detectKind(file);
+  if(kind==='unknown') kind = await sniff(file);
+  if(kind==='pdf'){ const r = await extractPdfWordLines(file); return { lines:r.lines, usedOcr:r.usedOcr, kind }; }
+  return { lines: plainTextToWordLines(await file.text()), usedOcr:false, kind };
+}
+function sheetFromLines(wordLines, usedOcr, fileName){
+  const rawText = wordLines.map(l=>l.text).join('\n');
+  const classified = classifyWordLines(wordLines, usedOcr===true);
+  const header = extractHeader(classified, fileName);
+  let title, artist='', body;
+  if(header){ title=header.title; artist=header.artist; body=classified.filter((_,i)=>!header.consumed.has(i)); }
+  else { const t=extractTitle(classified, fileName); title=t.title; body = t.consumedIndex>=0 ? classified.filter((_,i)=>i!==t.consumedIndex) : classified; }
+  const blocks = buildSheetBlocks(body);
+  return { title, artist, blocks, rawText, usedOcr,
+    junkCount: classified.filter(l=>l.type==='junk').length,
+    noiseCount: classified.filter(l=>l.type==='noise').length };
+}
 // Reads a chord-sheet file and returns
 //   { title, artist, blocks, rawText, usedOcr, junkCount, noiseCount }
 // where blocks are { type:'label', text } | { type:'couplet', words:[{text}],
@@ -390,21 +410,74 @@ export function isSheetFile(file){
 export async function importSheetFile(file, { onLog } = {}){
   logHook = onLog || null;
   try{
-    let kind = detectKind(file);
-    if(kind==='unknown') kind = await sniff(file);
-    let wordLines, usedOcr=false;
-    if(kind==='pdf'){ const r = await extractPdfWordLines(file); wordLines=r.lines; usedOcr=r.usedOcr; }
-    else wordLines = plainTextToWordLines(await file.text());
-    const rawText = wordLines.map(l=>l.text).join('\n');
-    const classified = classifyWordLines(wordLines, usedOcr===true);
-    const header = extractHeader(classified, file.name);
-    let title, artist='', body;
-    if(header){ title=header.title; artist=header.artist; body=classified.filter((_,i)=>!header.consumed.has(i)); }
-    else { const t=extractTitle(classified, file.name); title=t.title; body = t.consumedIndex>=0 ? classified.filter((_,i)=>i!==t.consumedIndex) : classified; }
-    const blocks = buildSheetBlocks(body);
-    return { title, artist, blocks, rawText, usedOcr,
-      junkCount: classified.filter(l=>l.type==='junk').length,
-      noiseCount: classified.filter(l=>l.type==='noise').length };
+    const r = await fileWordLines(file);
+    return sheetFromLines(r.lines, r.usedOcr, file.name);
+  } finally { logHook = null; }
+}
+// ---- several songs in one file ----
+// A text file: songs separated by a page break (form feed), a divider line
+// (---, ===, ***) or three or more empty lines.
+function splitTextSegments(lines){
+  const segs = [[]]; let blanks = 0;
+  lines.forEach(l=>{
+    const t = (l.text||'').trim();
+    if(/\f/.test(l.text||'') || /^[-=_*~#]{3,}$/.test(t)){ blanks = 0; if(segs[segs.length-1].length) segs.push([]); return; }
+    if(!t){ blanks++; if(blanks>=3 && segs[segs.length-1].length){ segs.push([]); return; } }
+    else blanks = 0;
+    segs[segs.length-1].push(l);
+  });
+  return segs.filter(s=>s.some(l=>(l.text||'').trim()));
+}
+// A PDF: page by page. A page starts a new song when it opens with a title
+// — a line in a bigger font than the rest of the page (or, on a scanned
+// page, a short line with a gap under it). A page that opens straight into
+// chords, a section label or more lyrics carries on the song before it.
+function splitPdfPages(lines){
+  const pages = [[]];
+  lines.forEach(l=>{ if(l.pageBreak){ if(pages[pages.length-1].length) pages.push([]); } else pages[pages.length-1].push(l); });
+  return pages.filter(p=>p.some(l=>(l.text||'').trim() && !l.junk));
+}
+function pageStartsSong(page, usedOcr){
+  const cls = classifyWordLines(page, usedOcr===true);
+  const idx = cls.findIndex(c=>c.type!=='blank' && c.type!=='junk' && c.type!=='noise' && c.type!=='pagebreak');
+  if(idx<0) return false;
+  const first = cls[idx];
+  if(first.type!=='lyric') return false;
+  const sizes = page.filter((l,i)=>l.size && cls[i].type==='lyric').map(l=>l.size).sort((a,b)=>a-b);
+  if(page[idx].size && sizes.length>=3){
+    const median = sizes[Math.floor(sizes.length/2)];
+    return page[idx].size >= median*1.18;
+  }
+  const next = cls[idx+1];
+  return first.words.length<=8 && (!next || next.type==='blank' || /^(chords|lyrics|tabs?)?\s*by\s/i.test(next.text||''));
+}
+// Reads several files into songs. split=false: everything is one song (the
+// files in order, e.g. the pages of one song). split=true: every file is at
+// least one song, and a file holding several songs is cut into them.
+export async function importSheetFiles(files, { onLog, split=false } = {}){
+  logHook = onLog || null;
+  try{
+    const parts = [];
+    for(const f of files){ const r = await fileWordLines(f); parts.push({ ...r, name:f.name }); }
+    if(!split){
+      const lines = [];
+      parts.forEach((p,i)=>{ if(i) lines.push({ text:'', words:[], pageBreak:true }); lines.push(...p.lines); });
+      return [sheetFromLines(lines, parts.some(p=>p.usedOcr), parts[0].name)];
+    }
+    const out = [];
+    parts.forEach(p=>{
+      let songs;
+      if(p.kind==='pdf'){
+        songs = [];
+        splitPdfPages(p.lines).forEach((pg,i)=>{
+          if(!i || pageStartsSong(pg, p.usedOcr) || !songs.length) songs.push([...pg]);
+          else songs[songs.length-1].push({ text:'', words:[], pageBreak:true }, ...pg);
+        });
+      } else songs = splitTextSegments(plainTextToWordLines(p.lines.map(l=>l.text).join('\n').replace(/\f/g, '\n---\n')));
+      if(!songs.length) songs = [p.lines];
+      songs.forEach(lines=>{ const r = sheetFromLines(lines, p.usedOcr, p.name); r.fileName = p.name; out.push(r); });
+    });
+    return out.filter(r=>r.blocks.some(b=>b.type==='couplet'));
   } finally { logHook = null; }
 }
 export { plainTextToWordLines, classifyWordLines, buildSheetBlocks, extractHeader, extractTitle, mapChordsToWords };
