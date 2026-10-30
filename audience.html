@@ -234,12 +234,13 @@ function renderLyricsTab(){
     let wordsHTML = '';
     if(!header) wordsHTML = ws.map((w,wi)=>{
       k++;
-      const chord = (s.chords||{})[li+'-'+wi];
+      // guests see the words only — no chords, no performer's markings
       const cls = !tempo.synced ? 'line' : (k===ci?'cur':(k<ci?'done':''));
-      return `<div class="lword ${cls}">${chord?`<div class="lchord">${esc(chord)}</div>`:'<div class="lchord"></div>'}<div class="ltext">${esc(w)}</div></div>`;
+      return `<div class="lword ${cls}"><div class="ltext">${esc(w)}</div></div>`;
     }).join('');
     if(li<first || li>=first+4) return '';
-    if(header) return `<div class="lline lheader">${esc(ws.join(' '))}</div>`;
+    // a section label, without any chords written into it ("[Intro: C G]" → "Intro")
+    if(header) return `<div class="lline lheader">${esc(ws.join(' ').replace(/^[\[(]\s*/,'').replace(/\s*[\])]$/,'').replace(/\s*:.*$/,''))}</div>`;
     return `<div class="lline">${wordsHTML}</div>`;
   }).join('');
   const statusLine = live.listening ? 'Listening for the performer to start singing…' : (!live.playing ? 'Paused' : '');
