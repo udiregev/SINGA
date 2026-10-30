@@ -611,11 +611,11 @@ function diagramHTML(dia, dotColor, vertical){
   const nameAnim = animStyle('diaName'+(vertical?'V':''), dia.name, vertical ? 'chordFromNextV' : 'chordFromNext', 650);
   const nextAnim = animStyle('diaNext'+(vertical?'V':''), dia.next, vertical ? 'nextInV' : 'nextIn', 650);
   const bar = dia.progress!=null ? `<div class="nextbar"><div style="width:${Math.round(dia.progress*100)}%"></div></div>` : '';
-  // Landscape: a column — next chord on top (with ⌄⌄), the current chord, its diagram.
+  // Landscape: a column — next chord on top, the current chord, its diagram.
   if(vertical) return `<div class="dia-v">
-    <div class="dia-v-next"><div class="diaNext" style="${nextAnim}">${esc(dia.next||'')}</div>${bar}<span class="msi" style="font-size:26px;color:#c4c4c4">keyboard_double_arrow_down</span></div>
+    <div class="dia-v-next"><div class="diaNext" style="${nextAnim}">${esc(dia.next||'')}</div>${bar}</div>
     <div class="diaName" style="${nameAnim}">${esc(dia.name)}</div>
     ${inner}
   </div>`;
-  return `<div class="diagram-row"><div style="display:flex;align-items:center;gap:26px">${inner}<div class="diaName" style="${nameAnim}">${esc(dia.name)}</div><div class="diaNextWrap"><div class="diaNext" style="${nextAnim}">» ${esc(dia.next)}</div>${bar}</div></div></div>`;
+  return `<div class="diagram-row"><div style="display:flex;align-items:center;gap:26px">${inner}<div class="diaName" style="${nameAnim}">${esc(dia.name)}</div><div class="diaNextWrap"><div class="diaNext" style="${nextAnim}">${esc(dia.next)}</div>${bar}</div></div></div>`;
 }
