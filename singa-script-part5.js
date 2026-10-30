@@ -215,7 +215,7 @@ function renderGig(){
   const g = gigObj();
   const setRows = g.setlist.map((id,i)=>{
     const s = song(id);
-    return `<div class="list-row has-act" data-act="openGigSong" data-id="${id}"><div><div class="t">${esc(s.title||'Untitled song')}</div><div class="s">${esc(s.sub)}</div></div><div class="row" style="gap:10px"><span style="font-size:11px;font-weight:700;letter-spacing:.05em;color:${s.synced?'#1b1b1b':'#b0b0b0'}">${s.synced?'SYNCED':'NO TAKE'}</span>${g.mine!==false ? rowActHTML('gigremove', id) : ''}${icon('chevron_right',22)}</div></div>`;
+    return `<div class="list-row has-act" data-act="openGigSong" data-id="${id}"><div><div class="t">${esc(s.title||'Untitled song')}</div><div class="s">${esc(s.sub)}</div></div><div class="row" style="gap:10px">${g.mine!==false ? rowActHTML('gigremove', id) : ''}${icon('chevron_right',22)}</div></div>`;
   }).join('');
   const collapsed = ST.gigMenuCollapsed;
   const live = ST._liveGig===g.id;
