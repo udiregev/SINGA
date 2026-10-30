@@ -281,15 +281,18 @@ function jobBarHTML(s){
   return `<div class="jobbar" style="margin-top:6px;max-width:240px"><div id="jobbar-${j.id}" style="width:${Math.round(j.pct)}%"></div></div><div id="jobnote-${j.id}" style="font-size:11px;color:#8a8a8a;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px">${esc(j.note||'Waiting…')}</div>`;
 }
 function songSubLine(s){ return s.failed ? "Couldn't be added — tap to try again" : (s.sub || (s.synced?'':'Draft')); }
+// The only labels on a song row: PROCESSING (being added), FAILED, or
+// RECENTLY ADDED (for RECENT_DAYS after it was added). Nothing otherwise.
+const RECENT_DAYS = 3;
 function songBadge(s){
-  if(songJob(s)) return ['IN PROGRESS','#2f8fe0'];
+  if(songJob(s)) return ['PROCESSING','#2f8fe0'];
   if(s.failed) return ['FAILED','#e5372a'];
-  if(s.needsReview) return ['REVIEW','#2f8fe0'];
-  return s.synced ? ['SYNCED','#1b1b1b'] : ['NO TAKE','#b0b0b0'];
+  if(s.added && Date.now() - s.added < RECENT_DAYS*864e5 && (s.lyrics||'').trim()) return ['RECENTLY ADDED','#2a9d6b'];
+  return ['',''];
 }
 function songRowHome(s){
   const j = songJob(s);
-  return `<div class="list-row" data-act="openSongFrom" data-id="${s.id}" data-from="home" style="border-bottom:1px solid var(--b2)"><div style="min-width:0;flex:1"><div class="t">${esc(songTitle(s))}</div>${j ? jobBarHTML(s) : `<div class="s"${s.failed?' style="color:#e5372a"':''}>${esc(songSubLine(s))}</div>`}</div>${(()=>{ const b=songBadge(s); return b[0]==='SYNCED'||b[0]==='NO TAKE' ? '' : `<span style="font-size:11px;font-weight:800;letter-spacing:.05em;color:${b[1]}">${b[0]}</span>`; })()}</div>`;
+  return `<div class="list-row" data-act="openSongFrom" data-id="${s.id}" data-from="home" style="border-bottom:1px solid var(--b2)"><div style="min-width:0;flex:1"><div class="t">${esc(songTitle(s))}</div>${j ? jobBarHTML(s) : `<div class="s"${s.failed?' style="color:#e5372a"':''}>${esc(songSubLine(s))}</div>`}</div>${(()=>{ const b=songBadge(s); return !b[0] ? '' : `<span style="font-size:11px;font-weight:800;letter-spacing:.05em;color:${b[1]};white-space:nowrap">${b[0]}</span>`; })()}</div>`;
 }
 
 function renderHome(){
@@ -349,7 +352,7 @@ function rowActHTML(kind, id){
 }
 function songRowList(id, badgeText, badgeCol, from, rowAct){
   const s = song(id);
-  return `<div class="list-row has-act" data-act="openSongFrom" data-id="${id}" data-from="${from}"><div style="min-width:0;flex:1"><div class="t">${esc(songTitle(s))}</div>${songJob(s) ? jobBarHTML(s) : `<div class="s"${s.failed?' style="color:#e5372a"':''}>${esc(songSubLine(s))}</div>`}</div><div class="row" style="gap:12px"><span style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:${badgeCol}">${esc(badgeText)}</span>${rowAct ? rowActHTML(rowAct, id) : ''}${icon('chevron_right',22)}</div></div>`;
+  return `<div class="list-row has-act" data-act="openSongFrom" data-id="${id}" data-from="${from}"><div style="min-width:0;flex:1"><div class="t">${esc(songTitle(s))}</div>${songJob(s) ? jobBarHTML(s) : `<div class="s"${s.failed?' style="color:#e5372a"':''}>${esc(songSubLine(s))}</div>`}</div><div class="row" style="gap:12px">${badgeText ? `<span style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:${badgeCol};white-space:nowrap">${esc(badgeText)}</span>` : ''}${rowAct ? rowActHTML(rowAct, id) : ''}${icon('chevron_right',22)}</div></div>`;
 }
 function gigRowList(g){
   const sub = g.date+' · '+g.setlist.length+' songs'+(g.mine?'':' · by '+g.by);
