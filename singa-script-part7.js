@@ -262,19 +262,24 @@ function lyricKeyframes(el){
   if(!lines.length) return null;
   const base = lines[0].offsetTop;
   const max = Math.max(0, el.scrollHeight - el.clientHeight);
-  const timed = lines.filter(l=>l.hasAttribute('data-t0')).map(l=>({ t:+l.getAttribute('data-t0'), y:Math.min(max, l.offsetTop-base) }));
+  const timed = lines.filter(l=>l.hasAttribute('data-t0')).map(l=>({ t:+l.getAttribute('data-t0'), y:Math.min(max, l.offsetTop-base), instr:l.classList.contains('linstr') }));
   const kf = [{ t:0, y:0 }];
   const add = (t, y)=>{ const p = kf[kf.length-1]; if(isFinite(t) && t>p.t && y>=p.y) kf.push({ t, y }); };
   if(timed.length){
-    // a long instrumental intro above the first sung line slides away before
-    // the singing starts (a short one just glides along with the rest)
-    if(timed[0].y > 1 && timed[0].t >= 3) add(timed[0].t, timed[0].y);
-    for(let k=2;k<timed.length;k++) add(timed[k].t, timed[k-1].y);
+    // an instrumental intro: the lyrics stay still until it ends and the
+    // singing starts, then move on like the rest
+    const firstSung = timed.findIndex(x=>!x.instr);
+    if(firstSung>0) add(timed[firstSung].t, 0);
+    // a long gap above the first sung line (labels) slides away before the
+    // singing starts (a short one just glides along with the rest)
+    else if(timed[0].y > 1 && timed[0].t >= 3) add(timed[0].t, timed[0].y);
+    for(let k=Math.max(2, firstSung+1);k<timed.length;k++) add(timed[k].t, timed[k-1].y);
     const s = lyricWinSong(), total = s ? timing(s).total : 0;
     const last = timed[timed.length-1];
+    // carry on to the very last line (the space below the lyrics lets it
+    // come up from the bottom of a tall screen)
     add(Math.max(total, last.t+2), Math.min(max, last.y));
-  }
-  add(kf[kf.length-1].t + 4, max);
+  } else add(kf[kf.length-1].t + 4, max);
   // smooth curve through the keyframes (monotone cubic), so the pace eases
   // from line to line instead of changing abruptly
   const n = kf.length, d = [], m = new Array(n).fill(0);
@@ -569,9 +574,22 @@ async function readSheetFile(file, onLog){
   if(typeof Promise.withResolvers !== 'function'){
     Promise.withResolvers = function(){ let resolve, reject; const promise = new Promise((a,b)=>{ resolve=a; reject=b; }); return { promise, resolve, reject }; };
   }
-  if(!sheetImportMod) sheetImportMod = await importFresh('./sheet-import.js?v=2');
+  if(!sheetImportMod) sheetImportMod = await importFresh('./sheet-import.js?v=4');
   const prepared = await prepareSheetFile(file, onLog);
   return sheetImportMod.importSheetFile(prepared, { onLog });
+}
+// Several files and/or several songs in one file. split=false reads them all
+// as ONE song (in file-name order); split=true gives a song per file, and
+// cuts a file holding several songs (e.g. a multi-page PDF) into them.
+async function readSheetFiles(files, split, onLog){
+  if(typeof Promise.withResolvers !== 'function'){
+    Promise.withResolvers = function(){ let resolve, reject; const promise = new Promise((a,b)=>{ resolve=a; reject=b; }); return { promise, resolve, reject }; };
+  }
+  if(!sheetImportMod) sheetImportMod = await importFresh('./sheet-import.js?v=4');
+  const prepared = [];
+  for(const f of files) prepared.push(await prepareSheetFile(f, onLog));
+  if(!sheetImportMod.importSheetFiles) return [await sheetImportMod.importSheetFile(prepared[0], { onLog })];
+  return sheetImportMod.importSheetFiles(prepared, { onLog, split });
 }
 // ---- turning other document types into something the engine reads ----
 async function prepareSheetFile(file, onLog){
@@ -674,7 +692,20 @@ function applySheetToSong(songObj, res, overwriteTitle){
   let li = 0;
   (res.blocks||[]).forEach(b=>{
     if(b.type==='label'){ if(lines.length) lines.push(''); lines.push('['+b.text+']'); li++; return; }
-    if(b.type==='standalone-chords'){ lines.push('['+b.text+']'); li++; return; }
+    if(b.type==='standalone-chords'){
+      // a chord line with no words under it (or chords over tab) is an
+      // instrumental passage: "[Instrumental: C G]" — joined onto an
+      // "[Intro]" / "[Solo]"… label just before it, or onto the passage
+      // just before (up to 8 chords on one line)
+      const ch = (b.text||'').split(/\s+/).filter(Boolean);
+      const prev = lines.length ? lines[lines.length-1] : '';
+      const pm = /^\[(instrumental|intro|outro|solo|interlude|break)\b:?\s*([^\]]*)\]$/i.exec(prev);
+      if(pm && pm[2].split(/\s+/).filter(Boolean).length + ch.length <= 8){
+        lines[lines.length-1] = '['+pm[1]+((pm[2]+' '+ch.join(' ')).trim() ? ': '+(pm[2]+' '+ch.join(' ')).trim() : '')+']';
+        return;
+      }
+      lines.push('[Instrumental'+(ch.length ? ': '+ch.join(' ') : '')+']'); li++; return;
+    }
     const ws = b.words.map(w=>String(w.text).replace(/\s+/g,'')).filter(Boolean);
     if(!ws.length) return;
     const tail = (b.tail||[]).slice();
@@ -702,7 +733,7 @@ function applySheetToSong(songObj, res, overwriteTitle){
    Capturing a song from a recording or a file runs as a "job". While it
    runs on the Create screen you can choose "Continue in the background":
    the job keeps going, you're free to use the app, and the finished song
-   lands in your library marked REVIEW.
+   lands in your library marked RECENTLY ADDED.
    ============================================================ */
 function newJob(songId, label, bg){
   const j = { id:'j'+Date.now()+Math.random().toString(36).slice(2,6), songId, label, pct:0, note:'', bg:!!bg };
@@ -722,24 +753,19 @@ function endJob(j){
   if(wasFg){ ST.fgJob=null; ST.phase='idle'; ST.procPct=0; ST.procNote=''; }
   return wasFg;
 }
-// A captured song is ready: open the review screen if you're still watching,
-// otherwise mark it for review and let you know.
+// A captured song is ready: it goes straight into your songs (marked
+// RECENTLY ADDED until you first open it) — no review step — and you're told.
 function jobFinished(j, songObj){
-  const wasFg = endJob(j);
+  endJob(j);
   if(!D.order.includes(songObj.id)){ D.order = [songObj.id, ...D.order]; }
   const autoPl = (D.playlists||[]).find(p=>p.auto); if(autoPl) autoPl.ids = D.order;
   if(!songObj.title.trim()) songObj.title = 'Untitled song';
-  if(wasFg){
-    songObj.needsReview = true;
-    ST.editId = songObj.id; ST.screen = 'review';
-    render();
-  } else {
-    songObj.needsReview = true;
-    addSongToTarget(songObj.id, j.target);
-    render();
-    toast('“'+songObj.title+'” is ready — open it to review');
-    notifyReady(songObj.title);
-  }
+  songObj.needsReview = false;
+  setFlag('fresh', songObj.id, true);   // RECENTLY ADDED until you open it
+  addSongToTarget(songObj.id, j.target);
+  render();
+  toast('“'+songObj.title+'” has been added to your songs');
+  notifyReady(songObj.title);
   saveSongRow(songObj);
 }
 function jobFailed(j, msg){
@@ -765,28 +791,105 @@ function addSongToTarget(songId, target){
   else if(target.kind==='gig'){ const g = D.gigs.find(x=>x.id===target.id); if(g && !g.setlist.includes(songId)){ g.setlist = [...g.setlist, songId]; queueSaveGig(g.id); } }
   else if(target.kind==='gigedit'){ if(ST.editList && !ST.editList.includes(songId)) ST.editList = [...ST.editList, songId]; }
 }
-// Text import 01 for one file, as a background job.
-async function importSheetJob(s, file, j){
-  jobProgress(j, 10, 'Reading '+file.name+'…');
-  let res;
+// Text import 01, as a background job: one or more files, read as one song
+// or (src.split) as one song each — and a file holding several songs gives
+// several songs.
+function fileBaseName(name){ return (name||'').replace(/\.[^.]+$/, '').replace(/_+/g,' ').trim(); }
+async function importSheetJob(s, src, j){
+  const files = src.files || [src.file];
+  const name = files.length>1 ? files.length+' files' : files[0].name;
+  jobProgress(j, 10, 'Reading '+name+'…');
+  let results;
   try{
-    res = await readSheetFile(file, msg=>jobProgress(j, Math.min(90, j.pct+8), msg));
+    results = await readSheetFiles(files, !!src.split, msg=>jobProgress(j, Math.min(90, j.pct+8), msg));
   }catch(e){
     console.error('Singa: file import failed', e);
-    jobFailed(j, "Couldn't read “"+file.name+"”: "+(e && e.message || e));
+    jobFailed(j, "Couldn't read “"+name+"”: "+(e && e.message || e));
     return;
   }
-  applySheetToSong(s, res, !s.title.trim());
-  if(!s.title.trim()) s.title = file.name.replace(/\.[^.]+$/, '').replace(/_+/g,' ').trim();
-  if(!s.lyrics.trim()){ jobFailed(j, "Couldn't find any lyrics in “"+file.name+"”"); return; }
-  s.synced = false;
+  results = (results||[]).filter(Boolean);
+  if(!results.length){ jobFailed(j, "Couldn't find any lyrics in “"+name+"”"); return; }
+  let prevId = s.id;
+  results.forEach((res, i)=>{
+    let so = s;
+    if(i>0){
+      const id = 'n'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
+      so = { id, title:'', sub:'', lyrics:'', chords:{}, notes:{}, synced:false, isPublic:false, plays:0, added:Date.now(), mine:true };
+      D.songs[id] = so;
+      const at = D.order.indexOf(prevId);
+      D.order = at<0 ? [id, ...D.order] : [...D.order.slice(0, at+1), id, ...D.order.slice(at+1)];
+    }
+    applySheetToSong(so, res, i>0 || !so.title.trim());
+    if(!so.title.trim()) so.title = fileBaseName(res.fileName || files[0].name);
+    so.synced = false;
+    if(i>0){ setFlag('fresh', so.id, true); addSongToTarget(so.id, j.target); saveSongRow(so); }
+    prevId = so.id;
+  });
+  if(!s.lyrics.trim()){ jobFailed(j, "Couldn't find any lyrics in “"+name+"”"); return; }
   jobFinished(j, s);
+  if(results.length>1) toast(results.length+' songs added from “'+name+'”');
+}
+// Documents (From text doc). Nothing appears in your songs while the file is
+// being read; once Singa knows how many songs it holds, each one shows up
+// under its own title marked PROCESSING while its lyrics and chords are
+// captured, then turns RECENTLY ADDED.
+function newSongObj(){
+  const id = 'n'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
+  const so = { id, title:'', sub:'', lyrics:'', chords:{}, notes:{}, synced:false, isPublic:false, plays:0, added:Date.now(), mine:true };
+  D.songs[id] = so;
+  return so;
+}
+async function importSheetUnit(src, target, draft){
+  const files = src.files || [src.file];
+  const name = files.length>1 ? files.length+' files' : (files[0].name || 'your document');
+  const rd = { id:'r'+Date.now()+Math.random().toString(36).slice(2,6), label:'Reading “'+name+'”', note:'Finding the songs…' };
+  ST.reading = [...(ST.reading||[]), rd];
+  if(draft){ D.order = D.order.filter(id=>id!==draft.id); const ap = (D.playlists||[]).find(p=>p.auto); if(ap) ap.ids = D.order; }   // not listed until it's known what's in the file
+  render();
+  const dropReading = ()=>{ ST.reading = (ST.reading||[]).filter(x=>x!==rd); };
+  let results = null, err = null;
+  try{ results = await readSheetFiles(files, !!src.split, msg=>{ rd.note = msg; const el = document.getElementById('readnote-'+rd.id); if(el) el.textContent = msg; }); }
+  catch(e){ err = e; console.error('Singa: file import failed', e); }
+  dropReading();
+  results = (results||[]).filter(r=>r && (r.blocks||[]).some(b=>b.type==='couplet'));
+  if(!results.length){
+    // stays in your songs marked FAILED, so it can be tried again
+    const so = (draft && !(draft.lyrics||'').trim() && !draft.synced) ? draft : newSongObj();
+    const j = newJob(so.id, so.title.trim() || fileBaseName(files[0].name) || 'Your document', true); j.target = target; j.src = src;
+    jobFailed(j, err ? "Couldn't read “"+name+"”: "+(err && err.message || err) : "Couldn't find any lyrics in “"+name+"”");
+    return;
+  }
+  // one song per result, in the document's order, each marked PROCESSING
+  const made = results.map((res, i)=>{
+    const so = (i===0 && draft && !(draft.lyrics||'').trim() && !draft.synced) ? draft : newSongObj();
+    const keepTitle = !src.split && so.title.trim();
+    if(!keepTitle) so.title = res.title || fileBaseName(res.fileName || files[0].name) || 'Untitled song';
+    if(res.artist && !so.sub.trim()) so.sub = res.artist;
+    const j = newJob(so.id, so.title, true); j.target = target; j.src = src; j.note = 'Capturing lyrics and chords…';
+    return { so, j, res, keepTitle };
+  });
+  const ids = made.map(m=>m.so.id);
+  D.order = [...ids, ...D.order.filter(id=>!ids.includes(id))];
+  const autoPl = (D.playlists||[]).find(p=>p.auto); if(autoPl) autoPl.ids = D.order;
+  render();
+  for(const m of made){
+    jobProgress(m.j, 40, 'Capturing lyrics and chords…');
+    await new Promise(r=>setTimeout(r, 450));
+    const t = m.so.title, sub = m.so.sub;
+    applySheetToSong(m.so, m.res, true);
+    if(m.keepTitle) m.so.title = t;
+    if(!m.so.sub.trim()) m.so.sub = sub;
+    m.so.synced = false;
+    if(!m.so.lyrics.trim()) jobFailed(m.j, "Couldn't find any lyrics for “"+m.so.title+"”");
+    else jobFinished(m.j, m.so);
+  }
+  if(made.length>1) toast(made.length+' songs added from “'+name+'”');
 }
 // Uploading a document or a recording never makes you wait: each file
-// becomes a song marked IN PROGRESS in your songs, the work runs in the
+// becomes a song marked PROCESSING in your songs, the work runs in the
 // background, and you get a "we'll let you know" screen right away. When
-// it's done the song is marked REVIEW and you're told (in the app, and
-// with a notification if you allowed them).
+// it's done the song is marked RECENTLY ADDED and you're told (in the app,
+// and with a notification if you allowed them).
 let _importAudioQueue = Promise.resolve();
 function queueImports(files){
   askNotify();
@@ -794,11 +897,34 @@ function queueImports(files){
   const draft = ST.screen==='create' ? D.songs[ST.editId] : null;
   const labels = [];
   let skipped = 0;
+  // documents: one song from all of them, or one (or more) per file
+  const units = [];
+  const sheets = [];
   files.forEach(f=>{
     if(/\.doc$/i.test(f.name||'')){ skipped++; return; }
-    if(!isSheetFile(f) && !isAudioFile(f)){ skipped++; return; }
+    const asDoc = isSheetFile(f) || (ST.createMode==='file' && !isAudioFile(f));   // From text doc: try any non-audio file as text
+    if(!asDoc && !isAudioFile(f)){ skipped++; return; }
+    if(asDoc) sheets.push(f); else units.push({ kind:'audio', file:f });
+  });
+  if(sheets.length){
+    if(ST.sheetMulti) sheets.forEach(f=>units.push({ kind:'sheet', files:[f], split:true, file:f }));
+    else {
+      const sorted = sheets.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'', undefined, { numeric:true }));
+      units.push({ kind:'sheet', files:sorted, split:false, file:sorted[0] });
+    }
+  }
+  let draftUsed = false;
+  units.forEach(src=>{
+    const f = src.file;
+    if(src.kind==='sheet'){
+      const useDraft = !draftUsed && draft && !(draft.lyrics||'').trim() && !draft.synced;
+      if(useDraft) draftUsed = true;
+      labels.push(src.files.length>1 ? src.files.length+' documents' : fileBaseName(f.name) || 'Your document');
+      importSheetUnit(src, target, useDraft ? draft : null).catch(e=>console.error('Singa: import failed', e));
+      return;
+    }
     let songObj;
-    if(draft && !labels.length && !(draft.lyrics||'').trim() && !draft.synced) songObj = draft;   // keep a title you already typed
+    if(draft && !draftUsed && !(draft.lyrics||'').trim() && !draft.synced){ songObj = draft; draftUsed = true; }   // keep a title you already typed
     else {
       const id = 'n'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
       songObj = { id, title:'', sub:'', lyrics:'', chords:{}, notes:{}, synced:false, isPublic:false, plays:0, added:Date.now(), mine:true };
@@ -809,7 +935,7 @@ function queueImports(files){
     const label = songObj.title.trim() || base || 'Your recording';
     const j = newJob(songObj.id, label, true); j.target = target; j.note = 'Waiting…';
     labels.push(label);
-    runImportJob(songObj, { kind: (f.name && isSheetFile(f)) ? 'sheet' : 'audio', file: f }, j);
+    runImportJob(songObj, src, j);
   });
   const autoPl = (D.playlists||[]).find(p=>p.auto); if(autoPl) autoPl.ids = D.order;
   if(skipped) toast(skipped===files.length ? "Singa can't read that file — use audio, a PDF, Word (.docx) or a .txt file" : 'Some files were skipped — Singa reads audio, PDF, Word (.docx) and .txt files');
@@ -821,7 +947,7 @@ function queueImports(files){
 // file / recording, or a link.
 function runImportJob(songObj, src, j){
   j.src = src;
-  if(src.kind==='sheet'){ importSheetJob(songObj, src.file, j).catch(e=>console.error('Singa: import failed', e)); return; }
+  if(src.kind==='sheet'){ importSheetJob(songObj, src, j).catch(e=>console.error('Singa: import failed', e)); return; }
   if(src.kind==='link'){
     _importAudioQueue = _importAudioQueue.then(async ()=>{
       let file;
@@ -851,7 +977,7 @@ function askNotify(){
 function notifyReady(title){
   try{
     if(!('Notification' in window) || Notification.permission!=='granted' || !document.hidden) return;
-    const body = '“'+title+'” is ready — open it to review';
+    const body = '“'+title+'” has been added to your songs';
     const plain = ()=>{ try{ new Notification('Singa', { body }); }catch(e){} };
     if(navigator.serviceWorker && navigator.serviceWorker.controller) navigator.serviceWorker.ready.then(r=>r.showNotification('Singa', { body, tag:'singa-ready-'+Date.now() })).catch(plain);
     else plain();
@@ -862,11 +988,11 @@ function openSongOrIncomplete(id, from){
   const s = song(id);
   if(ST.jobs.some(j=>j.songId===id)){ toast('Still being added — we\'ll let you know when it\'s ready'); return; }
   if(s.failed){ ST.failedOpen = id; return; }
-  if(s.needsReview){ ST.editId = id; ST.screen='review'; ST.back = from || 'home'; return; }
   const ok = s.lyrics && s.lyrics.trim();
   ST.songId = id; ST.viewBy=null; ST.viewChord=null; ST.menu=false; ST.instMenu=false; ST.ctx='view'; ST.t=0; ST.playing=false; ST.vcd=0; ST.listening=false; ST.sortOpen=false;
   ST.screen = ok ? 'song' : 'incomplete';
   ST.back = from || ST.screen;
+  if(hasFlag('fresh', id)) setFlag('fresh', id, false);   // seen: no longer "recently added"
 }
 function newSongDraft(){
   const id = 'n'+Date.now();
