@@ -92,7 +92,17 @@ function reconstructWordLines(content){
     line.items.push(it);
   });
   lines.sort((a,b)=>b.y-a.y);
-  return lines.map(l=>{
+  // vertical gaps bigger than the usual line spacing become empty lines, so
+  // a PDF shows the same breaks between verses (and songs) as a text file
+  const steps = lines.slice(1).map((l,i)=>lines[i].y - l.y).filter(d=>d>0).sort((a,b)=>a-b);
+  const step = steps.length ? steps[Math.floor(steps.length/2)] : 0;
+  const out = [];
+  lines.forEach((l,i)=>{
+    if(i && step){ const blanks = Math.min(4, Math.round((lines[i-1].y - l.y)/step) - 1); for(let k=0;k<blanks;k++) out.push({ text:'', words:[] }); }
+    out.push(l);
+  });
+  return out.map(l=>{
+    if(!l.items) return l;
     l.items.sort((a,b)=>a.x-b.x);
     const words = [];
     l.items.forEach(it=>{
@@ -216,7 +226,7 @@ const SECTION_WORDS = ['intro','verse','chorus','pre-chorus','prechorus','bridge
 function bareMatchesSectionKeyword(bare){
   const lower = (bare||'').trim().toLowerCase();
   return SECTION_WORDS.some(w=>{
-    const re = new RegExp('^'+w.replace(/[-/\\^$*+?.()|[\]{}]/g,'\\$&')+'\\s*\\d*\\.?$');
+    const re = new RegExp('^'+w.replace(/[-/\\^$*+?.()|[\]{}]/g,'\\$&')+'\\s*\\d*[.:]?$');
     return re.test(lower);
   });
 }
@@ -229,10 +239,10 @@ function sectionLabelFor(rawLine){
   if(bracketed) return bare;
   const lower = bare.toLowerCase();
   const isKeywordLine = SECTION_WORDS.some(w=>{
-    const re = new RegExp('^'+w.replace(/[-/\\^$*+?.()|[\]{}]/g,'\\$&')+'\\s*\\d*\\.?$');
+    const re = new RegExp('^'+w.replace(/[-/\\^$*+?.()|[\]{}]/g,'\\$&')+'\\s*\\d*[.:]?$');
     return re.test(lower);
   });
-  if(isKeywordLine && bare.split(/\s+/).length<=4) return bare;
+  if(isKeywordLine && bare.split(/\s+/).length<=4) return bare.replace(/:$/,'');
   return null;
 }
 const CHORD_TOKEN_RE = /^[A-G](#|b)?(maj|min|m|dim|aug|sus2|sus4|add\d{1,2}|maj7|m7|6|7|9|11|13)?(\/[A-G](#|b)?)?$/;
@@ -244,6 +254,16 @@ function isChordLine(rawLine){
   return tokens.every(tok=>CHORD_TOKEN_RE.test(tok));
 }
 
+// A line of guitar/bass tablature ("B|--5--x--7--|", "e|-----0---|"):
+// not lyrics. A chord line sitting over tab is an instrumental passage.
+function isTabLine(rawLine){
+  const t = (rawLine||'').trim();
+  if(t.length < 6) return false;
+  if(!/^([A-Ga-g][#b]?\s*)?\|/.test(t) && !/^[-|0-9xXhpbr\/\\~().*^=]+$/.test(t)) return false;
+  const body = t.replace(/^[A-Ga-g][#b]?\s*/, '');
+  const dashes = (body.match(/-/g)||[]).length;
+  return dashes >= 4 && /^[-|0-9xXhpbrtsv\/\\~().*^=\s]+$/.test(body) && dashes/body.replace(/\s+/g,'').length > 0.4;
+}
 // Classify a sequence of word-lines into typed entries, keeping each
 // line's word/position data attached (needed by the chord<->lyric
 // pairing pass that follows).
@@ -259,6 +279,7 @@ function classifyWordLines(wordLines, applyOcrNoiseFilter){
       if(trustLabel) return { type:'label', text:label, words:[] };
     }
     if(isChordLine(raw)) return { type:'chord', text:raw.trim(), words:line.words };
+    if(isTabLine(raw)) return { type:'tab', text:raw.trim(), words:[] };
     const trimmed = raw.trim();
     if(!trimmed.length) return { type:'blank', text:'', words:[] };
     if(applyOcrNoiseFilter && isLikelyNoiseLine(trimmed)) return { type:'noise', text:trimmed, words:[] };
@@ -315,6 +336,13 @@ function buildSheetBlocks(classified){
       let j=i+1;
       while(j<classified.length && (classified[j].type==='pagebreak' || classified[j].type==='junk')) j++;
       const next = classified[j];
+      let k=j; while(k<classified.length && classified[k].type==='blank') k++;
+      if(classified[k] && classified[k].type==='tab'){
+        // chords over a tab block: an instrumental passage
+        blocks.push({ type:'standalone-chords', text: line.text, instrumental:true });
+        while(k<classified.length && (classified[k].type==='tab' || classified[k].type==='blank')) k++;
+        i=k-1; continue;
+      }
       if(next && next.type==='lyric' && next.words.length){
         const { chordMap, tail } = mapChordsToWords(line.words, next.words);
         blocks.push({ type:'couplet', words: next.words, chordMap, tail });
@@ -322,6 +350,13 @@ function buildSheetBlocks(classified){
       } else {
         blocks.push({ type:'standalone-chords', text: line.text });
       }
+      continue;
+    }
+    if(line.type==='tab'){
+      // tab with no chords written over it: an instrumental passage
+      const prev = blocks[blocks.length-1];
+      if(!(prev && prev.type==='standalone-chords' && prev.instrumental)) blocks.push({ type:'standalone-chords', text:'', instrumental:true });
+      while(i+1<classified.length && (classified[i+1].type==='tab' || classified[i+1].type==='blank')) i++;
       continue;
     }
     if(line.type==='lyric'){
@@ -350,11 +385,15 @@ function extractHeader(classified, fileName){
   const head = classified.slice(0, firstMusic).map((l,i)=>({l,i})).filter(x=>x.l.type==='lyric');
   if(!head.length || head.length>5) return null;
   let title='', artist='';
+  let plain = '';
   head.forEach(({l})=>{
     const m = /^(?:chords|lyrics|tabs?)?\s*(?:and\s+(?:chords|lyrics)\s+)?by\s+(.+)$/i.exec(l.text);
     if(m && !artist) artist=m[1].trim();
     else if(!title) title=l.text;
+    else if(!plain) plain=l.text;
   });
+  // "Title" then "Artist" on the next line
+  if(!artist && plain && head.length===2 && plain.split(/\s+/).length<=5) artist = plain;
   return { title: title || titleFromFilename(fileName), artist, consumed: new Set(head.map(x=>x.i)) };
 }
 function extractTitle(classified, fileName){
@@ -415,41 +454,59 @@ export async function importSheetFile(file, { onLog } = {}){
   } finally { logHook = null; }
 }
 // ---- several songs in one file ----
-// A text file: songs separated by a page break (form feed), a divider line
-// (---, ===, ***) or three or more empty lines.
-function splitTextSegments(lines){
-  const segs = [[]]; let blanks = 0;
-  lines.forEach(l=>{
-    const t = (l.text||'').trim();
-    if(/\f/.test(l.text||'') || /^[-=_*~#]{3,}$/.test(t)){ blanks = 0; if(segs[segs.length-1].length) segs.push([]); return; }
-    if(!t){ blanks++; if(blanks>=3 && segs[segs.length-1].length){ segs.push([]); return; } }
-    else blanks = 0;
-    segs[segs.length-1].push(l);
-  });
-  return segs.filter(s=>s.some(l=>(l.text||'').trim()));
-}
-// A PDF: page by page. A page starts a new song when it opens with a title
-// — a line in a bigger font than the rest of the page (or, on a scanned
-// page, a short line with a gap under it). A page that opens straight into
-// chords, a section label or more lyrics carries on the song before it.
-function splitPdfPages(lines){
-  const pages = [[]];
-  lines.forEach(l=>{ if(l.pageBreak){ if(pages[pages.length-1].length) pages.push([]); } else pages[pages.length-1].push(l); });
-  return pages.filter(p=>p.some(l=>(l.text||'').trim() && !l.junk));
-}
-function pageStartsSong(page, usedOcr){
-  const cls = classifyWordLines(page, usedOcr===true);
-  const idx = cls.findIndex(c=>c.type!=='blank' && c.type!=='junk' && c.type!=='noise' && c.type!=='pagebreak');
-  if(idx<0) return false;
-  const first = cls[idx];
-  if(first.type!=='lyric') return false;
-  const sizes = page.filter((l,i)=>l.size && cls[i].type==='lyric').map(l=>l.size).sort((a,b)=>a-b);
-  if(page[idx].size && sizes.length>=3){
-    const median = sizes[Math.floor(sizes.length/2)];
-    return page[idx].size >= median*1.18;
+// Where each song starts, read from the layout of the whole document (not
+// page by page, so two songs on one page are found too):
+//  · a divider line (---, ===, ***) or a page-break character always starts
+//    a new song;
+//  · otherwise a song starts at a title: a short plain line (no chord line
+//    over it) that comes after a gap — two or more empty lines or a new
+//    page — or that's printed bigger than the lyrics, and that is followed
+//    (after at most an artist line) by the music: chords, a section name or
+//    tab.
+const DIVIDER_RE = /^[-=_*~#]{3,}$/;
+function songStarts(lines, usedOcr){
+  const cls = classifyWordLines(lines, usedOcr===true);
+  const sizes = lines.filter((l,i)=>l.size && cls[i].type==='lyric').map(l=>l.size).sort((a,b)=>a-b);
+  const median = sizes.length>=6 ? sizes[Math.floor(sizes.length/2)] : 0;
+  const isGap = c=>c.type==='blank' || c.type==='pagebreak' || c.type==='junk' || c.type==='noise';
+  const noMusic = !cls.some(c=>c.type==='chord' || c.type==='tab');
+  const starts = [];
+  let first = -1, gap = 99, forced = false, prevType = null;
+  for(let i=0;i<cls.length;i++){
+    const c = cls[i], raw = lines[i].text || '';
+    if(/\f/.test(raw) || (c.type!=='tab' && DIVIDER_RE.test(raw.trim()))){ forced = true; gap = 99; continue; }
+    if(c.type==='blank'){ gap++; continue; }
+    if(c.type==='pagebreak'){ gap += 2; continue; }
+    if(c.type==='junk' || c.type==='noise') continue;
+    if(first<0){ first = i; }
+    else if(forced) starts.push(i);
+    else if(c.type==='lyric' && c.words.length<=8 && prevType!=='chord'){
+      const big = median && lines[i].size && lines[i].size >= median*1.18;
+      if(gap>=2 || big){
+        // what follows: at most two plain lines (title / artist) before the music
+        let plain = 0, music = false;
+        for(let j=i+1, seen=0; j<cls.length && seen<6; j++){
+          const d = cls[j];
+          if(isGap(d)) continue;
+          seen++;
+          if(d.type==='chord' || d.type==='label' || d.type==='tab'){ music = true; break; }
+          if(d.type==='lyric'){ if(++plain>1) break; }
+        }
+        if(music || (big && plain<=1) || (noMusic && gap>=3)) starts.push(i);
+      }
+    }
+    forced = false; gap = 0; prevType = c.type;
   }
-  const next = cls[idx+1];
-  return first.words.length<=8 && (!next || next.type==='blank' || /^(chords|lyrics|tabs?)?\s*by\s/i.test(next.text||''));
+  return starts;
+}
+function splitSongs(lines, usedOcr){
+  const starts = songStarts(lines, usedOcr);
+  if(!starts.length) return [lines];
+  const out = []; let from = 0;
+  starts.forEach(st=>{ out.push(lines.slice(from, st)); from = st; });
+  out.push(lines.slice(from));
+  return out.map(seg=>seg.filter(l=>!DIVIDER_RE.test((l.text||'').trim()) || isTabLine(l.text)))
+    .filter(seg=>seg.some(l=>(l.text||'').trim() && !l.junk));
 }
 // Reads several files into songs. split=false: everything is one song (the
 // files in order, e.g. the pages of one song). split=true: every file is at
@@ -466,14 +523,7 @@ export async function importSheetFiles(files, { onLog, split=false } = {}){
     }
     const out = [];
     parts.forEach(p=>{
-      let songs;
-      if(p.kind==='pdf'){
-        songs = [];
-        splitPdfPages(p.lines).forEach((pg,i)=>{
-          if(!i || pageStartsSong(pg, p.usedOcr) || !songs.length) songs.push([...pg]);
-          else songs[songs.length-1].push({ text:'', words:[], pageBreak:true }, ...pg);
-        });
-      } else songs = splitTextSegments(plainTextToWordLines(p.lines.map(l=>l.text).join('\n').replace(/\f/g, '\n---\n')));
+      let songs = splitSongs(p.lines, p.usedOcr);
       if(!songs.length) songs = [p.lines];
       songs.forEach(lines=>{ const r = sheetFromLines(lines, p.usedOcr, p.name); r.fileName = p.name; out.push(r); });
     });
