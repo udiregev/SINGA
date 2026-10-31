@@ -254,6 +254,22 @@ function isChordLine(rawLine){
   return tokens.every(tok=>CHORD_TOKEN_RE.test(tok));
 }
 
+// A chord line with a few performance notes mixed in ("[Intro:] Dm G and",
+// "F into C", "C#m F# G#m7 Final: G#m7", "G D x2"): still a chord line —
+// the notes are dropped, the chords kept.
+const CHORD_NOTE_WORDS = new Set(['intro','outro','final','end','ending','and','into','then','to','repeat','riff','solo','chorus','verse','bridge','instrumental','interlude','break','tag','coda','fade','fine','last','time','play','nc','n.c']);
+function chordTokenOf(t){ return t.replace(/^[\[(|]+|[\])|,.:;]+$/g,''); }
+function isChordishLine(rawLine){
+  const toks = (rawLine||'').trim().split(/\s+/).filter(t=>t.replace(/[\[\](){}|:,.;\-\u2013]/g,''));
+  if(toks.length<2) return false;
+  let ch = 0, ok = true;
+  toks.forEach(t=>{
+    if(CHORD_TOKEN_RE.test(chordTokenOf(t))){ ch++; return; }
+    const w = t.toLowerCase().replace(/[\[\](){}|:,;]/g,'').replace(/\.$/,'');
+    if(!CHORD_NOTE_WORDS.has(w) && !/^x?\d+x?$/.test(w)) ok = false;
+  });
+  return ok && ch>=2 && ch/toks.length>=0.5;
+}
 // A line of guitar/bass tablature ("B|--5--x--7--|", "e|-----0---|"):
 // not lyrics. A chord line sitting over tab is an instrumental passage.
 function isTabLine(rawLine){
@@ -279,6 +295,12 @@ function classifyWordLines(wordLines, applyOcrNoiseFilter){
       if(trustLabel) return { type:'label', text:label, words:[] };
     }
     if(isChordLine(raw)) return { type:'chord', text:raw.trim(), words:line.words };
+    if(isChordishLine(raw)){
+      const words = line.words.map(w=>({ ...w, text: chordTokenOf(w.text) })).filter(w=>CHORD_TOKEN_RE.test(w.text));
+      const first = raw.trim().toLowerCase().replace(/^[\[(]+/,'').split(/[\s:\]]/)[0];
+      const label = ['intro','outro','solo','interlude','instrumental','break'].includes(first) ? first.charAt(0).toUpperCase()+first.slice(1) : '';
+      return { type:'chord', text: words.map(w=>w.text).join(' '), words, label };
+    }
     if(isTabLine(raw)) return { type:'tab', text:raw.trim(), words:[] };
     const trimmed = raw.trim();
     if(!trimmed.length) return { type:'blank', text:'', words:[] };
@@ -348,6 +370,7 @@ function buildSheetBlocks(classified){
         blocks.push({ type:'couplet', words: next.words, chordMap, tail });
         i=j; // consumed the paired lyric line
       } else {
+        if(line.label) blocks.push({ type:'label', text: line.label });
         blocks.push({ type:'standalone-chords', text: line.text });
       }
       continue;
@@ -437,6 +460,9 @@ function sheetFromLines(wordLines, usedOcr, fileName){
   let title, artist='', body;
   if(header){ title=header.title; artist=header.artist; body=classified.filter((_,i)=>!header.consumed.has(i)); }
   else { const t=extractTitle(classified, fileName); title=t.title; body = t.consumedIndex>=0 ? classified.filter((_,i)=>i!==t.consumedIndex) : classified; }
+  // "The Lazy Song / Bruno Mars": the title, then the artist
+  const ta = /^(.+?)\s+\/\s+(.+)$/.exec(title||'');
+  if(ta){ title = ta[1].trim(); if(!artist) artist = ta[2].trim(); }
   const blocks = buildSheetBlocks(body);
   return { title, artist, blocks, rawText, usedOcr,
     junkCount: classified.filter(l=>l.type==='junk').length,
@@ -470,7 +496,7 @@ function songStarts(lines, usedOcr){
   const median = sizes.length>=6 ? sizes[Math.floor(sizes.length/2)] : 0;
   const isGap = c=>c.type==='blank' || c.type==='pagebreak' || c.type==='junk' || c.type==='noise';
   const noMusic = !cls.some(c=>c.type==='chord' || c.type==='tab');
-  const starts = [];
+  const starts = [], bigAt = new Set(), forcedAt = new Set();
   let first = -1, gap = 99, forced = false, prevType = null;
   for(let i=0;i<cls.length;i++){
     const c = cls[i], raw = lines[i].text || '';
@@ -479,7 +505,7 @@ function songStarts(lines, usedOcr){
     if(c.type==='pagebreak'){ gap += 2; continue; }
     if(c.type==='junk' || c.type==='noise') continue;
     if(first<0){ first = i; }
-    else if(forced) starts.push(i);
+    else if(forced){ starts.push(i); forcedAt.add(i); }
     else if(c.type==='lyric' && c.words.length<=8 && prevType!=='chord'){
       const big = median && lines[i].size && lines[i].size >= median*1.18;
       if(gap>=2 || big){
@@ -492,11 +518,14 @@ function songStarts(lines, usedOcr){
           if(d.type==='chord' || d.type==='label' || d.type==='tab'){ music = true; break; }
           if(d.type==='lyric'){ if(++plain>1) break; }
         }
-        if(music || (big && plain<=1) || (noMusic && gap>=3)) starts.push(i);
+        if(music || (big && plain<=1) || (noMusic && gap>=3)){ starts.push(i); if(big) bigAt.add(i); }
       }
     }
     forced = false; gap = 0; prevType = c.type;
   }
+  // a songbook that prints its titles bigger: only those start songs (a
+  // lyric line after a gap is just a gap)
+  if(bigAt.size) return starts.filter(i=>bigAt.has(i) || forcedAt.has(i));
   return starts;
 }
 function splitSongs(lines, usedOcr){
