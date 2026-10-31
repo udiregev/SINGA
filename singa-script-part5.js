@@ -41,10 +41,23 @@ function playButtonHTML(playing, act, listening, id){
   const hint = paused ? 'Scroll the lyrics to start from another point' : (ST.startMode==='countdown' ? '' : (playing||counting ? '' : (listening ? 'Starts the moment you sing — tap to cancel' : 'Starts when you start singing')));
   return `<div class="row" style="gap:12px"><button class="playcap${playing||listening||counting?' live':''}" data-act="${act}"${did}>${label}</button>${hint?`<span style="font-size:12px;color:#8a8a8a">${hint}</span>`:''}</div>`;
 }
-// Set-speed songs say how fast they'll scroll, next to Play.
+// Set-speed songs say how fast they'll scroll, next to Play — tap it to
+// change the speed right here (even while it plays).
+const VIEW_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3];
 function speedHintHTML(s){
-  return songMode(s)==='synced' ? '' : `<span style="font-size:12px;color:#8a8a8a;white-space:nowrap">Speed ${speedLabel(songSpeed(s))}</span>`;
+  if(songMode(s)==='synced') return '';
+  const sp = songSpeed(s);
+  if(ST.speedPop===s.id) return `<span class="spdpop">${VIEW_SPEEDS.map(v=>`<button class="${Math.abs(v-sp)<0.01?'on':''}" data-act="x" data-xact="viewSetSpeed" data-id="${esc(s.id)}" data-v="${v}">${speedLabel(v)}</button>`).join('')}</span>`;
+  return `<button class="spdbtn" data-act="x" data-xact="viewSpeedPop" data-id="${esc(s.id)}" title="Change the scrolling speed">Speed ${speedLabel(sp)} ▾</button>`;
 }
+XActions.viewSpeedPop = function(d){ ST.speedPop = ST.speedPop===d.id ? null : d.id; render(); };
+XActions.viewSetSpeed = function(d){
+  const s = song(d.id); if(!s) return;
+  const v = Math.max(0.5, Math.min(4, +d.v || 1));
+  setSongTempo(s, { speed: v });
+  ST.speedPop = null; render();
+  if(s.mine!==false && D.songs[s.id]) queueSaveSong(s.id);
+};
 // Shared by the song viewer, Practice and the gig player.
 // Portrait: chord diagram above the lyrics (drag ═ to resize it).
 // Landscape: lyrics on the left, the diagram in a column on the right with

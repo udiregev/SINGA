@@ -80,6 +80,7 @@ function renderSongBody(d){
     ${ST.step==='chords' ? `<div class="ce-wrap">
       ${renderChordPicker()}
       <div class="ce-main">
+        ${keySelectHTML(d)}
         ${renderUsedRow()}
         <div id="editorLyricsScroll" class="sheet-edit ce-lyrics lyr-step">${linesHTML(lines)}</div>
       </div>
