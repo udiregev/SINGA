@@ -306,17 +306,29 @@ function songSubLine(s){ return s.failed ? "Couldn't be added — tap to try aga
 .srow.compact{flex-wrap:wrap;row-gap:4px}
 .srow.compact .sm{flex:1 1 calc(100% - 40px)}
 .srow.compact .s-content{width:auto;order:3;flex:none}
-.srow.compact .s-status{width:auto;order:4;flex:1 1 auto;min-width:0;flex-direction:row;gap:10px;align-items:center;margin-left:8px}
+.srow.compact .s-status{width:auto;order:4;flex:1 1 0;min-width:0;flex-direction:row;gap:10px;align-items:center;margin-left:8px;overflow:hidden}
 .srow.compact .s-acts{order:5;width:auto}
 .srow.compact > .msi{order:2}
 @media (max-width:820px){
   .srow{flex-wrap:wrap;row-gap:4px}
   .srow .sm{flex:1 1 calc(100% - 40px)}
   .srow .s-content{width:auto;order:3;flex:1 1 100%}
-  .srow .s-status{width:auto;order:4;flex:1 1 auto;min-width:0;flex-direction:row;gap:10px;align-items:center;margin-left:0}
+  .srow .s-status{width:auto;order:4;flex:1 1 0;min-width:0;flex-direction:row;gap:10px;align-items:center;margin-left:0;overflow:hidden}
   .srow .s-acts{order:5;width:auto}
   .srow > .msi{order:2}
 }
+/* screens that fit the window: never cut anything off — the lyrics box
+   shrinks to fit, and if it still doesn't fit the screen scrolls */
+body.fixed-screen #screen > .scr{overflow-y:auto}
+.lyr-form{min-height:0}
+.lyr-form textarea{min-height:110px !important;flex:1 1 0;height:auto}
+/* Key (Chords step) and Speed (song player) */
+.keyrow{display:flex;align-items:center;gap:8px;font-size:13px;color:#6f6f6f;margin:2px 0 6px}
+.keyrow select{font:inherit;font-weight:700;color:#1b1b1b;border:1.5px solid #d8d8d8;border-radius:8px;padding:4px 8px;background:#fff}
+.spdbtn{border:1.5px solid #d8d8d8;background:#fff;border-radius:14px;padding:3px 10px;font-size:12px;font-weight:700;color:#1b1b1b;white-space:nowrap;cursor:pointer}
+.spdpop{display:inline-flex;gap:4px;flex-wrap:wrap}
+.spdpop button{border:1.5px solid #d8d8d8;background:#fff;border-radius:14px;padding:3px 9px;font-size:12px;font-weight:700;color:#6f6f6f;cursor:pointer}
+.spdpop button.on{background:#1b1b1b;border-color:#1b1b1b;color:#fff}
 `;
   document.head.appendChild(st);
 })();
@@ -331,6 +343,80 @@ document.addEventListener('click', function(e){
   setFlag(b.dataset.kind, b.dataset.id, !hasFlag(b.dataset.kind, b.dataset.id));
   render();
 }, true);
+// Small actions defined outside the main Actions table (parts 2–5):
+// elements with data-xact="name" run XActions[name](dataset); a <select
+// data-xchange="name"> runs XActions[name](dataset, value) when changed.
+const XActions = {};
+document.addEventListener('click', function(e){
+  const b = e.target.closest && e.target.closest('[data-xact]'); if(!b) return;
+  const fn = XActions[b.dataset.xact]; if(!fn) return;
+  e.stopImmediatePropagation(); e.preventDefault();
+  fn(b.dataset, e);
+}, true);
+document.addEventListener('change', function(e){
+  const t = e.target; if(!t || !t.dataset || !t.dataset.xchange) return;
+  const fn = XActions[t.dataset.xchange]; if(fn) fn(t.dataset, t.value);
+});
+// ---- Change key: every chord in a song moves by the same interval ----
+const NOTE_SHARP = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+const NOTE_FLAT  = ['C','Db','D','Eb','E','F','Gb','G','Ab','A','Bb','B'];
+const FLAT_KEYS = new Set(['F','Bb','Eb','Ab','Db','Gb','Dm','Gm','Cm','Fm','Bbm','Ebm']);
+function noteIndex(n){ const i = NOTE_SHARP.indexOf(n); return i>=0 ? i : NOTE_FLAT.indexOf(n); }
+function keyName(root, minor, flats){ return (flats ? NOTE_FLAT : NOTE_SHARP)[((root%12)+12)%12] + (minor ? 'm' : ''); }
+function transposeChord(ch, semis, flats){
+  return String(ch||'').split(/(\s+)/).map(tok=>{
+    const m = /^([A-G][#b]?)([^\/\s]*)(?:\/([A-G][#b]?))?$/.exec(tok);
+    if(!m || noteIndex(m[1])<0) return tok;
+    const names = flats ? NOTE_FLAT : NOTE_SHARP;
+    const r = names[(noteIndex(m[1])+semis+120)%12];
+    const b = m[3] && noteIndex(m[3])>=0 ? '/'+names[(noteIndex(m[3])+semis+120)%12] : '';
+    return r + m[2] + b;
+  }).join('');
+}
+// all the chords in a song, in order (word chords, line-end chords,
+// instrumental chords, chords written in instrumental labels)
+function songChordList(s){
+  const out = [];
+  Object.keys(s.chords||{}).forEach(k=>{ if(s.chords[k]) String(s.chords[k]).split(/\s+/).forEach(c=>c && out.push(c)); });
+  String(s.lyrics||'').split('\n').forEach(l=>{ const m = /^\s*\[(?:instrumental|intro|outro|solo|interlude|break)\b:?\s*([^\]]*)\]\s*$/i.exec(l); if(m) m[1].split(/\s+/).forEach(c=>/^[A-G]/.test(c) && out.push(c)); });
+  return out;
+}
+// The song's key, guessed from its chords: the major or minor key whose
+// scale fits the chords best (the first and last chords count extra).
+function songKey(s){
+  const chords = songChordList(s).map(c=>/^([A-G][#b]?)(m(?!aj))?/.exec(c)).filter(Boolean).map(m=>({ r: noteIndex(m[1]), min: !!m[2] }));
+  if(!chords.length) return null;
+  let best = null;
+  for(let k=0;k<12;k++) for(const minor of [false, true]){
+    const tonic = minor ? (k+3)%12 : k;   // a minor key shares its relative major's chords
+    const maj = [0,5,7].map(x=>(tonic+x)%12), mn = [2,4,9].map(x=>(tonic+x)%12);
+    let sc = 0;
+    chords.forEach((c,i)=>{ const w = (i===0 || i===chords.length-1) ? 2 : 1; if((c.min ? mn : maj).includes(c.r)) sc += w; if(c.r===(minor?(tonic+9)%12:tonic) && c.min===minor) sc += w*0.5; });
+    if(!best || sc>best.sc) best = { sc, root: minor ? (tonic+9)%12 : tonic, minor };
+  }
+  const flats = songChordList(s).some(c=>/^[A-G]b/.test(c));
+  return { root: best.root, minor: best.minor, name: keyName(best.root, best.minor, flats || FLAT_KEYS.has(keyName(best.root, best.minor, true))) };
+}
+function transposeSong(s, semis, flats){
+  if(!s || !semis) return;
+  const ch = {}; Object.keys(s.chords||{}).forEach(k=>{ ch[k] = transposeChord(s.chords[k], semis, flats); }); s.chords = ch;
+  s.lyrics = String(s.lyrics||'').split('\n').map(l=>l.replace(/^(\s*\[(?:instrumental|intro|outro|solo|interlude|break)\b:?\s*)([^\]]*)(\]\s*)$/i, (m,a,b,c)=>a+b.split(/(\s+)/).map(t=>/^[A-G]/.test(t) ? transposeChord(t, semis, flats) : t).join('')+c)).join('\n');
+  if(s.notes && Array.isArray(s.notes._intro)) s.notes = { ...s.notes, _intro: s.notes._intro.map(x=>({ ...x, ch: transposeChord(x.ch, semis, flats) })) };
+}
+function keySelectHTML(s){
+  const k = songKey(s); if(!k) return '';
+  const opts = Array.from({length:12}, (_,i)=>{ const flats = FLAT_KEYS.has(keyName(i, k.minor, true)); const n = keyName(i, k.minor, flats); return `<option value="${i}"${i===k.root?' selected':''}>${n}</option>`; }).join('');
+  return `<label class="keyrow">Key <select data-xchange="changeKey" data-id="${esc(s.id)}" data-from="${k.root}" aria-label="Change key">${opts}</select></label>`;
+}
+XActions.changeKey = function(d, v){
+  const s = D.songs[d.id]; if(!s) return;
+  const from = +d.from, to = +v; if(isNaN(to) || to===from) return;
+  const k = songKey(s), semis = ((to-from)%12+12)%12;
+  const flats = FLAT_KEYS.has(keyName(to, k && k.minor, true));
+  transposeSong(s, semis>6 ? semis-12 : semis, flats);
+  render(); queueSaveSong(s.id);
+  toast('Key changed to '+keyName(to, k && k.minor, flats));
+};
 // Per-person song flags — heart, mark, and "recently added, not opened yet" —
 // kept with your Supabase account (user_metadata) so they follow you to
 // every device without a database change; a local copy covers offline use.
@@ -372,7 +458,7 @@ function songContent(s){
     ['Tempo', !!(s.synced || (s.notes && s.notes._tempo))]
   ];
 }
-function songOwner(s){ return 'Created by '+(s.mine===false ? (s.by||'someone') : (ST.nickname || nicknameFromEmail(ST.email) || 'you')); }
+function songOwner(s){ return s.mine===false ? 'Created by '+(s.by||'someone') : ''; }
 // A document still being read (its songs aren't known yet) — not a song.
 function readingRowsHTML(){
   return (ST.reading||[]).map(r=>`<div class="list-row" style="cursor:default"><div style="min-width:0;flex:1"><div class="t" style="font-weight:500;color:#6f6f6f">${esc(r.label)}</div><div class="s" id="readnote-${r.id}">${esc(r.note||'Finding the songs…')}</div></div></div>`).join('');
@@ -446,7 +532,7 @@ function songRowList(id, badgeText, badgeCol, from, rowAct, compact){
   return `<div class="list-row has-act srow${compact?' compact':''}" data-act="openSongFrom" data-id="${id}" data-from="${from}">
     <div class="sm"><div class="t">${esc(songTitle(s))}</div>${j ? jobBarHTML(s) : (sub ? `<div class="s"${s.failed?' style="color:#e5372a"':''}>${esc(sub)}</div>` : '')}</div>
     <div class="scol s-content">${j ? '' : content}</div>
-    <div class="scol s-status">${b[0] ? `<span class="sbadge" style="color:${b[1]}">${b[0]}</span>` : ''}<span class="sowner">${esc(songOwner(s))}</span></div>
+    <div class="scol s-status">${b[0] ? `<span class="sbadge" style="color:${b[1]}">${b[0]}</span>` : ''}${songOwner(s) ? `<span class="sowner">${esc(songOwner(s))}</span>` : ''}</div>
     <div class="scol s-acts">${rowAct ? rowActHTML(rowAct, id) : ''}${flagBtn('mark','bookmark', hasFlag('mark',id)?'Unmark':'Mark')}${flagBtn('fav','favorite', hasFlag('fav',id)?'Remove heart':'Heart')}</div>
     ${icon('chevron_right',22)}
   </div>`;
