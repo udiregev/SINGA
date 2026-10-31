@@ -280,20 +280,104 @@ function jobBarHTML(s){
   const j = songJob(s); if(!j) return '';
   return `<div class="jobbar" style="margin-top:6px;max-width:240px"><div id="jobbar-${j.id}" style="width:${Math.round(j.pct)}%"></div></div><div id="jobnote-${j.id}" style="font-size:11px;color:#8a8a8a;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px">${esc(j.note||'Waiting…')}</div>`;
 }
-function songSubLine(s){ return s.failed ? "Couldn't be added — tap to try again" : (s.sub || (s.synced?'':'Draft')); }
-// The only labels on a song row: PROCESSING (being added), FAILED, or
-// RECENTLY ADDED (for RECENT_DAYS after it was added). Nothing otherwise.
-const RECENT_DAYS = 3;
+function songSubLine(s){ return s.failed ? "Couldn't be added — tap to try again" : (s.sub || ''); }
+// Song-row layout styles (title | content | status / owner | actions)
+(function(){
+  if(document.getElementById('singa-srow-css')) return;
+  const st = document.createElement('style'); st.id = 'singa-srow-css';
+  st.textContent = `
+/* ---- a song row: title | content | status / owner | actions ---- */
+.srow .sm{min-width:0;flex:1}
+.srow .sm .t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+.srow .scol{flex:none;font-size:12px}
+.srow .s-content{width:236px;color:#c4c4c4;white-space:nowrap;font-weight:500}
+.srow .s-content span.on{color:#1b1b1b;font-weight:600}
+.srow .s-content i{font-style:normal;margin:0 6px;color:#d8d8d8}
+.srow .s-status{width:150px;display:flex;flex-direction:column;gap:3px;color:#8a8a8a}
+.srow .sbadge{font-size:11px;font-weight:800;letter-spacing:.05em;white-space:nowrap}
+.srow .sowner{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.srow .s-acts{display:flex;align-items:center;justify-content:flex-end;gap:0;width:108px}
+.srow .row-act{opacity:1}
+.sact{width:36px;height:36px;border:0;border-radius:50%;background:transparent;color:#b8b8b8;display:inline-flex;align-items:center;justify-content:center;flex:none;transition:background .15s,color .15s}
+.sact:hover{background:#f2f2f2;color:#1b1b1b}
+.sact.on[data-kind="mark"]{color:#1b1b1b}
+.sact.on[data-kind="fav"]{color:#e5372a}
+/* narrow screens, and the home screen's Songs column: details wrap under the title */
+.srow.compact{flex-wrap:wrap;row-gap:4px}
+.srow.compact .sm{flex:1 1 calc(100% - 40px)}
+.srow.compact .s-content{width:auto;order:3;flex:none}
+.srow.compact .s-status{width:auto;order:4;flex:1 1 auto;min-width:0;flex-direction:row;gap:10px;align-items:center;margin-left:8px}
+.srow.compact .s-acts{order:5;width:auto}
+.srow.compact > .msi{order:2}
+@media (max-width:820px){
+  .srow{flex-wrap:wrap;row-gap:4px}
+  .srow .sm{flex:1 1 calc(100% - 40px)}
+  .srow .s-content{width:auto;order:3;flex:1 1 100%}
+  .srow .s-status{width:auto;order:4;flex:1 1 auto;min-width:0;flex-direction:row;gap:10px;align-items:center;margin-left:0}
+  .srow .s-acts{order:5;width:auto}
+  .srow > .msi{order:2}
+}
+`;
+  document.head.appendChild(st);
+})();
+if(!SORTS.some(x=>x[0]==='fav')) SORTS.push(['fav','Hearted'], ['marked','Marked']);
+// Hearts, marks and "recently added" come with your account when you sign in
+const _applySessionBase = applySession;
+applySession = async function(session){ try{ loadFlags(session && session.user); }catch(e){} return _applySessionBase(session); };
+// Heart / mark on a song row: toggles without opening the song
+document.addEventListener('click', function(e){
+  const b = e.target.closest && e.target.closest('.sact[data-kind]'); if(!b) return;
+  e.stopImmediatePropagation(); e.preventDefault();
+  setFlag(b.dataset.kind, b.dataset.id, !hasFlag(b.dataset.kind, b.dataset.id));
+  render();
+}, true);
+// Per-person song flags — heart, mark, and "recently added, not opened yet" —
+// kept with your Supabase account (user_metadata) so they follow you to
+// every device without a database change; a local copy covers offline use.
+function flagList(k){ ST.flags = ST.flags || { fav:[], mark:[], fresh:[] }; return ST.flags[k] || (ST.flags[k] = []); }
+function hasFlag(k, id){ return flagList(k).includes(id); }
+function setFlag(k, id, on){
+  const a = flagList(k), i = a.indexOf(id);
+  if(on && i<0) a.push(id); else if(!on && i>=0) a.splice(i,1); else return;
+  saveFlags();
+}
+function saveFlags(){
+  try{ localStorage.setItem('singaFlags:'+ST.userId, JSON.stringify(ST.flags)); }catch(e){}
+  debounceSave('flags', async ()=>{
+    if(!ST.userId || !sb.auth.updateUser) return;
+    try{ const r = await sb.auth.updateUser({ data:{ singa_flags: ST.flags } }); if(r && r.error) console.error('Singa: flags save failed', r.error); }catch(e){ console.error('Singa: flags save failed', e); }
+  }, 1200);
+}
+function loadFlags(user){
+  let f = (user && user.user_metadata && user.user_metadata.singa_flags) || null;
+  if(!f){ try{ f = JSON.parse(localStorage.getItem('singaFlags:'+(user && user.id))||'null'); }catch(e){} }
+  ST.flags = { fav:(f && f.fav)||[], mark:(f && f.mark)||[], fresh:(f && f.fresh)||[] };
+}
+// The only status labels on a song row: PROCESSING (being added), FAILED,
+// or RECENTLY ADDED — a song that was added for you automatically, until
+// you first open it.
 function songBadge(s){
   if(songJob(s)) return ['PROCESSING','#2f8fe0'];
   if(s.failed) return ['FAILED','#e5372a'];
-  if(s.added && Date.now() - s.added < RECENT_DAYS*864e5 && (s.lyrics||'').trim()) return ['RECENTLY ADDED','#2a9d6b'];
+  if(hasFlag('fresh', s.id)) return ['RECENTLY ADDED','#2a9d6b'];
   return ['',''];
 }
-function songRowHome(s){
-  const j = songJob(s);
-  return `<div class="list-row" data-act="openSongFrom" data-id="${s.id}" data-from="home" style="border-bottom:1px solid var(--b2)"><div style="min-width:0;flex:1"><div class="t">${esc(songTitle(s))}</div>${j ? jobBarHTML(s) : `<div class="s"${s.failed?' style="color:#e5372a"':''}>${esc(songSubLine(s))}</div>`}</div>${(()=>{ const b=songBadge(s); return !b[0] ? '' : `<span style="font-size:11px;font-weight:800;letter-spacing:.05em;color:${b[1]};white-space:nowrap">${b[0]}</span>`; })()}</div>`;
+// What a song holds: lyrics, chords, markings, tempo (timing / speed).
+function songContent(s){
+  const chordKeys = Object.keys(s.chords||{}).filter(k=>s.chords[k]);
+  return [
+    ['Lyrics', !!(s.lyrics||'').trim()],
+    ['Chords', chordKeys.length>0 || !!((s.notes||{})._intro||[]).length],
+    ['Markings', markCount(s)>0],
+    ['Tempo', !!(s.synced || (s.notes && s.notes._tempo))]
+  ];
 }
+function songOwner(s){ return 'Created by '+(s.mine===false ? (s.by||'someone') : (ST.nickname || nicknameFromEmail(ST.email) || 'you')); }
+// A document still being read (its songs aren't known yet) — not a song.
+function readingRowsHTML(){
+  return (ST.reading||[]).map(r=>`<div class="list-row" style="cursor:default"><div style="min-width:0;flex:1"><div class="t" style="font-weight:500;color:#6f6f6f">${esc(r.label)}</div><div class="s" id="readnote-${r.id}">${esc(r.note||'Finding the songs…')}</div></div></div>`).join('');
+}
+function songRowHome(s){ return songRowList(s.id, '', '', 'home', s.mine!==false ? 'delete' : null, true); }
 
 function renderHome(){
   const playlists = D.playlists.slice(0,3).map(playlistRow).join('');
@@ -324,7 +408,7 @@ function renderHome(){
       <div style="display:flex;flex-direction:column;gap:48px">
         <div>
           <div class="row home-h" style="gap:14px;margin-bottom:8px"><span class="home-title" data-act="openList" data-kind="songs" title="All songs">Songs</span><span class="icon-btn" style="margin-left:36px" title="Add a song" data-act="newSong">${icon('add',24)}</span></div>
-          ${recent || '<div style="padding:14px 0;color:#8a8a8a;font-size:14px">No songs yet — tap + to add one.</div>'}
+          ${readingRowsHTML()}${recent || ((ST.reading||[]).length ? '' : '<div style="padding:14px 0;color:#8a8a8a;font-size:14px">No songs yet — tap + to add one.</div>')}
           <a class="link" style="display:inline-block;margin-top:14px;text-decoration:underline" data-act="openList" data-kind="songs">All Songs</a>
         </div>
       </div>
@@ -333,14 +417,18 @@ function renderHome(){
 }
 
 function sortRows(rows){
-  const r = ST.sort==='mine' ? rows.filter(x=>x.mine) : rows;
-  const by = { az:(a,b)=>a.title.localeCompare(b.title), za:(a,b)=>b.title.localeCompare(a.title), played:(a,b)=>b.plays-a.plays, recent:(a,b)=>b.added-a.added, mine:(a,b)=>b.added-a.added }[ST.sort];
+  const songsList = ST.listKind==='songs' || ST.screen!=='list';
+  const r = ST.sort==='mine' ? rows.filter(x=>x.mine)
+    : (ST.sort==='fav' && songsList) ? rows.filter(x=>hasFlag('fav',x.id))
+    : (ST.sort==='marked' && songsList) ? rows.filter(x=>hasFlag('mark',x.id)) : rows;
+  const newest = (a,b)=>b.added-a.added;
+  const by = { az:(a,b)=>a.title.localeCompare(b.title), za:(a,b)=>b.title.localeCompare(a.title), played:(a,b)=>b.plays-a.plays, recent:newest, mine:newest, fav:newest, marked:newest }[ST.sort] || newest;
   return [...r].sort(by);
 }
 function sortDropdown(){
   const label = SORTS.find(x=>x[0]===ST.sort)[1];
   const opts = ST.sortOpen ? `<div style="position:absolute;right:0;top:calc(100% + 6px);width:210px;background:#fff;border:1.5px solid var(--fg);border-radius:12px;padding:6px;box-shadow:0 12px 30px rgba(0,0,0,.1);display:flex;flex-direction:column;z-index:4">
-    ${SORTS.map(([v,l])=>`<button style="border:0;border-radius:8px;background:${v===ST.sort?'#f2f2f2':'transparent'};text-align:left;padding:10px 12px;font-size:14px;font-weight:${v===ST.sort?700:500};display:flex;justify-content:space-between;align-items:center" data-act="setSort" data-id="${v}">${l}<span class="msi" style="font-size:18px;opacity:${v===ST.sort?1:0}">check</span></button>`).join('')}
+    ${SORTS.filter(([v])=>ST.listKind==='songs' || (v!=='fav' && v!=='marked')).map(([v,l])=>`<button style="border:0;border-radius:8px;background:${v===ST.sort?'#f2f2f2':'transparent'};text-align:left;padding:10px 12px;font-size:14px;font-weight:${v===ST.sort?700:500};display:flex;justify-content:space-between;align-items:center" data-act="setSort" data-id="${v}">${l}<span class="msi" style="font-size:18px;opacity:${v===ST.sort?1:0}">check</span></button>`).join('')}
   </div>` : '';
   return `<div style="position:relative"><button class="row" style="border:0;background:transparent;gap:4px;font-size:13px;color:#6f6f6f" data-act="toggleSort">Sort by: <span style="font-weight:600;color:var(--fg)">${label}</span>${icon(ST.sortOpen?'expand_less':'expand_more',18)}</button>${opts}</div>`;
 }
@@ -350,9 +438,18 @@ function rowActHTML(kind, id){
   const lbl = kind==='delete' ? 'Delete song' : 'Remove';
   return `<button class="row-act" data-act="askRowAction" data-kind="${kind}" data-id="${esc(id)}" title="${lbl}" aria-label="${lbl}">${icon(kind==='delete'?'delete':'remove_circle',20)}</button>`;
 }
-function songRowList(id, badgeText, badgeCol, from, rowAct){
-  const s = song(id);
-  return `<div class="list-row has-act" data-act="openSongFrom" data-id="${id}" data-from="${from}"><div style="min-width:0;flex:1"><div class="t">${esc(songTitle(s))}</div>${songJob(s) ? jobBarHTML(s) : `<div class="s"${s.failed?' style="color:#e5372a"':''}>${esc(songSubLine(s))}</div>`}</div><div class="row" style="gap:12px">${badgeText ? `<span style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:${badgeCol};white-space:nowrap">${esc(badgeText)}</span>` : ''}${rowAct ? rowActHTML(rowAct, id) : ''}${icon('chevron_right',22)}</div></div>`;
+// A song row: title (and artist) | what it holds | status / owner | actions
+function songRowList(id, badgeText, badgeCol, from, rowAct, compact){
+  const s = song(id), j = songJob(s), b = songBadge(s), sub = songSubLine(s);
+  const content = songContent(s).map(([l,on])=>`<span class="${on?'on':''}">${l}</span>`).join('<i>|</i>');
+  const flagBtn = (k, ic, lbl)=>{ const on = hasFlag(k, id); return `<button class="sact${on?' on':''}" data-kind="${k}" data-id="${esc(id)}" title="${lbl}" aria-label="${lbl}" aria-pressed="${on}"><span class="msi" style="font-size:21px;font-variation-settings:'FILL' ${on?1:0}">${ic}</span></button>`; };
+  return `<div class="list-row has-act srow${compact?' compact':''}" data-act="openSongFrom" data-id="${id}" data-from="${from}">
+    <div class="sm"><div class="t">${esc(songTitle(s))}</div>${j ? jobBarHTML(s) : (sub ? `<div class="s"${s.failed?' style="color:#e5372a"':''}>${esc(sub)}</div>` : '')}</div>
+    <div class="scol s-content">${j ? '' : content}</div>
+    <div class="scol s-status">${b[0] ? `<span class="sbadge" style="color:${b[1]}">${b[0]}</span>` : ''}<span class="sowner">${esc(songOwner(s))}</span></div>
+    <div class="scol s-acts">${rowAct ? rowActHTML(rowAct, id) : ''}${flagBtn('mark','bookmark', hasFlag('mark',id)?'Unmark':'Mark')}${flagBtn('fav','favorite', hasFlag('fav',id)?'Remove heart':'Heart')}</div>
+    ${icon('chevron_right',22)}
+  </div>`;
 }
 function gigRowList(g){
   const sub = g.date+' · '+g.setlist.length+' songs'+(g.mine?'':' · by '+g.by);
@@ -371,7 +468,7 @@ function renderList(){
     title = curPl ? curPl.title : 'Songs';
     titleBadge = srcBadge(curPl);
     const rowAct = (curPl && !curPl.auto) ? (curPl.mine!==false ? 'plremove' : null) : 'delete';
-    rowsHtml = `<div class="list-row addrow" data-act="listAdd"><div class="t">${icon('add_circle',22)}Add song</div></div>` + rows.map(r=>{ const b=songBadge(r); return songRowList(r.id, b[0], b[1], 'list', r.mine!==false || rowAct==='plremove' ? rowAct : null); }).join('');
+    rowsHtml = `<div class="list-row addrow" data-act="listAdd"><div class="t">${icon('add_circle',22)}Add song</div></div>` + (curPl && !curPl.auto ? '' : readingRowsHTML()) + rows.map(r=>{ const b=songBadge(r); return songRowList(r.id, b[0], b[1], 'list', r.mine!==false || rowAct==='plremove' ? rowAct : null); }).join('');
     empty = false;
   } else if(ST.listKind==='playlists'){
     let rows = D.playlists.slice();
