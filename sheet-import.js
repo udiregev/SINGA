@@ -161,7 +161,22 @@ async function extractPdfWordLines(file){
     }
     lines.push({ text:'', words:[], pageBreak:true });
   }
-  return { lines: removePageFurniture(lines), usedOcr };
+  return { lines: markRepeatedFurniture(removePageFurniture(lines)), usedOcr };
+}
+// A line printed at the top or bottom of most pages (a copyright notice, the
+// songbook's name) is page furniture, not lyrics. Only a line on 3+ pages
+// and at least 3 in 10 of them counts, so a song's own repeated line that
+// happens to land at a page edge is left alone.
+function markRepeatedFurniture(lines){
+  const pages = [[]];
+  lines.forEach((l,i)=>{ if(l.pageBreak) pages.push([]); else if((l.text||'').trim() && !l.junk) pages[pages.length-1].push(i); });
+  const used = pages.filter(p=>p.length);
+  if(used.length < 3) return lines;
+  const key = i=>(lines[i].text||'').trim().toLowerCase().replace(/\d+/g,'#');
+  const count = {};
+  used.forEach(p=>{ const edge = new Set([p[0], p[1], p[p.length-2], p[p.length-1]].filter(i=>i!=null).map(key)); edge.forEach(k=>{ count[k] = (count[k]||0)+1; }); });
+  const need = Math.max(3, Math.ceil(used.length*0.3));
+  return lines.map(l=>(!l.pageBreak && !l.junk && (l.text||'').trim() && count[(l.text||'').trim().toLowerCase().replace(/\d+/g,'#')] >= need) ? { ...l, junk:true } : l);
 }
 
 // Printed / exported sheets carry text that isn't part of the song: page
@@ -305,7 +320,7 @@ function classifyWordLines(wordLines, applyOcrNoiseFilter){
     const trimmed = raw.trim();
     if(!trimmed.length) return { type:'blank', text:'', words:[] };
     if(applyOcrNoiseFilter && isLikelyNoiseLine(trimmed)) return { type:'noise', text:trimmed, words:[] };
-    return { type:'lyric', text:trimmed, words:line.words };
+    return { type:'lyric', text:trimmed, words:line.words, size:line.size };
   });
 }
 
@@ -460,6 +475,17 @@ function sheetFromLines(wordLines, usedOcr, fileName){
   let title, artist='', body;
   if(header){ title=header.title; artist=header.artist; body=classified.filter((_,i)=>!header.consumed.has(i)); }
   else { const t=extractTitle(classified, fileName); title=t.title; body = t.consumedIndex>=0 ? classified.filter((_,i)=>i!==t.consumedIndex) : classified; }
+  // lyric sheets without chords: "Title", then a short artist line on its
+  // own (with a gap or a different size before the lyrics)
+  if(!header && !artist){
+    const ti = body.findIndex(l=>l.type!=='blank' && l.type!=='junk' && l.type!=='pagebreak');
+    const a = body[ti], nx = body[ti+1];
+    if(a && a.type==='lyric' && a.words.length<=5 && !/[.,?;:]$/.test(a.text) && (!nx || nx.type==='blank' || (a.size && nx.size && Math.abs(a.size-nx.size)>0.5))){
+      artist = a.text; body = body.filter((_,i)=>i!==ti);
+    }
+  }
+  // songbook numbering ("12. Jolene") isn't part of the title
+  title = String(title||'').replace(/^\s*\d{1,3}\s*[.)]\s+(?=\S)/, '');
   // "The Lazy Song / Bruno Mars": the title, then the artist
   const ta = /^(.+?)\s+\/\s+(.+)$/.exec(title||'');
   if(ta){ title = ta[1].trim(); if(!artist) artist = ta[2].trim(); }
@@ -497,18 +523,23 @@ function songStarts(lines, usedOcr){
   const isGap = c=>c.type==='blank' || c.type==='pagebreak' || c.type==='junk' || c.type==='noise';
   const noMusic = !cls.some(c=>c.type==='chord' || c.type==='tab');
   const starts = [], bigAt = new Set(), forcedAt = new Set();
-  let first = -1, gap = 99, forced = false, prevType = null;
+  let first = -1, gap = 99, forced = false, prevType = null, prevBig = false;
   for(let i=0;i<cls.length;i++){
     const c = cls[i], raw = lines[i].text || '';
     if(/\f/.test(raw) || (c.type!=='tab' && DIVIDER_RE.test(raw.trim()))){ forced = true; gap = 99; continue; }
     if(c.type==='blank'){ gap++; continue; }
     if(c.type==='pagebreak'){ gap += 2; continue; }
     if(c.type==='junk' || c.type==='noise') continue;
-    if(first<0){ first = i; }
+    const big = !!(median && lines[i].size && lines[i].size >= median*1.18 && c.type==='lyric');
+    if(first<0){ first = i; if(big) bigAt.add(i); }
     else if(forced){ starts.push(i); forcedAt.add(i); }
-    else if(c.type==='lyric' && c.words.length<=8 && prevType!=='chord'){
-      const big = median && lines[i].size && lines[i].size >= median*1.18;
-      if(gap>=2 || big){
+    else if(big && !prevBig && c.words.length<=12 && prevType!=='chord'){
+      // a title printed bigger than the lyrics (a title running onto a
+      // second line doesn't start another song)
+      starts.push(i); bigAt.add(i);
+    }
+    else if(c.type==='lyric' && c.words.length<=8 && prevType!=='chord' && !big){
+      if(gap>=2){
         // what follows: at most two plain lines (title / artist) before the music
         let plain = 0, music = false;
         for(let j=i+1, seen=0; j<cls.length && seen<6; j++){
@@ -518,24 +549,41 @@ function songStarts(lines, usedOcr){
           if(d.type==='chord' || d.type==='label' || d.type==='tab'){ music = true; break; }
           if(d.type==='lyric'){ if(++plain>1) break; }
         }
-        if(music || (big && plain<=1) || (noMusic && gap>=3)){ starts.push(i); if(big) bigAt.add(i); }
+        if(music || (noMusic && gap>=3)) starts.push(i);
       }
     }
-    forced = false; gap = 0; prevType = c.type;
+    forced = false; gap = 0; prevType = c.type; prevBig = big;
   }
   // a songbook that prints its titles bigger: only those start songs (a
-  // lyric line after a gap is just a gap)
-  if(bigAt.size) return starts.filter(i=>bigAt.has(i) || forcedAt.has(i));
+  // lyric line after a gap is just a gap), and whatever comes before the
+  // first title (a cover, a table of contents) isn't a song
+  if(bigAt.size>1 || (bigAt.size===1 && !bigAt.has(first))){
+    const kept = starts.filter(i=>bigAt.has(i) || forcedAt.has(i));
+    kept.dropFirst = first>=0 && !bigAt.has(first);
+    kept.big = median*1.18;
+    return kept;
+  }
   return starts;
 }
 function splitSongs(lines, usedOcr){
   const starts = songStarts(lines, usedOcr);
   if(!starts.length) return [lines];
-  const out = []; let from = 0;
+  let out = []; let from = 0;
   starts.forEach(st=>{ out.push(lines.slice(from, st)); from = st; });
   out.push(lines.slice(from));
-  return out.map(seg=>seg.filter(l=>!DIVIDER_RE.test((l.text||'').trim()) || isTabLine(l.text)))
-    .filter(seg=>seg.some(l=>(l.text||'').trim() && !l.junk));
+  if(starts.dropFirst) out = out.slice(1);
+  out = out.map(seg=>seg.filter(l=>!DIVIDER_RE.test((l.text||'').trim()) || isTabLine(l.text)));
+  // a big title that runs onto a second big line is one title
+  if(starts.big) out = out.map(seg=>{
+    const idx = seg.map((l,i)=>i).filter(i=>(seg[i].text||'').trim() && !seg[i].junk && !seg[i].pageBreak);
+    const a = seg[idx[0]], b = seg[idx[1]];
+    if(a && b && idx[1]===idx[0]+1 && a.size>=starts.big && b.size>=starts.big){
+      const m = { ...a, text: a.text+' '+b.text, words: [...a.words, ...b.words] };
+      return [...seg.slice(0, idx[0]), m, ...seg.slice(idx[1]+1)];
+    }
+    return seg;
+  });
+  return out.filter(seg=>seg.some(l=>(l.text||'').trim() && !l.junk));
 }
 // Reads several files into songs. split=false: everything is one song (the
 // files in order, e.g. the pages of one song). split=true: every file is at
