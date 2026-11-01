@@ -329,6 +329,13 @@ body.fixed-screen #screen > .scr{overflow-y:auto}
 .spdpop{display:inline-flex;gap:4px;flex-wrap:wrap}
 .spdpop button{border:1.5px solid #d8d8d8;background:#fff;border-radius:14px;padding:3px 9px;font-size:12px;font-weight:700;color:#6f6f6f;cursor:pointer}
 .spdpop button.on{background:#1b1b1b;border-color:#1b1b1b;color:#fff}
+/* home screen song rows and the Songs filter */
+.hrow .t{display:flex;align-items:center;gap:8px;min-width:0}
+.hrow .tt{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.hrow .hind{display:inline-flex;gap:2px;flex:none}
+.hsort{margin-left:24px;position:relative;display:inline-flex;align-items:center;font-size:13px;color:#6f6f6f}
+.hsort select{appearance:none;-webkit-appearance:none;border:0;background:transparent;font:inherit;font-weight:600;color:#1b1b1b;padding:4px 20px 4px 4px;cursor:pointer}
+.hsort .msi{position:absolute;right:0;pointer-events:none}
 `;
   document.head.appendChild(st);
 })();
@@ -437,7 +444,7 @@ function saveFlags(){
 function loadFlags(user){
   let f = (user && user.user_metadata && user.user_metadata.singa_flags) || null;
   if(!f){ try{ f = JSON.parse(localStorage.getItem('singaFlags:'+(user && user.id))||'null'); }catch(e){} }
-  ST.flags = { fav:(f && f.fav)||[], mark:(f && f.mark)||[], fresh:(f && f.fresh)||[] };
+  ST.flags = { fav:(f && f.fav)||[], mark:(f && f.mark)||[], fresh:(f && f.fresh)||[], opened:(f && f.opened)||{} };
 }
 // The only status labels on a song row: PROCESSING (being added), FAILED,
 // or RECENTLY ADDED — a song that was added for you automatically, until
@@ -463,12 +470,48 @@ function songOwner(s){ return s.mine===false ? 'Created by '+(s.by||'someone') :
 function readingRowsHTML(){
   return (ST.reading||[]).map(r=>`<div class="list-row" style="cursor:default"><div style="min-width:0;flex:1"><div class="t" style="font-weight:500;color:#6f6f6f">${esc(r.label)}</div><div class="s" id="readnote-${r.id}">${esc(r.note||'Finding the songs…')}</div></div></div>`).join('');
 }
-function songRowHome(s){ return songRowList(s.id, '', '', 'home', s.mine!==false ? 'delete' : null, true); }
+// Home screen: just the song (title, artist, PROCESSING / RECENTLY ADDED)
+// and a small heart / bookmark if you've loved or marked it.
+function songRowHome(s){
+  const j = songJob(s), b = songBadge(s), sub = songSubLine(s);
+  const ind = (hasFlag('mark', s.id) ? `<span class="msi" title="Marked" style="font-size:17px;font-variation-settings:'FILL' 1;color:#1b1b1b">bookmark</span>` : '')
+    + (hasFlag('fav', s.id) ? `<span class="msi" title="Loved" style="font-size:17px;font-variation-settings:'FILL' 1;color:#e5372a">favorite</span>` : '');
+  return `<div class="list-row hrow" data-act="openSongFrom" data-id="${s.id}" data-from="home">
+    <div style="min-width:0;flex:1"><div class="t"><span class="tt">${esc(songTitle(s))}</span>${ind ? `<span class="hind">${ind}</span>` : ''}</div>${j ? jobBarHTML(s) : (sub ? `<div class="s"${s.failed?' style="color:#e5372a"':''}>${esc(sub)}</div>` : '')}</div>
+    ${b[0] ? `<span class="sbadge" style="font-size:11px;font-weight:800;letter-spacing:.05em;white-space:nowrap;color:${b[1]}">${b[0]}</span>` : ''}
+    ${icon('chevron_right',22)}
+  </div>`;
+}
+// The home screen's Songs filter. Recent = last opened (played or viewed)
+// or added, newest first.
+const HOME_SORTS = [['recent','Recent'],['fav','Loved'],['marked','Marked'],['added','Recently added'],['az','A → Z']];
+function homeSort(){ if(!ST.homeSort){ try{ ST.homeSort = localStorage.getItem('singaHomeSort') || 'recent'; }catch(e){ ST.homeSort = 'recent'; } } return ST.homeSort; }
+function lastUsed(id){ const s = D.songs[id] || {}; return Math.max(((ST.flags && ST.flags.opened) || {})[id] || 0, s.added || 0); }
+function homeSongIds(){
+  const ids = D.order.filter(id=>D.songs[id]);
+  const k = homeSort();
+  if(k==='fav') return ids.filter(id=>hasFlag('fav', id));
+  if(k==='marked') return ids.filter(id=>hasFlag('mark', id));
+  if(k==='added') return ids.slice().sort((a,b)=>(D.songs[b].added||0)-(D.songs[a].added||0));
+  if(k==='az') return ids.slice().sort((a,b)=>songTitle(D.songs[a]).localeCompare(songTitle(D.songs[b])));
+  return ids.slice().sort((a,b)=>lastUsed(b)-lastUsed(a));
+}
+XActions.homeSort = function(d, v){ ST.homeSort = v; try{ localStorage.setItem('singaHomeSort', v); }catch(e){} render(); };
+// remember when each song was last opened (for Recent)
+document.addEventListener('click', function(e){
+  const r = e.target.closest && e.target.closest('[data-act="openSongFrom"],[data-act="openGigSong"]'); if(!r || !r.dataset.id) return;
+  ST.flags = ST.flags || { fav:[], mark:[], fresh:[] };
+  const o = ST.flags.opened = ST.flags.opened || {};
+  o[r.dataset.id] = Date.now();
+  const keys = Object.keys(o); if(keys.length > 150) keys.sort((a,b)=>o[a]-o[b]).slice(0, keys.length-150).forEach(k=>delete o[k]);
+  saveFlags();
+}, true);
 
 function renderHome(){
   const playlists = D.playlists.slice(0,3).map(playlistRow).join('');
   const gigs = D.gigs.slice(0,3).map(gigRowHome).join('');
-  const recent = D.order.slice(0,4).map(id=>songRowHome(song(id))).join('');
+  const recent = homeSongIds().slice(0,5).map(id=>songRowHome(song(id))).join('');
+  const hk = homeSort(), emptyNote = hk==='fav' ? 'No loved songs yet — tap ♡ on a song in All Songs.' : hk==='marked' ? 'No marked songs yet.' : 'No songs yet — tap + to add one.';
   return `<div class="scr">
     <div class="row" style="gap:16px;margin-bottom:36px">
       <div class="search-field" style="flex:1;max-width:340px">
@@ -493,8 +536,8 @@ function renderHome(){
       </div>
       <div style="display:flex;flex-direction:column;gap:48px">
         <div>
-          <div class="row home-h" style="gap:14px;margin-bottom:8px"><span class="home-title" data-act="openList" data-kind="songs" title="All songs">Songs</span><span class="icon-btn" style="margin-left:36px" title="Add a song" data-act="newSong">${icon('add',24)}</span></div>
-          ${readingRowsHTML()}${recent || ((ST.reading||[]).length ? '' : '<div style="padding:14px 0;color:#8a8a8a;font-size:14px">No songs yet — tap + to add one.</div>')}
+          <div class="row home-h" style="gap:14px;margin-bottom:8px"><span class="home-title" data-act="openList" data-kind="songs" title="All songs">Songs</span><span class="icon-btn" style="margin-left:36px" title="Add a song" data-act="newSong">${icon('add',24)}</span><label class="hsort" title="Show"><select data-xchange="homeSort" aria-label="Show songs" style="width:${Math.round((HOME_SORTS.find(x=>x[0]===hk)||HOME_SORTS[0])[1].length*7.6)+28}px">${HOME_SORTS.map(([v,l])=>`<option value="${v}"${v===hk?' selected':''}>${l}</option>`).join('')}</select>${icon('expand_more',18)}</label></div>
+          ${readingRowsHTML()}${recent || ((ST.reading||[]).length ? '' : `<div style="padding:14px 0;color:#8a8a8a;font-size:14px">${emptyNote}</div>`)}
           <a class="link" style="display:inline-block;margin-top:14px;text-decoration:underline" data-act="openList" data-kind="songs">All Songs</a>
         </div>
       </div>
