@@ -237,7 +237,8 @@ function isPlausibleBracketLabel(rawLine){
   return counted > 0 && hits > 0;
 }
 const SECTION_WORDS = ['intro','verse','chorus','pre-chorus','prechorus','bridge','outro','hook','refrain',
-  'interlude','breakdown','instrumental','solo','guitar solo','piano solo','drum solo','vamp','tag','coda','ad-lib','spoken','build','drop'];
+  'interlude','breakdown','instrumental','solo','guitar solo','piano solo','drum solo','vamp','tag','coda','ad-lib','spoken','build','drop',
+  'post-chorus','postchorus','post chorus','pre chorus','middle 8','middle eight','climb','instrumental break','ending'];
 function bareMatchesSectionKeyword(bare){
   const lower = (bare||'').trim().toLowerCase();
   return SECTION_WORDS.some(w=>{
@@ -275,7 +276,7 @@ function isChordLine(rawLine){
 const CHORD_NOTE_WORDS = new Set(['intro','outro','final','end','ending','and','into','then','to','repeat','riff','solo','chorus','verse','bridge','instrumental','interlude','break','tag','coda','fade','fine','last','time','play','nc','n.c']);
 function chordTokenOf(t){ return t.replace(/^[\[(|]+|[\])|,.:;]+$/g,''); }
 function isChordishLine(rawLine){
-  const toks = (rawLine||'').trim().split(/\s+/).filter(t=>t.replace(/[\[\](){}|:,.;\-\u2013]/g,''));
+  const toks = (rawLine||'').trim().split(/\s+/).filter(t=>t.replace(/[\[\](){}|:,.;\-\\u2013]/g,''));
   if(toks.length<2) return false;
   let ch = 0, ok = true;
   toks.forEach(t=>{
@@ -400,7 +401,9 @@ function buildSheetBlocks(classified){
     if(line.type==='lyric'){
       blocks.push({ type:'couplet', words: line.words, chordMap: {} });
     }
-    // 'blank' and 'noise' lines produce no block
+    // an empty line between parts of the song (words:[] keeps older readers safe)
+    if(line.type==='blank' && blocks.length && blocks[blocks.length-1].type!=='gap') blocks.push({ type:'gap', words:[] });
+    // 'noise' lines produce no block
   }
   return blocks;
 }
