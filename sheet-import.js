@@ -276,7 +276,7 @@ function isChordLine(rawLine){
 const CHORD_NOTE_WORDS = new Set(['intro','outro','final','end','ending','and','into','then','to','repeat','riff','solo','chorus','verse','bridge','instrumental','interlude','break','tag','coda','fade','fine','last','time','play','nc','n.c']);
 function chordTokenOf(t){ return t.replace(/^[\[(|]+|[\])|,.:;]+$/g,''); }
 function isChordishLine(rawLine){
-  const toks = (rawLine||'').trim().split(/\s+/).filter(t=>t.replace(/[\[\](){}|:,.;\-\\u2013]/g,''));
+  const toks = (rawLine||'').trim().split(/\s+/).filter(t=>t.replace(/[\[\](){}|:,.;\-–]/g,''));
   if(toks.length<2) return false;
   let ch = 0, ok = true;
   toks.forEach(t=>{
