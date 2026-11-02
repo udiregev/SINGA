@@ -54,7 +54,7 @@ const Actions = {
           await applySession(signUp.data.session);
           ST.password=''; render();
         } else {
-          ST.password=''; toast('Account created — check your email to confirm, then sign in'); ST.authMode='signin'; render();
+          ST.password=''; toast('Account created — confirm it from the email we sent, then sign in'); ST.authMode='signin'; render();
         }
       } else {
         const signIn = await sb.auth.signInWithPassword({ email, password });
@@ -129,7 +129,10 @@ const Actions = {
   async signOut(){
     stopOnsetListening(); endLiveGig();
     try{ await sb.auth.signOut(); }catch(e){}
-    ST.screen='login'; ST.email=''; ST.password=''; ST.nickname=null; ST.authProvider=null; ST.userId=null; render();
+    ST.screen='login'; ST.email=''; ST.password=''; ST.nickname=null; ST.authProvider=null; ST.userId=null;
+    ST.accountOpen=false; ST.menu=false; ST.confirm=null; ST.verifyModal=false; ST.flags=null; ST.pubResults=[];
+    D.songs={}; D.order=[]; D.playlists=[]; D.gigs=[];
+    render();
   },
   async rebootApp(){
     try{
@@ -160,13 +163,27 @@ const Actions = {
     if(d.kind==='delete') ST.confirm = { act:'delete', id:d.id, ok:'Delete', text: title+' will be deleted from your songs, playlists and gigs.' };
     else if(d.kind==='plremove'){ const p = D.playlists.find(x=>x.id===ST.listPl); if(!p) return; ST.confirm = { act:'plremove', id:d.id, pl:p.id, ok:'Remove', text: title+' will be removed from '+p.title+'.' }; }
     else if(d.kind==='gigremove'){ const g = gigObj(); if(!g) return; ST.confirm = { act:'gigremove', id:d.id, gig:g.id, ok:'Remove', text: title+' will be removed from '+g.title+'.' }; }
+    else if(d.kind==='unlib') ST.confirm = { act:'unlib', id:d.id, ok:'Remove', text: title+' will be removed from your songs and playlists. It stays with the person who made it — you can add it again from Search.' };
+    ST.menu = false;
     render();
   },
   confirmCancel(){ ST.confirm=null; render(); },
   confirmOk(){
     const c = ST.confirm; ST.confirm = null; if(!c){ render(); return; }
     if(!canSync()) return;
-    if(c.act==='delete'){ deleteSongEverywhere(c.id); render(); toast('Song deleted'); return; }
+    if(c.act==='delete' || c.act==='delSong'){
+      const viewing = (ST.screen==='song' || ST.screen==='gigplayer') && (ST.songId===c.id || ST.gigCur===c.id);
+      const fromGig = ST.screen==='gigplayer';
+      stopOnsetListening(); deleteSongEverywhere(c.id); ST.menu=false;
+      if(viewing){ ST.playing=false; ST.t=0; if(fromGig){ if(!gigObj().setlist.length) ST.screen='gig'; } else ST.screen = ST.back==='list' ? 'list' : 'home'; }
+      render(); toast('Song deleted'); return;
+    }
+    if(c.act==='unlib'){
+      const viewing = ST.screen==='song' && ST.songId===c.id;
+      removeFromMine(c.id); ST.menu=false;
+      if(viewing){ ST.playing=false; ST.t=0; ST.screen = ST.back==='list' ? 'list' : 'home'; }
+      render(); toast('Removed from your songs'); return;
+    }
     if(c.act==='plremove'){ const p = D.playlists.find(x=>x.id===c.pl); if(p){ p.ids = p.ids.filter(i=>i!==c.id); queueSavePlaylist(p.id); } render(); toast('Removed from '+(p?p.title:'the playlist')); return; }
     if(c.act==='gigremove'){
       const g = D.gigs.find(x=>x.id===c.gig);
@@ -261,7 +278,7 @@ const Actions = {
   },
   pickVariant(d){ ST.selRoot = d.root; ST.selSuffix = d.q; render(); },
   toggleAcc(){ ST.accOn = !ST.accOn; render(); },
-  removeChord(d){ const s = D.songs[ST.editId]; if(!s || !s.chords[d.id]) return; dropChord(s.chords[d.id], d.id, null); },
+  removeChord(d){ const s = D.songs[ST.editId]; if(!s) return; const m = /^(.+)#(\d+)$/.exec(d.id||''); const base = m ? m[1] : d.id; if(!s.chords[base]) return; const ch = m ? String(s.chords[base]).split(/\s+/)[+m[2]] : s.chords[base]; dropChord(ch, d.id, null); },
   placeChord(d){
     const s = D.songs[ST.editId]; const sel = ST.selRoot+ST.selSuffix;
     const [li, wi] = String(d.id).split('-').map(Number); if(!isNaN(li)) ST.editorLine = li;
@@ -416,7 +433,7 @@ const Actions = {
   toggleSongPick(d){ if(!canSync()) return; const sp = ST.songPick;
     if(sp.kind==='gigedit'){ const l = ST.editList||[]; ST.editList = l.includes(d.id) ? l.filter(i=>i!==d.id) : [...l, d.id]; render(); return; }
     const isPl = sp.kind==='playlist'; const target = isPl ? D.playlists.find(p=>p.id===sp.id) : D.gigs.find(g=>g.id===sp.id); const ids = isPl?target.ids:target.setlist; const on = ids.includes(d.id); const next = on ? ids.filter(i=>i!==d.id) : [...ids, d.id]; if(isPl) target.ids=next; else target.setlist=next; render(); if(isPl) queueSavePlaylist(sp.id); else queueSaveGig(sp.id); },
-  togglePublic(){ if(!canSync()) return; const s = D.songs[ST.editId]; if(!s) return; s.isPublic = !s.isPublic; render(); saveSongRow(s); },
+  togglePublic(){ const s = D.songs[ST.editId]; if(!s) return; XActions.togglePrivate({ id:s.id }); },
   togglePlaylistPublic(d){ if(!canSync()) return; const p = D.playlists.find(x=>x.id===d.id); if(!p) return; p.isPublic = !p.isPublic; render(); savePlaylistRow(p); },
   viewDone(){ openSongOrIncomplete(ST.editId, 'home'); render(); },
   continueSong(){ if(!canSync()) return; ST.editId = ST.songId; ST.screen='create'; ST.createMode='manual'; ST.step='lyrics'; ST.phase='idle'; ST.editorLine=0; render(); },
@@ -478,16 +495,15 @@ const Actions = {
   // song viewer: a song without a take / without chords
   addSync(){ Actions.editSong(); if(ST.screen==='create'){ ST.step='sync'; render(); } },
   addChords(){ Actions.editSong(); },
-  removeMarkings(){ const s = song(ST.songId); if(!s || s.id==='none') return; const keep = {}; if(s.notes && s.notes._tempo) keep._tempo = s.notes._tempo; if(s.notes && s.notes._intro) keep._intro = s.notes._intro; s.notes = keep; ST.menu=false; render(); toast('Markings removed'); queueSaveSong(s.id); },
+  removeMarkings(){ const s = song(ST.songId); if(!s || s.id==='none') return; const keep = {}; Object.keys(s.notes||{}).forEach(k=>{ if(k.charAt(0)==='_') keep[k] = s.notes[k]; }); s.notes = keep; ST.menu=false; render(); toast('Markings removed'); queueSaveSong(s.id); },
   editSong(){ if(!canSync()) return; stopOnsetListening(); ST.editReturn = ST.screen==='gigplayer' ? 'gigplayer' : null; ST.playing=false; ST.vcd=0; ST.editId = ST.songId; ST.editing=true; ST.addTarget=null; ST.screen='create'; ST.createMode='manual'; ST.step=hasLyrics(song(ST.songId))?'chords':'sync'; ST.phase='idle'; ST.menu=false; ST.selWord=null; ST.editorLine=0; ST.tempoView=null; ST.speedOpen=false; ST.linkDraft=''; render(); },
+  // Delete in the song menu asks again before anything is deleted
   deleteSong(){
-    if(!canSync()) return; stopOnsetListening();
-    const delId=ST.songId, fromGig = ST.screen==='gigplayer';
-    deleteSongEverywhere(delId);
+    if(!canSync()) return;
+    const s = song(ST.songId); if(!s || s.id==='none') return;
     ST.menu=false;
-    if(fromGig){ if(ST.gigCur===delId){ ST.gigCur=null; ST.t=0; ST.playing=false; ST.gListening=false; } if(!gigObj().setlist.length) ST.screen='gig'; }
-    else ST.screen='home';
-    render(); toast('Song deleted');
+    ST.confirm = { act:'delSong', id:s.id, ok:'Delete', text: '“'+(s.title||'Untitled song')+'” will be deleted for good — from your songs, playlists and gigs.' };
+    render();
   },
   copySong(){
     if(!canSync()) return;
@@ -634,9 +650,12 @@ const Actions = {
   async resendVerifyEmail(){
     if(!ST.email){ toast('No email on file'); return; }
     try{
-      const r = await sb.auth.resend({ type:'signup', email: ST.email });
+      // a sign-in link that comes back with ?singa_verify=1: opening it
+      // confirms the address (see applySession in singa-script-part2.js)
+      const back = location.origin + location.pathname + '?singa_verify=1';
+      const r = await sb.auth.signInWithOtp({ email: ST.email, options:{ emailRedirectTo: back, shouldCreateUser:false } });
       if(r.error) toast(r.error.message);
-      else toast('Verification email sent to '+ST.email);
+      else { ST.verifyModal=false; render(); toast('Email sent to '+ST.email+' — open the link in it to confirm'); }
     }catch(e){ toast('Could not resend — check your connection'); }
   }
 };
