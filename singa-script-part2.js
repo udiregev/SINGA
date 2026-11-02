@@ -17,7 +17,7 @@ function songTempo(s){ const t = (s && s.notes && s.notes._tempo) || {}; return 
 function songMode(s){ const t = songTempo(s); return t.mode==='synced' && s && s.synced ? 'synced' : 'speed'; }
 function songSpeed(s){ return songTempo(s).speed; }
 function setSongTempo(s, patch){ if(!s) return; const t = { ...songTempo(s), ...patch }; s.notes = { ...(s.notes||{}), _tempo: { mode:t.mode, speed:t.speed } }; }
-function markCount(s){ return Object.keys((s && s.notes) || {}).filter(k=>k!=='_tempo' && k!=='_intro').length; }
+function markCount(s){ return Object.keys((s && s.notes) || {}).filter(k=>k.charAt(0)!=='_').length; }   // _tempo, _intro, _spotify… are settings, not marks
 // For a recorded take of typed lyrics: the chords heard before the singing
 // starts (notes._intro, with their times) — an instrumental intro row above
 // the lyrics. ("[Intro: C G]" lines typed or captured from an audio track are
@@ -126,6 +126,12 @@ function buildLines(s, mode, opt){
         else if(mode==='play'){ o.chordCol = curLine ? '#8a8a8a' : '#cfcfcf'; }
         w2.push(o);
       }
+      // Chords step: an empty spot after the last word, for a chord played
+      // after the singing on that line (as many as you like, one after another)
+      if(mode==='chords' && ws.length){
+        let k = 0; while(s.chords[li+'-t'+k]) k++;
+        w2.push({ id:li+'-t'+k, w:'', chord:'', col:'#333', chordCol:'#1b1b1b', weight:400, cursor:'default', mark:'', markSide:null, selected:false, tail:true, tailSlot:true, chip:true, drop:li+'-t'+k });
+      }
     }
     const isPlay = mode==='play', on = !header && isPlay && curLine;
     // (no extra margins on the current line, so starting playback never shifts the lyrics)
@@ -199,10 +205,13 @@ function sideMarkHTML(w){
     ? `<span class="mside-abs l">${txt}${MARR_R}</span>`
     : `<span class="mside-abs r">${MARR_L}${txt}</span>`;
 }
+// A section heading ("Verse 2", "Chorus"…): a small label with space above
+// it, clearly not a lyric — never highlighted, never timed.
 function headerLineHTML(l){
   const raw = l.words.map(w=>w.w).join(' ').replace(/^[\[(]\s*/,'').replace(/\s*[\])]$/,'');
   const m = /^([^:]{1,30}):\s*(.+)$/.exec(raw);
-  return `<div class="lline lheader"><span class="hl">${esc(m?m[1]:raw)}</span>${m?`<span class="hc">${esc(m[2])}</span>`:''}</div>`;
+  const name = sectionName(m ? m[1] : raw);
+  return `<div class="lline lheader${SECTION_RE.test(name)?' lsection':''}"><span class="hl">${esc(name)}</span>${m?`<span class="hc">${esc(m[2])}</span>`:''}</div>`;
 }
 function linesHTML(lines, big){
   return `<div class="lyrics-wrap">` + lines.map(l=>{
@@ -224,9 +233,14 @@ function linesHTML(lines, big){
       const side = (w.mark && (w.markSide==='left' || w.markSide==='right')) ? sideMarkHTML(w) : '';
       const topArrow = (w.mark && w.markSide==='top') ? `<span class="marr-v"${w.lvl?' style="margin-top:-31px"':''}></span>` : '';
       const rowCls = topArrow && !w.chord ? 'lchord-row solo' : 'lchord-row';
-      // a placed chord on the Chords step gets a × to take it off again
-      const chipX = (w.chip && w.chord) ? `<span class="chip-x" data-act="removeChord" data-id="${esc(w.id)}" title="Remove chord">×</span>` : '';
-      return `<span class="lword${w.chip?' editable':''}" style="cursor:${w.cursor};border-radius:5px;${bg}" ${act}${drop}>${hasTop?markRowHTML(w.mark, w.markSide, w.lvl, lift):''}<span class="${rowCls}"><span class="${chordCls}" style="${fszc};color:${w.chordCol};${w.chordAnim||''}"${drag}>${esc(w.chord)}</span>${chipX}${topArrow}</span><span class="ltext" style="${fsz};font-weight:${w.weight};color:${w.col}">${w.w?esc(w.w):'&nbsp;'}${side}</span></span>`;
+      // a placed chord on the Chords step gets a × to take it off again; two
+      // chords over one word are two chips, each moved / removed on its own
+      const parts = String(w.chord||'').split(/\s+/).filter(Boolean);
+      const chipX = (w.chip && w.chord && parts.length<2) ? `<span class="chip-x" data-act="removeChord" data-id="${esc(w.id)}" title="Remove chord">×</span>` : '';
+      const chordSpan = (w.chip && parts.length>1)
+        ? parts.map((c,k)=>`<span class="${chordCls}" style="${fszc};color:${w.chordCol}" data-drag-chord="${esc(c)}" data-from="${esc(w.id)}#${k}">${esc(c)}</span><span class="chip-x" data-act="removeChord" data-id="${esc(w.id)}#${k}" title="Remove chord">×</span>`).join('')
+        : `<span class="${chordCls}" style="${fszc};color:${w.chordCol};${w.chordAnim||''}"${drag}>${esc(w.chord)}</span>`;
+      return `<span class="lword${w.chip?' editable':''}${w.tailSlot?' tailslot':(w.tail && w.chip?' tailc':'')}" style="cursor:${w.cursor};border-radius:5px;${bg}" ${act}${drop}${w.tailSlot?' title="Drop a chord here to play it after the last word"':''}>${hasTop?markRowHTML(w.mark, w.markSide, w.lvl, lift):''}<span class="${rowCls}">${chordSpan}${chipX}${topArrow}</span><span class="ltext" style="${fsz};font-weight:${w.weight};color:${w.col}">${w.w?esc(w.w):'&nbsp;'}${side}</span></span>`;
     }).join('');
     return `<div class="lline" style="${style}"${l.cur?' data-cur="1"':''}${l.t0!=null?' data-t0="'+(+l.t0).toFixed(3)+'"':''}>${words}</div>`;
   }).join('') + `</div>`;
@@ -325,10 +339,38 @@ body.fixed-screen #screen > .scr{overflow-y:auto}
 /* Key (Chords step) and Speed (song player) */
 .keyrow{display:flex;align-items:center;gap:8px;font-size:13px;color:#6f6f6f;margin:2px 0 6px}
 .keyrow select{font:inherit;font-weight:700;color:#1b1b1b;border:1.5px solid #d8d8d8;border-radius:8px;padding:4px 8px;background:#fff}
-.spdbtn{border:1.5px solid #d8d8d8;background:#fff;border-radius:14px;padding:3px 10px;font-size:12px;font-weight:700;color:#1b1b1b;white-space:nowrap;cursor:pointer}
-.spdpop{display:inline-flex;gap:4px;flex-wrap:wrap}
-.spdpop button{border:1.5px solid #d8d8d8;background:#fff;border-radius:14px;padding:3px 9px;font-size:12px;font-weight:700;color:#6f6f6f;cursor:pointer}
-.spdpop button.on{background:#1b1b1b;border-color:#1b1b1b;color:#fff}
+/* song viewer controls: round Play / Stop with skip buttons; the speed is plain text */
+.tpl{display:inline-flex;align-items:center;gap:4px}
+.tpl-play{width:52px;height:52px;border-radius:50%;border:0;background:#1b1b1b;color:#fff;display:inline-flex;align-items:center;justify-content:center;flex:none;margin:0 4px;cursor:pointer}
+.tpl-play.live{background:#f24822}
+.tpl-btn{width:38px;height:38px;border:0;border-radius:50%;background:transparent;color:#1b1b1b;display:inline-flex;align-items:center;justify-content:center;flex:none;cursor:pointer}
+.tpl-btn:hover{background:#f2f2f2}
+.spdbtn{border:0;background:transparent;padding:4px 2px;font-size:14px;font-weight:700;color:#1b1b1b;white-space:nowrap;cursor:pointer;display:inline-flex;align-items:center;gap:2px;margin-left:10px}
+.spdlbl{font-weight:500;color:#8a8a8a;margin-right:4px}
+.spdpop{display:inline-flex;align-items:center;gap:2px;flex-wrap:wrap;margin-left:10px;font-size:14px}
+.spdpop button{border:0;background:transparent;padding:4px 6px;font-size:14px;font-weight:500;color:#8a8a8a;cursor:pointer;border-radius:6px}
+.spdpop button.on{color:#1b1b1b;font-weight:800;text-decoration:underline;text-underline-offset:4px}
+/* set-speed songs: the chords of the current line, side by side (a column in landscape) */
+.cgroup{display:flex;align-items:flex-end;gap:30px;justify-content:center}
+.cgroup.v{flex-direction:column;align-items:center;gap:18px}
+.cg-item{display:flex;flex-direction:column;align-items:center;gap:26px}
+.cg-name{font-size:24px;font-weight:800;line-height:1}
+.cgroup.v .cg-item{gap:22px}
+@keyframes cgroupIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+/* section headings: a small coloured label with room above it */
+.lline.lheader.lsection{opacity:1;margin-top:18px;margin-bottom:2px}
+.lline.lheader.lsection .hl{display:inline-block;font-size:11px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:#2f8fe0;background:#e9f3fd;border-radius:5px;padding:3px 8px}
+.lyrics-wrap > .lline.lheader.lsection:first-child{margin-top:0}
+/* Chords step: the drop spot after a line's last word */
+.lword.tailslot{min-width:30px;margin-left:6px}
+.lword.tailslot .ltext{color:transparent !important;border-bottom:2px dotted #d4d4d4;display:inline-block;min-width:26px}
+.lword.tailslot.drop-on .ltext{border-bottom-color:#2f8fe0}
+.lword.tailc{min-width:34px;margin-left:6px}
+/* Spotify link on a song */
+.spot{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:#1b1b1b;text-decoration:none;white-space:nowrap}
+.spot:hover{text-decoration:underline}
+.spot-edit{border:0;background:transparent;color:#9a9a9a;padding:2px;cursor:pointer;display:inline-flex}
+.spot-row{display:flex;align-items:center;gap:6px;margin-top:6px}
 /* home screen song rows and the Songs filter */
 .hrow .t{display:flex;align-items:center;gap:8px;min-width:0}
 .hrow .tt{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
@@ -424,6 +466,232 @@ XActions.changeKey = function(d, v){
   render(); queueSaveSong(s.id);
   toast('Key changed to '+keyName(to, k && k.minor, flats));
 };
+// ---- Song structure: section headings ----
+// The names Singa uses for the parts of a song (a typed or imported label is
+// shown with its standard name: "pre-chorus" / "climb" → Pre-Chorus, "coda"
+// → Outro, "middle eight" → Middle 8 …).
+const SECTION_NAMES = [
+  [/^intro$/,'Intro'], [/^verse$/,'Verse'], [/^(pre[- ]?chorus|climb|lift|build)$/,'Pre-Chorus'], [/^chorus$/,'Chorus'],
+  [/^post[- ]?chorus$/,'Post-Chorus'], [/^bridge$/,'Bridge'], [/^(outro|coda|ending)$/,'Outro'], [/^hook$/,'Hook'],
+  [/^refrain$/,'Refrain'], [/^(middle ?8|middle eight)$/,'Middle 8'],
+  [/^(instrumental( break)?|solo|guitar solo|piano solo|sax solo|interlude|break)$/,'Instrumental']
+];
+const SECTION_RE = /^(Intro|Verse|Pre-Chorus|Chorus|Post-Chorus|Bridge|Outro|Hook|Refrain|Middle 8|Instrumental)\b/;
+function sectionName(label){
+  const t = String(label||'').trim(), m = /^(.*?)[\s.:]*(\d+)?$/.exec(t);
+  const base = (m ? m[1] : t).toLowerCase().trim(), num = m && m[2] ? ' '+m[2] : '';
+  for(const [re, name] of SECTION_NAMES) if(re.test(base)) return name + num;
+  return t;
+}
+// "[Verse 2]" is a heading; so is "(Chorus)". A sung line in brackets
+// ("(Don't go breaking my)") is a lyric — it's timed and highlighted.
+isHeaderLine = function(ws){
+  if(!ws || !ws.length) return false;
+  if(/^\[/.test(ws[0]) && /\]$/.test(ws[ws.length-1])) return true;
+  if(!(/^\(/.test(ws[0]) && /\)$/.test(ws[ws.length-1]))) return false;
+  const inner = ws.join(' ').replace(/^\(\s*/,'').replace(/\s*\)$/,'').replace(/:.*$/,'');
+  return SECTION_RE.test(sectionName(inner)) || /^(capo|key|tempo|repeat|x\d+|\d+x)\b/i.test(inner);
+};
+// Lyrics with no section headings (an imported text): label the verses
+// (blank-line separated) from how they repeat — a verse that comes back is
+// the Chorus, the different part late in the song the Bridge, a short part
+// that always leads into the chorus the Pre-Chorus, a last short part the
+// Outro. Chords and marks move with their lines. Returns true if it changed.
+function autoSections(s){
+  const raw = String(s.lyrics||'').split('\n');
+  const isHead = l=>{ const ws = l.trim().split(/\s+/); return isHeaderLine(ws) && !instrLine(ws); };
+  if(raw.some(l=>l.trim() && isHead(l))) return false;
+  const st = []; let cur = null;
+  raw.forEach(l=>{
+    if(!l.trim()){ cur = null; return; }
+    if(instrLine(l.trim().split(/\s+/))){ st.push({ instr:true, lines:[l] }); cur = null; return; }
+    if(!cur){ cur = { lines:[] }; st.push(cur); }
+    cur.lines.push(l);
+  });
+  const ly = st.filter(x=>!x.instr);
+  if(ly.length < 2) return false;
+  // a text with an empty line after every line isn't in parts
+  if(ly.reduce((n,x)=>n+x.lines.length,0)/ly.length < 1.8) return false;
+  const norm = l=>l.toLowerCase().replace(/[^a-z0-9À-ɏ' ]/g,'').replace(/\s+/g,' ').trim();
+  const sets = ly.map(x=>new Set(x.lines.map(norm)));
+  const sim = (a,b)=>{ let n=0; a.forEach(x=>{ if(b.has(x)) n++; }); return n/Math.max(a.size,b.size,1); };
+  const rep = ly.map((x,i)=>sets.some((o,j)=>j!==i && sim(sets[i],o)>=0.6));
+  // clusters of repeated stanzas; a repeated part that always comes right
+  // before another repeated part is the Pre-Chorus
+  const cl = ly.map(()=>-1); let nc = 0;
+  ly.forEach((x,i)=>{ if(!rep[i] || cl[i]>=0) return; cl[i] = nc; ly.forEach((y,j)=>{ if(j>i && rep[j] && cl[j]<0 && sim(sets[i],sets[j])>=0.6) cl[j] = nc; }); nc++; });
+  const pre = new Set();
+  for(let c=0;c<nc;c++){
+    const idx = ly.map((x,i)=>i).filter(i=>cl[i]===c);
+    if(idx.length>=2 && idx.every(i=>i+1<ly.length && rep[i+1] && cl[i+1]!==c) && ly[idx[0]].lines.length<=4) pre.add(c);
+  }
+  let verseN = 0, chorusSeen = 0;
+  const lastChorus = ly.map((x,i)=>i).filter(i=>rep[i] && !pre.has(cl[i])).pop();
+  ly.forEach((x,i)=>{
+    if(rep[i]){ x.label = pre.has(cl[i]) ? 'Pre-Chorus' : 'Chorus'; if(x.label==='Chorus') chorusSeen++; return; }
+    if(chorusSeen>=2 && lastChorus!=null && i<lastChorus) x.label = 'Bridge';
+    else if(i===ly.length-1 && chorusSeen>=1 && x.lines.length<=3) x.label = 'Outro';
+    else { verseN++; x.label = 'Verse '+verseN; }
+  });
+  if(verseN===1) ly.forEach(x=>{ if(x.label==='Verse 1') x.label = 'Verse'; });
+  // rebuild the lyrics; old line index → new line index (headings are lines too)
+  const out = [], map = {}; let oldLi = 0, newLi = 0;
+  st.forEach((x,si)=>{
+    if(x.instr){
+      let line = x.lines[0];
+      if(si===0) line = line.replace(/^\[\s*instrumental\b/i, '[Intro');
+      if(out.length) out.push('');
+      out.push(line); map[oldLi++] = newLi++; return;
+    }
+    if(out.length) out.push('');
+    out.push('['+x.label+']'); newLi++;
+    x.lines.forEach(l=>{ out.push(l); map[oldLi++] = newLi++; });
+  });
+  const remap = obj=>{ const o = {}; Object.keys(obj||{}).forEach(k=>{ const m = /^(\d+)-(.+)$/.exec(k); if(m && map[m[1]]!=null) o[map[m[1]]+'-'+m[2]] = obj[k]; else o[k] = obj[k]; }); return o; };
+  s.lyrics = out.join('\n');
+  s.chords = remap(s.chords);
+  if(s.notes) s.notes = remap(s.notes);
+  return true;
+}
+// ---- Chord timing: two chords over one word, and chords after the last word ----
+// "C G" over a word: the second chord comes halfway to the next word. Chords
+// after a line's last word (li-t0, li-t1…) are spread over the gap before
+// the next line.
+chordEvents = function(s, tm){
+  const ev = [], words = tm.words;
+  words.forEach((w,k)=>{
+    const ch = s.chords[w.li+'-'+w.wi]; if(!ch) return;
+    const parts = String(ch).split(/\s+/).filter(Boolean);
+    const nt = k+1<words.length ? words[k+1].t : w.t+1;
+    parts.forEach((c,i)=>ev.push({ t: w.t + (nt-w.t)*i/parts.length, ch:c }));
+  });
+  const lastOf = {}; words.forEach((w,k)=>{ lastOf[w.li] = k; });
+  Object.keys(lastOf).forEach(li=>{
+    const tails = []; for(let k=0; s.chords[li+'-t'+k]; k++) String(s.chords[li+'-t'+k]).split(/\s+/).filter(Boolean).forEach(c=>tails.push(c));
+    if(!tails.length) return;
+    const k = lastOf[li], w = words[k], nt = k+1<words.length ? words[k+1].t : w.t+2;
+    const a = w.t + Math.min(0.5, (nt-w.t)*0.4);
+    tails.forEach((c,i)=>ev.push({ t: a + (nt-a)*i/tails.length, ch:c }));
+  });
+  Object.keys(tm.instr||{}).forEach(li=>{ const it = tm.instr[li]; it.chords.forEach(c=>ev.push({ t: it.a+(it.b-it.a)*c.p, ch:c.ch })); });
+  const io = typeof introInfo==='function' ? introInfo(s, tm) : null;
+  if(io) io.chords.forEach(c=>ev.push({ t:c.t, ch:c.ch }));
+  return ev.sort((x,y)=>x.t-y.t);
+};
+chordSeq = function(s){ const tm = timing(s); return chordEvents(s, tm).map((e,k)=>({ k, ch:e.ch })); };
+// ---- Your songs: your own, the demo, and songs you've added from others ----
+// Each song you make can be found by other Singa users unless you set it
+// private (song menu). Songs added from other people (flags.lib) are shown
+// in your songs too, and can be removed again.
+function songIsPrivate(s){ return hasFlag('priv', s && s.id); }
+const _songToRowBase = songToRow;
+songToRow = function(s){ const r = _songToRowBase(s); r.is_public = !songIsPrivate(s); return r; };
+const _songRowToLocalBase = songRowToLocal;
+songRowToLocal = function(row){
+  const s = _songRowToLocalBase(row);
+  try{ s.notes = JSON.parse(JSON.stringify(s.notes||{})); }catch(e){ s.notes = {}; }   // every song its own settings
+  s.isPublic = !!row.is_public;
+  return s;
+};
+const _loadUserDataBase = loadUserData;
+loadUserData = async function(){
+  await _loadUserDataBase();
+  if(!ST.userId) return;
+  // songs made before "discoverable by default" become discoverable (unless set private)
+  Object.values(D.songs).forEach(s=>{ if(s.mine!==false && !s.isPublic && !songIsPrivate(s)){ s.isPublic = true; queueSaveSong(s.id); } });
+  const lib = flagList('lib').filter(id=>!D.songs[id]);
+  if(!lib.length) return;
+  try{
+    const res = await sb.from('songs').select('*').in('id', lib);
+    (res.data||[]).forEach(row=>{ const s = songRowToLocal(row); D.songs[s.id] = s; if(!D.order.includes(s.id)) D.order.push(s.id); });
+    const at = (ST.flags && ST.flags.libAt) || {};
+    D.order.sort((a,b)=>(at[b]||D.songs[b].added||0)-(at[a]||D.songs[a].added||0));
+    const autoPl = (D.playlists||[]).find(p=>p.auto); if(autoPl) autoPl.ids = D.order;
+  }catch(e){ console.error('Singa: failed to load added songs', e); }
+};
+// Signing in: start from an empty library (never another account's songs),
+// and work out whether this email has been confirmed.
+const _applySessionWithFlags = applySession;
+applySession = async function(session){
+  D.songs = {}; D.order = []; D.playlists = []; D.gigs = [];
+  const r = await _applySessionWithFlags(session);
+  ST.emailVerified = emailConfirmed(session && session.user);
+  if(/[?&#]singa_verify=1/.test(location.href) && session && session.user){
+    ST.emailVerified = true; ST.verifyModal = false;
+    try{ await sb.auth.updateUser({ data:{ singa_verified:true } }); }catch(e){}
+    try{ history.replaceState(history.state, '', location.pathname); }catch(e){}
+    toast('Email confirmed — thanks!');
+  }
+  return r;
+};
+// You can sign in straight away; your email is confirmed when you open the
+// link Singa sends (until then, saving asks you to confirm it). Older
+// accounts that confirmed through the sign-up email count as confirmed.
+function emailConfirmed(u){
+  if(!u) return false;
+  if((u.app_metadata && u.app_metadata.provider && u.app_metadata.provider!=='email')) return true;
+  if(u.user_metadata && u.user_metadata.singa_verified) return true;
+  const c = u.email_confirmed_at || u.confirmed_at;
+  return !!(c && u.created_at && new Date(c) - new Date(u.created_at) > 60000);
+}
+XActions.addToMine = function(d){
+  if(!canSync()) return;
+  const s = D.songs[d.id]; if(!s) return;
+  setFlag('lib', d.id, true);
+  ST.flags.libAt = ST.flags.libAt || {}; ST.flags.libAt[d.id] = Date.now(); saveFlags();
+  if(!D.order.includes(d.id)) D.order = [d.id, ...D.order];
+  const autoPl = (D.playlists||[]).find(p=>p.auto); if(autoPl) autoPl.ids = D.order;
+  ST.viewBy = null; ST.menu = false; render(); toast('Added to your songs');
+};
+function removeFromMine(id){
+  setFlag('lib', id, false);
+  D.order = D.order.filter(x=>x!==id);
+  const autoPl = (D.playlists||[]).find(p=>p.auto); if(autoPl) autoPl.ids = D.order;
+  D.playlists.forEach(p=>{ if(!p.auto && p.mine!==false && p.ids.includes(id)){ p.ids = p.ids.filter(i=>i!==id); queueSavePlaylist(p.id); } });
+}
+XActions.togglePrivate = function(d){
+  if(!canSync()) return;
+  const s = D.songs[d.id]; if(!s) return;
+  const priv = !songIsPrivate(s);
+  setFlag('priv', s.id, priv); s.isPublic = !priv;
+  ST.menu = false; render(); saveSongRow(s);
+  toast(priv ? 'Private — only you can see this song' : 'Other Singa users can now find this song');
+};
+// ---- Spotify link (temporary) ----
+// Every uploaded song gets a link to its original recording on Spotify,
+// found by the Singa server (or, if it can't search Spotify, a Spotify
+// search for the title and artist). Kept in the song's notes as _spotify,
+// and can be edited from the song menu. Set to false to switch it all off.
+const SPOTIFY_LINKS = true;
+const SPOTIFY_SERVER = 'https://singa-production-e6f3.up.railway.app';
+function spotifyOf(s){ const x = s && s.notes && s.notes._spotify; return x && x.url ? x : null; }
+function spotifySearchUrl(s){ return 'https://open.spotify.com/search/' + encodeURIComponent(((s.title||'')+' '+(s.sub||'')).trim()); }
+// A pasted link: open.spotify.com/…, spotify:track:…, spotify.link/… — or null
+function normSpotify(v){
+  v = String(v||'').trim();
+  let m = /^spotify:(track|album|playlist|artist):([A-Za-z0-9]+)$/.exec(v);
+  if(m) return 'https://open.spotify.com/'+m[1]+'/'+m[2];
+  if(!/^https?:\/\//i.test(v) && /^(open\.spotify\.com|spotify\.link)\//i.test(v)) v = 'https://'+v;
+  try{ const u = new URL(v); if(/(^|\.)spotify\.(com|link)$/i.test(u.hostname)) return u.origin + u.pathname; }catch(e){}
+  return null;
+}
+function setSpotify(s, url, auto){
+  s.notes = { ...(s.notes||{}) };
+  if(url) s.notes._spotify = { url, auto: !!auto, search: /\/search\//.test(url) }; else delete s.notes._spotify;
+}
+async function autoSpotify(s){
+  if(!SPOTIFY_LINKS || !s || spotifyOf(s) || !(s.title||'').trim()) return;
+  let url = null;
+  try{
+    const r = await fetch(SPOTIFY_SERVER+'/spotify-search?title='+encodeURIComponent(s.title.trim())+'&artist='+encodeURIComponent((s.sub||'').trim()));
+    if(r.ok){ const j = await r.json(); url = j && j.url || null; }
+  }catch(e){}
+  if(spotifyOf(s)) return;   // set by hand meanwhile
+  setSpotify(s, url || spotifySearchUrl(s), true);
+  if(s.mine!==false && D.songs[s.id]) queueSaveSong(s.id);
+  render();
+}
+const SPOTIFY_SVG = '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="12" fill="#1ed760"/><path d="M6.5 9.2c3.8-1.1 7.6-.8 11 1M7.2 12.4c3-.8 6.1-.6 8.8.9M7.9 15.4c2.3-.6 4.6-.4 6.6.7" stroke="#000" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>';
 // Per-person song flags — heart, mark, and "recently added, not opened yet" —
 // kept with your Supabase account (user_metadata) so they follow you to
 // every device without a database change; a local copy covers offline use.
@@ -444,7 +712,7 @@ function saveFlags(){
 function loadFlags(user){
   let f = (user && user.user_metadata && user.user_metadata.singa_flags) || null;
   if(!f){ try{ f = JSON.parse(localStorage.getItem('singaFlags:'+(user && user.id))||'null'); }catch(e){} }
-  ST.flags = { fav:(f && f.fav)||[], mark:(f && f.mark)||[], fresh:(f && f.fresh)||[], opened:(f && f.opened)||{} };
+  ST.flags = { fav:(f && f.fav)||[], mark:(f && f.mark)||[], fresh:(f && f.fresh)||[], opened:(f && f.opened)||{}, lib:(f && f.lib)||[], libAt:(f && f.libAt)||{}, priv:(f && f.priv)||[] };
 }
 // The only status labels on a song row: PROCESSING (being added), FAILED,
 // or RECENTLY ADDED — a song that was added for you automatically, until
@@ -624,6 +892,6 @@ function renderList(){
       <div style="flex:1"></div>
       ${sortDropdown()}
     </div>
-    <div style="overflow:auto;padding-left:40px">${rowsHtml}${empty?'<div style="padding:24px 0;color:#8a8a8a">Nothing here yet.</div>':''}</div>
+    <div style="overflow:auto;padding-left:40px">${rowsHtml}${empty?'<div style="padding:14px 0;color:#8a8a8a">Nothing here yet.</div>':''}</div>
   </div>`;
 }
