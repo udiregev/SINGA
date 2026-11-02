@@ -53,6 +53,14 @@ Endpoint:
     usually can't load the model. Env var WHISPER_MODEL picks the model
     (default small.en); it downloads once, in the background at start-up.
 
+  GET /spotify-search?title=...&artist=...
+    Finds the song's original recording on Spotify. Response 200 JSON:
+      { "url": "https://open.spotify.com/track/...", "name": "...",
+        "artist": "...", "year": "1976" }   or { "url": null, "reason": "..." }
+    Needs env vars SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET (a free app at
+    developer.spotify.com); without them it answers { "url": null } and the
+    app links to a Spotify search instead.
+
   POST /convert-audio
     multipart/form-data, field "file" — any audio/video ffmpeg can read.
     Response 200: 16kHz mono WAV. The app falls back to this when the
@@ -341,6 +349,88 @@ def transcribe(file: UploadFile = File(...)):
         except Exception as e:  # noqa: BLE001
             return JSONResponse(status_code=500, content={"error": "Transcription failed: " + str(e)})
     return {"words": words, "text": "".join(texts).strip(), "model": "server:" + WHISPER_MODEL}
+
+
+# ---- Spotify: a link to the original recording of a song ----
+_spotify_token = {"value": None, "exp": 0.0}
+_SPOT_SKIP = ("live", "remaster", "karaoke", "cover", "acoustic", "remix", "instrumental", "tribute",
+              "demo", "version", "re-record", "rerecord", "originally performed", "in the style")
+
+
+def _spotify_auth():
+    import time
+    import requests
+    cid, sec = os.environ.get("SPOTIFY_CLIENT_ID"), os.environ.get("SPOTIFY_CLIENT_SECRET")
+    if not cid or not sec:
+        return None
+    if _spotify_token["value"] and time.time() < _spotify_token["exp"] - 60:
+        return _spotify_token["value"]
+    r = requests.post("https://accounts.spotify.com/api/token", data={"grant_type": "client_credentials"},
+                      auth=(cid, sec), timeout=10)
+    r.raise_for_status()
+    j = r.json()
+    _spotify_token["value"] = j["access_token"]
+    _spotify_token["exp"] = time.time() + int(j.get("expires_in", 3600))
+    return _spotify_token["value"]
+
+
+def _norm(t: str) -> str:
+    import re
+    t = (t or "").lower()
+    t = re.sub(r"\s*[\(\[].*?[\)\]]", "", t)          # (Remastered 2011), [Live]
+    t = re.sub(r"\s+-\s+.*$", "", t)                    # " - 2015 Remaster"
+    return re.sub(r"[^a-z0-9À-ɏ]+", " ", t).strip()
+
+
+@app.get("/spotify-search")
+def spotify_search(title: str = "", artist: str = ""):
+    import requests
+    title, artist = (title or "").strip(), (artist or "").strip()
+    if not title:
+        return {"url": None, "reason": "no title"}
+    try:
+        token = _spotify_auth()
+    except Exception as e:  # noqa: BLE001
+        return {"url": None, "reason": "Spotify sign-in failed: " + str(e)}
+    if not token:
+        return {"url": None, "reason": "not configured"}
+    q = 'track:"%s"' % title + (' artist:"%s"' % artist if artist else "")
+    try:
+        r = requests.get("https://api.spotify.com/v1/search", params={"q": q, "type": "track", "limit": 30},
+                         headers={"Authorization": "Bearer " + token}, timeout=10)
+        items = r.json().get("tracks", {}).get("items", []) if r.ok else []
+        if not items and artist:   # a looser search
+            r = requests.get("https://api.spotify.com/v1/search", params={"q": title + " " + artist, "type": "track", "limit": 30},
+                             headers={"Authorization": "Bearer " + token}, timeout=10)
+            items = r.json().get("tracks", {}).get("items", []) if r.ok else []
+    except Exception as e:  # noqa: BLE001
+        return {"url": None, "reason": "Spotify search failed: " + str(e)}
+    nt, na = _norm(title), _norm(artist)
+    best, best_key = None, None
+    for it in items:
+        name = it.get("name") or ""
+        full = name.lower() + " " + ((it.get("album") or {}).get("name") or "").lower()
+        artists = [a.get("name") or "" for a in it.get("artists") or []]
+        title_ok = _norm(name) == nt
+        artist_ok = (not na) or any(_norm(a) == na or na in _norm(a) or _norm(a) in na for a in artists)
+        if not title_ok and not artist_ok:
+            continue
+        odd = any(w in full for w in _SPOT_SKIP)
+        album = it.get("album") or {}
+        comp = album.get("album_type") == "compilation"
+        date = (album.get("release_date") or "9999")[:10]
+        pop = it.get("popularity") or 0
+        # the original: right title and artist, not a live / remastered / cover
+        # version, not a compilation, then the earliest release (then the most played)
+        key = (0 if title_ok else 1, 0 if artist_ok else 1, 1 if odd else 0, 1 if comp else 0, date, -pop)
+        if best_key is None or key < best_key:
+            best, best_key = it, key
+    if not best:
+        return {"url": None, "reason": "not found"}
+    return {"url": (best.get("external_urls") or {}).get("spotify"),
+            "name": best.get("name"),
+            "artist": ", ".join(a.get("name") or "" for a in best.get("artists") or []),
+            "year": ((best.get("album") or {}).get("release_date") or "")[:4]}
 
 
 @app.get("/")
