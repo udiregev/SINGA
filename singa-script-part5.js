@@ -18,14 +18,18 @@ function renderSongMenu(){
   return `<div class="modal-backdrop" style="background:rgba(255,255,255,.92);display:block;padding:0" data-act="toggleMenu">
     <div style="position:fixed;top:${Math.round(mp.top)}px;right:${Math.round(mp.right)}px;display:flex;flex-direction:column;align-items:flex-end;gap:12px;text-align:right" onclick="modalClick(event)">
       <span class="icon-btn" data-act="toggleMenu">${icon('close',28)}</span>
-      ${mine ? item('editSong','Edit') : ''}
+      ${mine ? item('editSong','Edit song') : ''}
       <a class="link" style="font-size:17px;font-weight:700;display:flex;align-items:center;gap:4px" data-act="toggleInstMenu">Change instrument</a>
       ${ST.instMenu?`<div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;margin:-4px 0 4px">${instOpts}</div>`:''}
       ${mine && markCount(s) ? item('removeMarkings','Remove markings') : ''}
       ${ctx==='playlist' ? item('menuRemovePlaylist','Remove song from playlist') : item('menuAddPlaylist','Add song to a playlist')}
       ${ctx==='gig' ? item('menuRemoveGig','Remove song from gig') : item('menuAddGig','Add song to a gig')}
+      ${mine && D.songs[s.id] && SPOTIFY_LINKS ? `<a class="link" style="font-size:17px;font-weight:700" data-act="x" data-xact="editSpotify" data-id="${esc(s.id)}">${spotifyOf(s) ? 'Edit Spotify link' : 'Add Spotify link'}</a>` : ''}
+      ${mine && D.songs[s.id] ? `<a class="link" style="font-size:17px;font-weight:700" data-act="x" data-xact="togglePrivate" data-id="${esc(s.id)}">${songIsPrivate(s) ? 'Let others find this song' : 'Set as private'}</a>` : ''}
+      ${!mine && s.id!=='none' ? (D.order.includes(s.id) ? '' : `<a class="link" style="font-size:17px;font-weight:700" data-act="x" data-xact="addToMine" data-id="${esc(s.id)}">Add to my songs</a>`) + item('copySong','Copy and edit') : ''}
       <a class="link" style="font-size:17px;font-weight:700;margin-top:16px;display:flex;align-items:center;gap:6px" data-act="newSong">Add a new song${icon('add_circle',22)}</a>
-      ${mine ? `<a class="link link-accent" style="font-size:17px;font-weight:700;margin-top:16px" data-act="deleteSong">Delete song</a>` : ''}
+      ${mine ? `<a class="link link-accent" style="font-size:17px;font-weight:700;margin-top:16px" data-act="deleteSong">Delete song</a>`
+        : (D.order.includes(s.id) ? `<a class="link link-accent" style="font-size:17px;font-weight:700;margin-top:16px" data-act="askRowAction" data-kind="unlib" data-id="${esc(s.id)}">Remove from my songs</a>` : '')}
     </div>
   </div>`;
 }
@@ -47,17 +51,82 @@ const VIEW_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3];
 function speedHintHTML(s){
   if(songMode(s)==='synced') return '';
   const sp = songSpeed(s);
-  if(ST.speedPop===s.id) return `<span class="spdpop">${VIEW_SPEEDS.map(v=>`<button class="${Math.abs(v-sp)<0.01?'on':''}" data-act="x" data-xact="viewSetSpeed" data-id="${esc(s.id)}" data-v="${v}">${speedLabel(v)}</button>`).join('')}</span>`;
-  return `<button class="spdbtn" data-act="x" data-xact="viewSpeedPop" data-id="${esc(s.id)}" title="Change the scrolling speed">Speed ${speedLabel(sp)} ▾</button>`;
+  if(ST.speedPop===s.id) return `<span class="spdpop"><span class="spdlbl">Speed</span>${VIEW_SPEEDS.map(v=>`<button class="${Math.abs(v-sp)<0.01?'on':''}" data-act="x" data-xact="viewSetSpeed" data-id="${esc(s.id)}" data-v="${v}">${speedLabel(v)}</button>`).join('')}</span>`;
+  return `<button class="spdbtn" data-act="x" data-xact="viewSpeedPop" data-id="${esc(s.id)}" title="Change this song's scrolling speed"><span class="spdlbl">Speed</span> ${speedLabel(sp)}${icon('expand_more',18)}</button>`;
 }
 XActions.viewSpeedPop = function(d){ ST.speedPop = ST.speedPop===d.id ? null : d.id; render(); };
+// changes this one song's speed only
 XActions.viewSetSpeed = function(d){
-  const s = song(d.id); if(!s) return;
+  const s = D.songs[d.id]; if(!s){ ST.speedPop = null; render(); return; }
   const v = Math.max(0.5, Math.min(4, +d.v || 1));
-  setSongTempo(s, { speed: v });
+  const t = songTempo(s);
+  s.notes = { ...(s.notes||{}), _tempo: { mode: t.mode, speed: v } };
   ST.speedPop = null; render();
-  if(s.mine!==false && D.songs[s.id]) queueSaveSong(s.id);
+  if(s.mine!==false) queueSaveSong(s.id);
 };
+// The song viewer's controls: back to the start · back a few lines · Play /
+// Stop · forward a few lines, then the speed (for set-speed songs).
+function transportHTML(s){
+  const live = ST.playing || ST.vcd>0, listening = ST.listening;
+  const sm = (dir, ic, title)=>`<button class="tpl-btn" data-act="x" data-xact="viewSeek" data-dir="${dir}" title="${title}" aria-label="${title}">${icon(ic,26)}</button>`;
+  const play = `<button class="tpl-play${live||listening?' live':''}" data-act="viewPlay" title="${live?'Stop':(listening?'Cancel':'Play')}" aria-label="${live?'Stop':'Play'}">${icon(live?'stop':(listening?'hearing':'play_arrow'),32)}</button>`;
+  const hint = listening ? 'Starts the moment you sing — tap to cancel' : (!live && ST.t===0 && ST.startMode!=='countdown' ? 'Starts when you start singing' : '');
+  return `<div class="tpl">${sm('start','skip_previous','Back to the start')}${sm('back','fast_rewind','Back a few lines')}${play}${sm('fwd','fast_forward','Forward a few lines')}</div>${speedHintHTML(s)}${hint?`<span style="font-size:12px;color:#8a8a8a">${hint}</span>`:''}`;
+}
+XActions.viewSeek = function(d){
+  const s = song(ST.songId), tm = timing(s);
+  if(d.dir==='start' || !tm.words.length){ ST.t = 0; }
+  else {
+    const ci = curWord(tm, ST.t), lis = [...new Set(tm.words.map(w=>w.li))];
+    let idx = ci>=0 ? lis.indexOf(tm.words[ci].li) : -1;
+    idx = d.dir==='back' ? idx-3 : idx+3;
+    if(idx<0) ST.t = 0;
+    else { idx = Math.min(lis.length-1, idx); const w = tm.words.find(x=>x.li===lis[idx]); ST.t = Math.max(0, w.t - 0.05); }
+  }
+  render();
+};
+// Set-speed songs (no recorded timing): instead of the current + next chord,
+// the chords of the highlighted line, in order, change with the line.
+function lineChordGroup(lines){
+  const has = l=> l.instr ? l.chords.length>0 : l.words.some(w=>w.chord);
+  const chordsOf = l=> l.instr ? l.chords.map(c=>c.ch) : l.words.filter(w=>w.chord).flatMap(w=>String(w.chord).split(/\s+/).filter(Boolean));
+  let i = lines.findIndex(l=>l.cur && !l.header);
+  if(i<0) i = lines.findIndex(l=>!l.header && has(l));
+  if(i<0) return null;
+  let chords = has(lines[i]) ? chordsOf(lines[i]) : [];
+  if(!chords.length){ for(let k=i-1;k>=0;k--){ if(!lines[k].header && has(lines[k])){ const c = chordsOf(lines[k]); chords = [c[c.length-1]]; break; } } }
+  chords = chords.filter((c,k)=>c && c!==chords[k-1]).slice(0, 6);
+  return chords.length ? { li: lines[i].li, chords } : null;
+}
+function diaShapeHTML(dia){
+  let inner = '';
+  if(dia.isGuitar){
+    inner += `<div class="fretboard" style="width:${dia.w}px;height:120px;border-top:${dia.nut}px solid #1b1b1b">`;
+    if(dia.hasBase) inner += `<div style="position:absolute;right:100%;margin-right:8px;top:4px;font-size:12px;font-weight:700;white-space:nowrap">${dia.base}fr</div>`;
+    dia.strings.forEach(x=> inner += `<div style="position:absolute;top:0;bottom:0;left:${x.left}px;width:1.5px;background:#1b1b1b"></div>`);
+    dia.frets.forEach(x=> inner += `<div style="position:absolute;left:0;right:-1px;top:${x.top}px;height:1.5px;background:#1b1b1b"></div>`);
+    dia.dots.forEach(x=> inner += `<div style="position:absolute;left:${x.left}px;top:${x.top}px;width:15px;height:15px;border-radius:50%;background:#1b1b1b"></div>`);
+    dia.marks.forEach(x=> inner += `<div style="position:absolute;left:${x.left}px;top:-24px;width:14px;text-align:center;font-size:12px;font-weight:700">${x.txt}</div>`);
+    inner += `</div>`;
+  } else if(dia.isPiano){
+    inner += `<div class="piano">`;
+    dia.white.forEach(k=> inner += `<div style="width:22px;height:100%;border-right:1px solid #1b1b1b;background:${k.on?PIANO_KEY_ON:'#fff'}"></div>`);
+    dia.black.forEach(k=> inner += `<div style="position:absolute;top:0;left:${k.left}px;width:14px;height:56px;background:${k.on?PIANO_KEY_ON:'#1b1b1b'};border-radius:0 0 3px 3px;border:1px solid #1b1b1b"></div>`);
+    inner += `</div>`;
+  }
+  return inner;
+}
+function chordGroupHTML(g, inst, vertical){
+  return `<div class="cgroup${vertical?' v':''}" style="${animStyle('cgroup', g.li+'|'+g.chords.join(' '), 'cgroupIn', 380)}">${g.chords.map(ch=>{ const d = diagram(ch, '', inst); return `<div class="cg-item"><div class="cg-name">${esc(ch)}</div>${diaShapeHTML(d)}</div>`; }).join('')}</div>`;
+}
+// which song a player shows (the song viewer and gig player, not Practice)
+function playerSong(o){ const m = /^(song|gig)-(.+)$/.exec(o.winKey||''); return m ? song(m[2]) : null; }
+function playerInst(o){
+  const d = o.dia || {};
+  if(d.isPiano) return 'piano';
+  if(d.isGuitar) return d.strings && d.strings.length===4 ? 'ukulele' : 'guitar';
+  return ST.instrument;
+}
 // Shared by the song viewer, Practice and the gig player.
 // Portrait: chord diagram above the lyrics (drag ═ to resize it).
 // Landscape: lyrics on the left, the diagram in a column on the right with
@@ -75,7 +144,14 @@ function addChordsHTML(){
 }
 function playerBodyHTML(o){
   // o: { lines, live, winKey, dia, showDia, big, extraDia, scrollId, left, noChords }
+  const ps = playerSong(o), grp = (o.showDia && ps && songMode(ps)!=='synced') ? lineChordGroup(o.lines) : null;
+  if(grp) setTimeout(fitDias, 80);   // fit the group once fonts and layout have settled
   if(isLandscape()){
+    if(grp) return `<div class="land-grid">
+      ${lyricsAreaHTML(o.lines, o.live, o.winKey, o.big, o.scrollId, o.left)}
+      <div id="chordResizeHandleX" class="land-handle" title="Drag to resize">${icon('drag_indicator',22)}</div>
+      <div id="chordDiagramBox" class="land-dia" data-fit="${chordScaleV()}" style="width:${Math.round(ST.chordW)}px"><div class="chordInnerScale" style="transform:scale(${chordScaleV()})">${chordGroupHTML(grp, playerInst(o), true)}${o.extraDia||''}</div></div>
+    </div>`;
     return `<div class="land-grid">
       ${lyricsAreaHTML(o.lines, o.live, o.winKey, o.big, o.scrollId, o.left)}
       ${o.noChords ? `<div class="land-dia" style="width:${Math.round(ST.chordW)}px;justify-content:center">${addChordsHTML()}</div>`
@@ -84,6 +160,11 @@ function playerBodyHTML(o){
     </div>`;
   }
   const chordScale = Math.max(0.55, Math.min(1.9, ST.chordH/230));
+  if(grp) return `<div id="chordDiagramBox" data-fit="${chordScale}" style="height:${Math.round(ST.chordH)}px;display:flex;align-items:center;justify-content:center;overflow:hidden;margin-top:8px;flex:none">
+        <div class="chordInnerScale" style="display:flex;flex-direction:column;align-items:center;gap:14px;transform:scale(${chordScale})">${chordGroupHTML(grp, playerInst(o), false)}${o.extraDia||''}</div>
+      </div>
+      <div id="chordResizeHandle" class="row" style="justify-content:center;cursor:ns-resize;height:30px;touch-action:none;flex:none" title="Drag to resize">${icon('drag_handle',26)}</div>
+    ${lyricsAreaHTML(o.lines, o.live, o.winKey, o.big, o.scrollId, o.left)}`;
   return `${o.noChords ? `<div style="height:${Math.round(Math.min(ST.chordH,170))}px;display:flex;align-items:center;justify-content:center;margin-top:8px;flex:none">${addChordsHTML()}</div>`
     : o.showDia ? `<div id="chordDiagramBox" data-fit="${chordScale}" style="height:${Math.round(ST.chordH)}px;display:flex;align-items:center;justify-content:center;overflow:hidden;margin-top:8px;flex:none">
         <div class="chordInnerScale" style="display:flex;flex-direction:column;align-items:center;gap:14px;transform:scale(${chordScale})">${diagramHTML(o.dia, o.dotColor)}${o.extraDia||''}</div>
@@ -132,14 +213,15 @@ function renderSong(){
   // line's first word goes above it rather than out to the left
   const lines = buildLines(s, vLive?(songMode(s)==='synced'?'play':'scroll'):'view', { t: vLive?ST.t:null, hideChords: !hasInst, leftTop: withList });
   const land = isLandscape();
-  const playRow = playButtonHTML(ST.playing,'viewPlay',ST.listening) + speedHintHTML(s);
+  const playRow = transportHTML(s);
   const noChords = hasInst && !seq.length && !ST.viewBy && s.mine!==false;
   const head = land ? `<div class="row" style="gap:14px;align-items:flex-start">
       ${withList ? '' : `<span class="icon-btn" style="margin-top:2px" data-act="back" data-to="${esc(ST.back)}">${icon('chevron_left',26)}</span>`}
       <div style="flex:1;min-width:0">
         <div style="font-size:22px;font-weight:700;letter-spacing:-0.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(s.title||'Untitled song')}</div>
         <div style="font-size:13px;color:#6f6f6f;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(s.sub)}${ST.viewBy?' · added by '+esc(ST.viewBy):''}</div>
-        <div class="row" style="gap:14px;margin-top:10px">${playRow}${ST.viewBy?`<button class="btn btn-dark btn-sm" data-act="copySong">Copy to your songs</button>`:''}</div>
+        ${spotifyLinkHTML(s)}
+        <div class="row" style="gap:14px;margin-top:10px">${playRow}${ST.viewBy && !D.order.includes(s.id)?`<button class="btn btn-dark btn-sm" data-act="x" data-xact="addToMine" data-id="${esc(s.id)}">Add to my songs</button>`:''}</div>
       </div>
       <span class="icon-btn" data-act="toggleMenu">${icon('menu',28)}</span>
     </div>` : '';
@@ -150,7 +232,8 @@ function renderSong(){
         <div style="font-size:${land?24:28}px;font-weight:700;letter-spacing:-0.01em">${esc(s.title||'Untitled song')}</div>
         <div style="font-size:14px;color:#6f6f6f;margin-top:4px">${esc(s.sub)}</div>
         ${ST.viewBy?`<div class="row" style="gap:6px;font-size:13px;margin-top:8px">${icon('account_circle',18)}added by ${esc(ST.viewBy)}</div>`:''}
-        <div class="row" style="gap:14px;margin-top:${land?10:14}px">${playRow}${ST.viewBy?`<button class="btn btn-dark btn-sm" data-act="copySong">Copy to your songs</button>`:''}</div>
+        ${spotifyLinkHTML(s)}
+        <div class="row" style="gap:14px;margin-top:${land?10:14}px">${playRow}${ST.viewBy && !D.order.includes(s.id)?`<button class="btn btn-dark btn-sm" data-act="x" data-xact="addToMine" data-id="${esc(s.id)}">Add to my songs</button>`:''}</div>
       </div>
       <span class="icon-btn" data-act="toggleMenu">${icon('menu',28)}</span>
     </div>`}
@@ -335,3 +418,108 @@ function renderGigEdit(){
     </div>
   </div>`;
 }
+/* ============================================================
+   SEARCH: songs other Singa users have made findable
+   Shown under your own results; open one to look at it, then "Add to my
+   songs" (it stays theirs — you can remove it again) or "Copy and edit".
+   ============================================================ */
+let _pubQ = null, _pubT = 0;
+function loadPublicResults(q){
+  if(q===_pubQ) return; _pubQ = q;
+  clearTimeout(_pubT);
+  if(!q || q.length<2 || !ST.userId){ ST.pubResults = []; return; }
+  _pubT = setTimeout(async ()=>{
+    try{
+      const res = await sb.from('songs').select('id,title,sub,owner_id,owner_nickname').eq('is_public', true).neq('owner_id', ST.userId).or('title.ilike.%'+q.replace(/[%,()]/g,' ')+'%,sub.ilike.%'+q.replace(/[%,()]/g,' ')+'%').limit(20);
+      if(_pubQ!==q) return;
+      ST.pubResults = (res.data||[]).filter(r=>!D.order.includes(r.id));
+      if(ST.screen==='search') render();
+    }catch(e){ console.error('Singa: public search failed', e); }
+  }, 300);
+}
+const _renderSearchBase = renderSearch;
+renderSearch = function(){
+  const html = _renderSearchBase();
+  const q = (ST.searchQuery||'').trim();
+  loadPublicResults(q);
+  const rows = (q.length>=2 ? (ST.pubResults||[]) : []);
+  if(!rows.length) return html;
+  const sec = `<div><div style="font-size:24px;font-weight:700;padding-bottom:8px;border-bottom:1px solid var(--b2)">From other Singa users</div>${rows.map(r=>`<div class="list-row" data-act="x" data-xact="openPublicSong" data-id="${esc(r.id)}"><div style="min-width:0;flex:1"><div class="t">${esc(r.title||'Untitled song')}</div><div class="s">${esc(r.sub||'')}${r.sub?' · ':''}by ${esc(r.owner_nickname||'someone')}</div></div>${icon('chevron_right',22)}</div>`).join('')}</div>`;
+  // put it after your own results (or instead of the "nothing found" note)
+  return html.replace(/<div style="display:flex;flex-direction:column;gap:40px;overflow:auto">([\s\S]*)<\/div>\s*<\/div>\s*$/, (m, inner)=>{
+    const own = /No songs, playlists or gigs match/.test(inner) ? '' : inner;
+    return `<div style="display:flex;flex-direction:column;gap:40px;overflow:auto">${own}${sec}</div>\n  </div>`;
+  });
+};
+XActions.openPublicSong = async function(d){
+  const r = (ST.pubResults||[]).find(x=>x.id===d.id);
+  try{
+    const res = await sb.from('songs').select('*').eq('id', d.id).maybeSingle();
+    if(!res.data){ toast("That song isn't available any more"); return; }
+    D.songs[d.id] = songRowToLocal(res.data);
+  }catch(e){ toast("Couldn't open that song — check your connection"); return; }
+  stopOnsetListening();
+  ST.screen='song'; ST.songId=d.id; ST.viewBy=(r && r.owner_nickname) || D.songs[d.id].by || 'someone'; ST.back='search';
+  ST.ctx='view'; ST.t=0; ST.playing=false; ST.vcd=0; ST.menu=false; ST.viewChord=null;
+  render();
+};
+// The "song added" screen: songs can be found by others unless set private.
+const _renderDoneBase = renderDone;
+renderDone = function(){
+  const d = D.songs[ST.editId], priv = !!(d && songIsPrivate(d));
+  return _renderDoneBase().replace(/<a class="link" style="color:[^"]*" data-act="togglePublic">[^<]*<\/a>/, `<a class="link" style="color:#6f6f6f" data-act="togglePublic">${priv ? 'Private · tap to let others find it' : 'Others can find it · tap to make it private'}</a>`);
+};
+/* ============================================================
+   SPOTIFY LINK (temporary) — on the song viewer under the title, with an
+   edit button; "Add Spotify link" on the song-added screen; a popup to
+   paste / change / remove it.
+   ============================================================ */
+function spotifyLinkHTML(s){
+  if(!SPOTIFY_LINKS || !s || s.id==='none') return '';
+  const x = spotifyOf(s), mine = s.mine!==false && !!D.songs[s.id];
+  const edit = mine ? `<button class="spot-edit" data-act="x" data-xact="editSpotify" data-id="${esc(s.id)}" title="${x?'Change the Spotify link':'Add a Spotify link'}" aria-label="Edit Spotify link">${icon(x?'edit':'add_link',18)}</button>` : '';
+  if(!x) return mine ? `<div class="spot-row">${edit}<a class="link" style="font-size:13px" data-act="x" data-xact="editSpotify" data-id="${esc(s.id)}">Add Spotify link</a></div>` : '';
+  return `<div class="spot-row"><a class="spot" href="${esc(x.url)}" target="_blank" rel="noopener">${SPOTIFY_SVG}${x.search ? 'Find on Spotify' : 'Listen on Spotify'}</a>${edit}</div>`;
+}
+function renderSpotifyModal(){
+  const s = D.songs[ST.spotEdit]; if(!s){ ST.spotEdit = null; return ''; }
+  const x = spotifyOf(s);
+  return `<div class="modal-backdrop spot-bg"><div class="modal" style="max-width:440px;gap:14px">
+    <div class="mhead"><span style="font-size:21px;font-weight:700;display:flex;align-items:center;gap:8px">${SPOTIFY_SVG}Spotify link</span><span class="icon-btn" data-act="x" data-xact="closeSpotify">${icon('close',22)}</span></div>
+    <div style="font-size:14px;color:#6f6f6f;line-height:1.5">Paste the link to “${esc(s.title||'this song')}” on Spotify (in Spotify: Share › Copy Song Link).</div>
+    <input id="spotInput" class="ipt" placeholder="https://open.spotify.com/track/…" value="${esc(ST.spotDraft!=null ? ST.spotDraft : (x ? x.url : ''))}" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false">
+    <a class="link" style="font-size:13px" href="${esc(spotifySearchUrl(s))}" target="_blank" rel="noopener">Look for it on Spotify</a>
+    <div class="row" style="gap:12px;margin-top:4px">
+      ${x ? `<button class="btn btn-outline" style="flex:1" data-act="x" data-xact="removeSpotify">Remove</button>` : `<button class="btn btn-outline" style="flex:1" data-act="x" data-xact="closeSpotify">Cancel</button>`}
+      <button class="btn btn-dark" style="flex:1" data-act="x" data-xact="saveSpotify">Save</button>
+    </div>
+  </div></div>`;
+}
+document.addEventListener('input', function(e){ if(e.target && e.target.id==='spotInput') ST.spotDraft = e.target.value; });
+document.addEventListener('click', function(e){ if(e.target && e.target.classList && e.target.classList.contains('spot-bg')) XActions.closeSpotify(); });
+document.addEventListener('keydown', function(e){ if(e.key==='Enter' && e.target && e.target.id==='spotInput') XActions.saveSpotify(); });
+XActions.editSpotify = function(d){ if(!canSync()) return; ST.spotEdit = d.id; ST.spotDraft = null; ST.menu = false; render(); setTimeout(()=>{ const el = document.getElementById('spotInput'); if(el){ el.focus(); el.select(); } }, 60); };
+XActions.closeSpotify = function(){ ST.spotEdit = null; ST.spotDraft = null; render(); };
+XActions.saveSpotify = function(){
+  const s = D.songs[ST.spotEdit]; if(!s){ XActions.closeSpotify(); return; }
+  const el = document.getElementById('spotInput'), v = el ? el.value : (ST.spotDraft||'');
+  if(!v.trim()){ XActions.removeSpotify(); return; }
+  const url = normSpotify(v);
+  if(!url){ toast("That isn't a Spotify link — in Spotify, use Share › Copy Song Link"); return; }
+  setSpotify(s, url, false);
+  ST.spotEdit = null; ST.spotDraft = null; render(); queueSaveSong(s.id); toast('Spotify link saved');
+};
+XActions.removeSpotify = function(){
+  const s = D.songs[ST.spotEdit]; if(s){ setSpotify(s, null); queueSaveSong(s.id); }
+  ST.spotEdit = null; ST.spotDraft = null; render(); toast('Spotify link removed');
+};
+// the song-added screen (songs made by hand): "Add Spotify link"
+const _renderDoneSpot = renderDone;
+renderDone = function(){
+  const html = _renderDoneSpot(), d = D.songs[ST.editId];
+  if(!SPOTIFY_LINKS || !d) return html;
+  const x = spotifyOf(d);
+  const btn = x ? `<a class="spot" href="${esc(x.url)}" target="_blank" rel="noopener">${SPOTIFY_SVG}Spotify link added</a><a class="link link-muted" data-act="x" data-xact="editSpotify" data-id="${esc(d.id)}">Change Spotify link</a>`
+    : `<a class="link" style="display:inline-flex;align-items:center;gap:6px" data-act="x" data-xact="editSpotify" data-id="${esc(d.id)}">${SPOTIFY_SVG}Add Spotify link</a>`;
+  return html.replace(/(data-act="togglePublic">[^<]*<\/a>)/, '$1'+btn);
+};
