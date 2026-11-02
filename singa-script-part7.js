@@ -93,6 +93,7 @@ function renderModals(){
   if(ST.accountOpen) html += renderAccountPanel();
   if(ST.confirm) html += renderConfirmModal();
   if(ST.failedOpen) html += renderFailedModal();
+  if(ST.spotEdit && typeof renderSpotifyModal==='function') html += renderSpotifyModal();
   // The chord/markings-step note editor now floats as a modal popup (over
   // the lyrics, not squeezed in below them) instead of being part of the
   // normal in-flow layout.
@@ -176,7 +177,7 @@ function render(){
   // Modals and the toast are redrawn on every 100ms tick during playback and
   // recording; only play their entrance animation when they first appear,
   // otherwise it restarts every tick and flickers.
-  const modalKey = [ST.gigSettings,ST.upgrade,!!(ST.pick||ST.songPick),!!ST.newItem,!!ST.collabEdit,ST.editNick!=null,ST.verifyModal,ST.accountOpen,ST.selWord,!!ST.confirm,!!ST.failedOpen].join('|');
+  const modalKey = [ST.gigSettings,ST.upgrade,!!(ST.pick||ST.songPick),!!ST.newItem,!!ST.collabEdit,ST.editNick!=null,ST.verifyModal,ST.accountOpen,ST.selWord,!!ST.confirm,!!ST.failedOpen,!!ST.spotEdit].join('|');
   if(modalKey===_prevModalKey) document.querySelectorAll('#modalLayer .modal-backdrop, #modalLayer .modal, #modalLayer .sidepanel, #modalLayer .sidepanel-backdrop').forEach(el=>{ el.style.animation='none'; });
   _prevModalKey = modalKey;
   // a failed import stays on screen (with the reason) until it's closed
@@ -468,21 +469,44 @@ function compactTailChords(s, li){
   for(let k=0;k<12;k++){ const id = li+'-t'+k; if(s.chords[id]){ tails.push(s.chords[id]); delete s.chords[id]; } }
   tails.forEach((c,k)=>{ s.chords[li+'-t'+k] = c; });
 }
+// Two chords can sit over one word ("C G": the second comes halfway to the
+// next word); a third replaces the second. A chip of a pair is "id#k".
+const MAX_STACK = 2;
+function isWordSpot(id){ return /^\d+-\d+$/.test(String(id||'')); }
+function putChord(s, to, chord){
+  const cur = s.chords[to];
+  if(cur && isWordSpot(to) && String(cur).split(/\s+/).indexOf(chord)<0){
+    const parts = String(cur).split(/\s+/).filter(Boolean);
+    if(parts.length>=MAX_STACK) parts[MAX_STACK-1] = chord; else parts.push(chord);
+    s.chords[to] = parts.join(' ');
+  } else s.chords[to] = chord;
+}
+function takeChord(s, from){
+  const m = /^(.+)#(\d+)$/.exec(String(from));
+  if(!m){ delete s.chords[from]; return from; }
+  const parts = String(s.chords[m[1]]||'').split(/\s+/).filter(Boolean);
+  parts.splice(+m[2], 1);
+  if(parts.length) s.chords[m[1]] = parts.join(' '); else delete s.chords[m[1]];
+  return m[1];
+}
 function dropChord(chord, from, to){
   const s = D.songs[ST.editId]; if(!s || !chord) return;
   if(from && from===to) return;
   if(from){
     // moving a chord that's already on the lyrics (or dragging it off them)
-    // touches only that one chord — and the chord it's dropped onto, which
-    // it replaces. Repeats of the line are left alone.
-    delete s.chords[from];
-    if(to){ s.chords[to] = chord; recordRecentChord(chord); }
-    compactTailChords(s, String(from).split('-')[0]);
+    // touches only that one chord. Dropped on a word that has a chord, it
+    // joins it (two chords over the word). Repeats of the line are left alone.
+    const base = String(from).replace(/#\d+$/,'');
+    if(to && base===to) return;
+    takeChord(s, from);
+    if(to){ putChord(s, to, chord); recordRecentChord(chord); }
+    compactTailChords(s, base.split('-')[0]);
   } else if(to){
-    // a new chord from the picker also fills the same spot on repeated lines
-    s.chords[to] = chord; recordRecentChord(chord);
-    const [li, wi] = String(to).split('-').map(Number);
-    applyChordPatternToRepeats(s, li, wi, chord);
+    // a new chord from the picker: onto an empty spot it also fills the same
+    // spot on repeated lines; onto a chord, it becomes the second chord there
+    const had = !!s.chords[to];
+    putChord(s, to, chord); recordRecentChord(chord);
+    if(!had){ const [li, wi] = String(to).split('-').map(Number); applyChordPatternToRepeats(s, li, wi, chord); }
   }
   if(to){ const p = splitChordStr(chord); ST.selRoot = p.root; ST.selSuffix = p.q; }
   render();
@@ -574,7 +598,7 @@ async function readSheetFile(file, onLog){
   if(typeof Promise.withResolvers !== 'function'){
     Promise.withResolvers = function(){ let resolve, reject; const promise = new Promise((a,b)=>{ resolve=a; reject=b; }); return { promise, resolve, reject }; };
   }
-  if(!sheetImportMod) sheetImportMod = await importFresh('./sheet-import.js?v=4');
+  if(!sheetImportMod) sheetImportMod = await importFresh('./sheet-import.js?v=5');
   const prepared = await prepareSheetFile(file, onLog);
   return sheetImportMod.importSheetFile(prepared, { onLog });
 }
@@ -585,7 +609,7 @@ async function readSheetFiles(files, split, onLog){
   if(typeof Promise.withResolvers !== 'function'){
     Promise.withResolvers = function(){ let resolve, reject; const promise = new Promise((a,b)=>{ resolve=a; reject=b; }); return { promise, resolve, reject }; };
   }
-  if(!sheetImportMod) sheetImportMod = await importFresh('./sheet-import.js?v=4');
+  if(!sheetImportMod) sheetImportMod = await importFresh('./sheet-import.js?v=5');
   const prepared = [];
   for(const f of files) prepared.push(await prepareSheetFile(f, onLog));
   if(!sheetImportMod.importSheetFiles) return [await sheetImportMod.importSheetFile(prepared[0], { onLog })];
@@ -691,7 +715,9 @@ function applySheetToSong(songObj, res, overwriteTitle){
   const lines = [], chords = {};
   let li = 0;
   (res.blocks||[]).forEach(b=>{
-    if(b.type==='label'){ if(lines.length) lines.push(''); lines.push('['+b.text+']'); li++; return; }
+    // an empty line in the document: a break between parts of the song
+    if(b.type==='gap'){ if(lines.length && lines[lines.length-1]!=='') lines.push(''); return; }
+    if(b.type==='label'){ if(lines.length && lines[lines.length-1]!=='') lines.push(''); lines.push('['+(typeof sectionName==='function' ? sectionName(b.text) : b.text)+']'); li++; return; }
     if(b.type==='standalone-chords'){
       // a chord line with no words under it (or chords over tab) is an
       // instrumental passage: "[Instrumental: C G]" — joined onto an
@@ -725,6 +751,8 @@ function applySheetToSong(songObj, res, overwriteTitle){
   });
   songObj.lyrics = lines.join('\n').trim();
   songObj.chords = chords;
+  // no section names in the document: label the parts (Verse, Chorus…)
+  if(typeof autoSections==='function') autoSections(songObj);
   if(res.title && (overwriteTitle || !songObj.title.trim())) songObj.title = res.title;
   if(res.artist && (overwriteTitle || !songObj.sub.trim())) songObj.sub = res.artist;
 }
@@ -767,6 +795,7 @@ function jobFinished(j, songObj){
   toast('“'+songObj.title+'” has been added to your songs');
   notifyReady(songObj.title);
   saveSongRow(songObj);
+  if(typeof autoSpotify==='function') autoSpotify(songObj);   // link to the original on Spotify
 }
 function jobFailed(j, msg){
   const wasFg = endJob(j);
@@ -822,7 +851,7 @@ async function importSheetJob(s, src, j){
     applySheetToSong(so, res, i>0 || !so.title.trim());
     if(!so.title.trim()) so.title = fileBaseName(res.fileName || files[0].name);
     so.synced = false;
-    if(i>0){ setFlag('fresh', so.id, true); addSongToTarget(so.id, j.target); saveSongRow(so); }
+    if(i>0){ setFlag('fresh', so.id, true); addSongToTarget(so.id, j.target); saveSongRow(so); if(typeof autoSpotify==='function') autoSpotify(so); }
     prevId = so.id;
   });
   if(!s.lyrics.trim()){ jobFailed(j, "Couldn't find any lyrics in “"+name+"”"); return; }
