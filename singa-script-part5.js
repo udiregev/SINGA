@@ -66,12 +66,12 @@ XActions.viewSetSpeed = function(d){
 };
 // The song viewer's controls: back to the start · back a few lines · Play /
 // Stop · forward a few lines, then the speed (for set-speed songs).
-function transportHTML(s){
+function transportHTML(s, extra){
   const live = ST.playing || ST.vcd>0, listening = ST.listening;
   const sm = (dir, ic, title)=>`<button class="tpl-btn" data-act="x" data-xact="viewSeek" data-dir="${dir}" title="${title}" aria-label="${title}">${icon(ic,26)}</button>`;
   const play = `<button class="tpl-play${live||listening?' live':''}" data-act="viewPlay" title="${live?'Stop':(listening?'Cancel':'Play')}" aria-label="${live?'Stop':'Play'}">${icon(live?'stop':(listening?'hearing':'play_arrow'),32)}</button>`;
   const hint = listening ? 'Starts the moment you sing — tap to cancel' : (!live && ST.t===0 && ST.startMode!=='countdown' ? 'Starts when you start singing' : '');
-  return `<div class="tpl">${sm('start','skip_previous','Back to the start')}${sm('back','fast_rewind','Back a few lines')}${play}${sm('fwd','fast_forward','Forward a few lines')}</div>${speedHintHTML(s)}${hint?`<span style="font-size:12px;color:#8a8a8a">${hint}</span>`:''}`;
+  return `<div class="tpl">${sm('start','skip_previous','Back to the start')}${sm('back','fast_rewind','Back a few lines')}${play}${sm('fwd','fast_forward','Forward a few lines')}</div>${extra||''}${speedHintHTML(s)}${hint?`<span style="font-size:12px;color:#8a8a8a">${hint}</span>`:''}`;
 }
 XActions.viewSeek = function(d){
   const s = song(ST.songId), tm = timing(s);
@@ -213,15 +213,17 @@ function renderSong(){
   // line's first word goes above it rather than out to the left
   const lines = buildLines(s, vLive?(songMode(s)==='synced'?'play':'scroll'):'view', { t: vLive?ST.t:null, hideChords: !hasInst, leftTop: withList });
   const land = isLandscape();
-  const playRow = transportHTML(s);
-  const noChords = hasInst && !seq.length && !ST.viewBy && s.mine!==false;
+  // someone else's song (from Search, or found while making a song): add it right here
+  const addMine = ST.viewBy && !D.order.includes(s.id) ? `<button class="btn btn-dark btn-sm addmine" data-act="x" data-xact="addToMine" data-id="${esc(s.id)}">${icon('add',18)}Add to my songs</button>` : '';
+  const playRow = transportHTML(s, addMine);
+  const noChords = false;   // a song with no chords has no chord section at all
   const head = land ? `<div class="row" style="gap:14px;align-items:flex-start">
       ${withList ? '' : `<span class="icon-btn" style="margin-top:2px" data-act="back" data-to="${esc(ST.back)}">${icon('chevron_left',26)}</span>`}
       <div style="flex:1;min-width:0">
         <div style="font-size:22px;font-weight:700;letter-spacing:-0.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(s.title||'Untitled song')}</div>
         <div style="font-size:13px;color:#6f6f6f;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(s.sub)}${ST.viewBy?' · added by '+esc(ST.viewBy):''}</div>
         ${spotifyLinkHTML(s)}
-        <div class="row" style="gap:14px;margin-top:10px">${playRow}${ST.viewBy && !D.order.includes(s.id)?`<button class="btn btn-dark btn-sm" data-act="x" data-xact="addToMine" data-id="${esc(s.id)}">Add to my songs</button>`:''}</div>
+        <div class="row tprow" style="gap:14px;margin-top:10px">${playRow}</div>
       </div>
       <span class="icon-btn" data-act="toggleMenu">${icon('menu',28)}</span>
     </div>` : '';
@@ -233,11 +235,11 @@ function renderSong(){
         <div style="font-size:14px;color:#6f6f6f;margin-top:4px">${esc(s.sub)}</div>
         ${ST.viewBy?`<div class="row" style="gap:6px;font-size:13px;margin-top:8px">${icon('account_circle',18)}added by ${esc(ST.viewBy)}</div>`:''}
         ${spotifyLinkHTML(s)}
-        <div class="row" style="gap:14px;margin-top:${land?10:14}px">${playRow}${ST.viewBy && !D.order.includes(s.id)?`<button class="btn btn-dark btn-sm" data-act="x" data-xact="addToMine" data-id="${esc(s.id)}">Add to my songs</button>`:''}</div>
+        <div class="row tprow" style="gap:14px;margin-top:${land?10:14}px">${playRow}</div>
       </div>
       <span class="icon-btn" data-act="toggleMenu">${icon('menu',28)}</span>
     </div>`}
-    ${playerBodyHTML({ lines, live:vLive, winKey:'song-'+s.id, dia, showDia:hasInst, left:withList, noChords })}
+    ${playerBodyHTML({ lines, live:vLive, winKey:'song-'+s.id, dia, showDia:hasInst && seq.length>0, left:withList, noChords })}
   </div>`;
   return `${withList ? `<div class="gigplayer-grid songlist">${songSideHTML()}${main}</div>` : main}
   ${ST.vcd>0?`<div class="modal-backdrop" style="background:rgba(255,255,255,.75);font-size:180px;font-weight:800;animation:none">${Math.max(1,Math.ceil(ST.vcd))}</div>`:''}
@@ -268,17 +270,17 @@ function renderPractice(){
       </div>
     </div>
     ${isLandscape()
-      ? playerBodyHTML({ lines, live:true, winKey:'practice-'+s.id, dia, showDia:ST.instrument!=='none', big:true, dotColor:'#f24822' })
-      : `${ST.instrument!=='none' ? `<div data-fit="1" style="margin-top:24px;height:190px;flex:none;display:flex;align-items:center;justify-content:center;overflow:hidden"><div class="chordInnerScale" style="display:flex;justify-content:center">${diagramHTML(dia,'#f24822')}</div></div>` : ''}
+      ? playerBodyHTML({ lines, live:true, winKey:'practice-'+s.id, dia, showDia:ST.instrument!=='none' && seq.length>0, big:true, dotColor:'#f24822' })
+      : `${ST.instrument!=='none' && seq.length ? `<div data-fit="1" style="margin-top:24px;height:190px;flex:none;display:flex;align-items:center;justify-content:center;overflow:hidden"><div class="chordInnerScale" style="display:flex;justify-content:center">${diagramHTML(dia,'#f24822')}</div></div>` : ''}
     ${lyricsAreaHTML(lines, true, 'practice-'+s.id, true)}`}
     <div style="border-top:1px solid #ececec;padding-top:22px;display:flex;flex-direction:column;gap:18px">
       <div style="height:22px;display:flex;align-items:center;cursor:pointer" data-act="seek"><div style="flex:1;height:6px;border-radius:3px;background:#e6e6e6;position:relative"><div style="position:absolute;left:0;top:0;bottom:0;width:${progress}%;background:#1b1b1b;border-radius:3px"></div></div></div>
-      <div class="row" style="gap:16px">
+      <div class="row prow" style="gap:16px;flex-wrap:wrap;row-gap:14px">
         <button class="icon-btn" style="width:48px;height:48px;border-radius:50%;border:1.5px solid var(--fg)" data-act="restart">${icon('replay',24)}</button>
         <button class="icon-btn" style="width:64px;height:64px;border-radius:50%;background:#1b1b1b;color:#fff" data-act="togglePlay">${icon(ST.playing?'pause':'play_arrow',34)}</button>
-        <div style="font-size:14px;color:#6f6f6f;font-variant-numeric:tabular-nums">${fmtTime(ST.t)} / ${fmtTime(tm.total)}</div>
+        <div style="font-size:14px;color:#6f6f6f;font-variant-numeric:tabular-nums;white-space:nowrap">${fmtTime(ST.t)} / ${fmtTime(tm.total)}</div>
         <div style="flex:1"></div>
-        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px">
+        <div class="pguide" style="display:flex;flex-direction:column;align-items:flex-end;gap:8px">
           <div class="row" style="gap:10px;cursor:pointer" data-act="toggleGuide">
             <span style="font-size:14px;font-weight:600">Guide melody</span>
             <div class="toggle" style="background:${ST.guide?'#1b1b1b':'#fff'}"><div class="dot" style="left:${ST.guide?20:2}px;background:${ST.guide?'#fff':'#1b1b1b'}"></div></div>
@@ -523,3 +525,87 @@ renderDone = function(){
     : `<a class="link" style="display:inline-flex;align-items:center;gap:6px" data-act="x" data-xact="editSpotify" data-id="${esc(d.id)}">${SPOTIFY_SVG}Add Spotify link</a>`;
   return html.replace(/(data-act="togglePublic">[^<]*<\/a>)/, '$1'+btn);
 };
+/* ============================================================
+   INCOMPLETE SONG — besides "Continue", it can be deleted (or, for a song
+   added from someone else, removed from your songs).
+   ============================================================ */
+const _renderIncompleteBase = renderIncomplete;
+renderIncomplete = function(){
+  const s = D.songs[ST.songId];
+  if(!s){   // just deleted: back to where it was opened from
+    ST.screen = ST.back && ST.back!=='incomplete' ? ST.back : 'home';
+    return ST.screen==='list' ? renderList() : ST.screen==='search' ? renderSearch() : renderHome();
+  }
+  const mine = s.mine!==false;
+  const del = `<a class="link link-accent" style="margin-top:22px;font-weight:700" data-act="x" data-xact="deleteIncomplete" data-id="${esc(s.id)}">${mine ? 'Delete song' : 'Remove from my songs'}</a>`;
+  return _renderIncompleteBase().replace(/(data-act="continueSong">[^<]*<\/button>)/, '$1'+del);
+};
+XActions.deleteIncomplete = function(d){
+  const s = D.songs[d.id]; if(!s) return;
+  if(s.mine===false){ Actions.askRowAction({ kind:'unlib', id:s.id }); return; }
+  ST.confirm = { act:'delete', id:s.id, ok:'Delete', text: '“'+(s.title||'Untitled song')+'” will be deleted for good — from your songs, playlists and gigs.' };
+  render();
+};
+/* ============================================================
+   ADDING A SONG YOU FOUND WHILE MAKING ONE
+   Typing a title on the Lyrics step can turn up the same song made by
+   someone else. Adding theirs to your songs drops the half-made draft
+   (it was only a title), so you don't end up with both.
+   ============================================================ */
+const _addToMineBase = XActions.addToMine;
+XActions.addToMine = function(d){
+  const draftId = ST.back==='create' ? ST.editId : null;
+  _addToMineBase(d);
+  if(!D.order.includes(d.id)) return;   // not added (e.g. not signed in yet)
+  const dr = draftId && draftId!==d.id ? D.songs[draftId] : null;
+  if(dr && !dr.synced && !(dr.lyrics||'').trim()){
+    deleteSongEverywhere(dr.id);
+    ST.editId = null; ST.editing = false; ST.phase = 'idle';
+    ST.back = 'home';
+    render();
+  }
+};
+/* ============================================================
+   PHONE (PORTRAIT) LAYOUT
+   Marks go above their word on narrow lyrics (left / right of the line
+   they squeeze the lyrics into a thin column), search boxes use the whole
+   width, song rows keep their icons on the same line as what the song
+   holds, and nothing is cut off at the right.
+   ============================================================ */
+function narrowLyrics(){ return (isLandscape() ? innerWidth - (ST.chordW||260) : innerWidth) < 640; }
+const _buildLinesBase = buildLines;
+buildLines = function(s, mode, opt){
+  const out = _buildLinesBase(s, mode, opt);
+  if(narrowLyrics()) out.forEach(l=>(l.words||[]).forEach(w=>{ if(w.mark && (w.markSide==='left' || w.markSide==='right')) w.markSide = 'top'; }));
+  return out;
+};
+(function(){
+  if(document.getElementById('singa-phone-css')) return;
+  const st = document.createElement('style'); st.id = 'singa-phone-css';
+  st.textContent = `
+.tprow{flex-wrap:wrap;row-gap:10px}
+.addmine{display:inline-flex;align-items:center;gap:4px;padding-left:12px;padding-right:14px;white-space:nowrap}
+[data-act="toggleSort"]{white-space:nowrap}
+@media (max-width:640px){
+  #screen .scr > .row:first-child > .search-field{max-width:none !important;flex:1 1 auto}
+  #screen .scr > .row:first-child > .search-field + div[style="flex:1"]{display:none}
+  #screen .scr > .search-field{max-width:none !important;margin-bottom:20px !important}
+  #screen .scr > div[style*="padding-left:40px"]{padding-left:0 !important}
+  #screen .scr > .row > span[style*="font-size:28px"]{font-size:23px !important;white-space:nowrap}
+  #screen .scr > .row > span.icon-btn + span[style*="font-size:28px"]{margin-left:-6px}
+  .srow{column-gap:6px}
+  .srow .s-content{flex:1 1 auto !important;order:3 !important;min-width:0;overflow:hidden;text-overflow:ellipsis}
+  .srow .s-acts{order:4 !important}
+  .srow .s-status{order:5 !important;flex:1 1 100% !important;margin-left:0 !important}
+  .srow .s-status:empty{display:none}
+  .gig-main div[style*="font-size:30px"]{font-size:24px !important}
+  .gig-main .row[style*="margin:18px 0 6px 40px"], .gig-main div[style*="padding-left:40px"]{margin-left:0 !important;padding-left:0 !important}
+  .prow .pguide{flex:1 1 100%;align-items:flex-start !important}
+  .prow .pguide .row{flex-wrap:wrap}
+  .tprow .spdbtn, .tprow .spdpop{margin-left:4px}
+  [data-act="toggleSort"]{font-size:0 !important}
+  [data-act="toggleSort"] > span:not(.msi){font-size:13px}
+}
+`;
+  document.head.appendChild(st);
+})();
