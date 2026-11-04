@@ -7,7 +7,7 @@ const Binds = {
   searchQuery(v){ ST.searchQuery=v; render(); },
   draftTitle(v){ D.songs[ST.editId].title=v; queueSaveSong(ST.editId); if(ST.screen==='create') refreshLyricsGate(); },
   draftSub(v){ D.songs[ST.editId].sub=v; queueSaveSong(ST.editId); },
-  draftLyrics(v){ D.songs[ST.editId].lyrics=v; queueSaveSong(ST.editId); refreshLyricsGate(); },
+  draftLyrics(v){ const s = D.songs[ST.editId]; remapOnEdit(s, s.lyrics, v); s.lyrics=v; queueSaveSong(ST.editId); refreshLyricsGate(); },
   noteDraft(v){ ST.noteDraft=v; },
   newName(v){ ST.newItem.name=v; render(); },
   newDate(v){ ST.newItem.date=v; },
@@ -364,6 +364,290 @@ document.addEventListener('scroll', function(e){
   document.addEventListener('dragstart', function(e){ if(e.target.closest && e.target.closest('[data-drag-chord]')) e.preventDefault(); });
 })();
 
+/* ============================================================
+   SONG STRUCTURE FROM IMPORTED LYRICS
+   1. A sung line written in brackets — "(She said yeah, yeah, yeah)" — is
+      a lyric, not a section name: only a bracketed line that names a part
+      of the song ("[Chorus]", "(Repeat x2)", "[Guitar solo]"…) or is one or
+      two words ("[Spoken]") is a heading.
+   2. Lyrics with no empty lines between their parts still get their parts
+      named, from how the lines repeat: the block of lines that comes back
+      most is the Chorus, the parts between are Verses, a line sung over and
+      over between choruses is the Refrain, what follows the last chorus is
+      the Outro, a different part late in the song is the Bridge.
+   ============================================================ */
+const LABEL_WORDS_RE = /\b(intro|verse|pre-?chorus|chorus|post-?chorus|bridge|outro|hook|refrain|solo|instrumental|interlude|break|breakdown|coda|ending|middle|climb|tag|vamp|riff|spoken|repeat|capo|key|tempo|fade|x\d+|\d+x)\b/i;
+function labelIsSection(text){
+  const t = String(text||'').trim();
+  return LABEL_WORDS_RE.test(t) || t.split(/\s+/).filter(Boolean).length <= 2;
+}
+const _applySheetToSongBase = applySheetToSong;
+applySheetToSong = function(songObj, res, overwriteTitle){
+  const blocks = (res && res.blocks || []).map(b=>{
+    if(b.type!=='label' || labelIsSection(b.text)) return b;
+    return { type:'couplet', words: ('('+String(b.text).trim()+')').split(/\s+/).map(t=>({ text:t })), chordMap:{} };
+  });
+  return _applySheetToSongBase(songObj, { ...res, blocks }, overwriteTitle);
+};
+// lines compared without ad-libs in brackets, punctuation or case
+function lineKey(l){ return String(l||'').toLowerCase().replace(/\([^)]*\)|\[[^\]]*\]/g,' ').replace(/[^a-z0-9À-ɏ' ]/g,'').replace(/\s+/g,' ').trim(); }
+const _autoSectionsBase = autoSections;
+autoSections = function(s){
+  const r = _autoSectionsBase(s) || autoSectionsByRepeats(s);
+  if(r) normalizeHeads(s);
+  return r;
+};
+function autoSectionsByRepeats(s){
+  const raw = String(s.lyrics||'').split('\n').map(l=>l.trim()).filter(Boolean);
+  if(raw.length < 8) return false;
+  if(raw.some(l=>isHeaderLine(l.split(/\s+/)))) return false;   // already has headings (or instrumentals): leave it
+  const keys = raw.map(lineKey), n = raw.length;
+  // the chorus: the run of 2–8 lines that comes back most (not one line over and over)
+  let best = null;
+  for(let k=Math.min(8, Math.floor(n/2)); k>=2; k--){
+    for(let i=0;i+k<=n;i++){
+      const blk = keys.slice(i, i+k);
+      if(blk.some(x=>!x) || blk.every(x=>x===blk[0])) continue;
+      const occ = [];
+      for(let j=0;j+k<=n;){ if(blk.every((x,q)=>keys[j+q]===x)){ occ.push(j); j+=k; } else j++; }
+      if(occ.length < 2) continue;
+      const score = k*occ.length;
+      if(!best || score>best.score || (score===best.score && k>best.k)) best = { k, occ, score };
+    }
+  }
+  if(!best || best.score < 6) return false;
+  const isCh = new Array(n).fill(false);
+  best.occ.forEach(j=>{ for(let q=0;q<best.k;q++) isCh[j+q] = true; });
+  // the song in parts: choruses (back to back = one chorus) and what's between them
+  const parts = [];
+  for(let i=0;i<n;i++){
+    const last = parts[parts.length-1];
+    if(last && last.ch===isCh[i]) last.lines.push(i); else parts.push({ ch:isCh[i], lines:[i] });
+  }
+  // a verse that ends on the same line twice ("It's easy") is two verses
+  const split = [], lastChPart = parts.map((p,i)=>p.ch?i:-1).filter(i=>i>=0).pop();
+  parts.forEach((p,pi)=>{
+    const pks = p.lines.map(li=>keys[li]);
+    if(p.ch || pi>lastChPart || pks.every(x=>x===pks[0])){ split.push(p); return; }
+    const endKey = keys[p.lines[p.lines.length-1]];
+    let cur = [];
+    p.lines.forEach((li,x)=>{ cur.push(li); if(keys[li]===endKey && x<p.lines.length-1 && cur.length>=2){ split.push({ ch:false, lines:cur }); cur = []; } });
+    if(cur.length) split.push({ ch:false, lines:cur });
+  });
+  const lastCh = split.map((p,i)=>p.ch?i:-1).filter(i=>i>=0).pop();
+  let verseN = 0, chorusSeen = 0, firstVerse = null;
+  split.forEach((p,i)=>{
+    if(p.ch){ p.label = 'Chorus'; chorusSeen++; return; }
+    const ks = p.lines.map(li=>keys[li]);
+    const same = ks.length>=2 && ks.every(x=>x===ks[0]);
+    const repeated = ks.filter(x=>keys.filter(y=>y===x).length>1).length / ks.length;
+    if(i>lastCh && chorusSeen) p.label = 'Outro';
+    else if(i===0 && same) p.label = 'Intro';
+    else if(same) p.label = 'Refrain';
+    else if(chorusSeen>=2 && verseN>=1 && i<lastCh && repeated<0.5 && firstVerse
+      && Math.abs(p.lines.length-firstVerse.lines.length)>1 && keys[p.lines[p.lines.length-1]]!==keys[firstVerse.lines[firstVerse.lines.length-1]]) p.label = 'Bridge';
+    else { verseN++; p.label = 'Verse '+verseN; if(!firstVerse) firstVerse = p; }
+  });
+  if(verseN===1) split.forEach(p=>{ if(p.label==='Verse 1') p.label = 'Verse'; });
+  // rebuild with headings; chords and marks move with their lines
+  const out = [], map = {};
+  split.forEach(p=>{
+    if(out.length) out.push('');
+    out.push('(('+p.label+'))');
+    p.lines.forEach(li=>{ map[li] = out.filter(Boolean).length; out.push(raw[li]); });
+  });
+  const remap = obj=>{ const o = {}; Object.keys(obj||{}).forEach(k=>{ const m = /^(\d+)-(.+)$/.exec(k); if(m && map[m[1]]!=null) o[map[m[1]]+'-'+m[2]] = obj[k]; else o[k] = obj[k]; }); return o; };
+  s.lyrics = out.join('\n');
+  s.chords = remap(s.chords);
+  if(s.notes) s.notes = remap(s.notes);
+  return true;
+}
+/* ============================================================
+   SECTION HEADINGS AND INSTRUMENTALS, AS TYPED IN THE LYRICS
+   ((Chorus)), ((Verse 2)), ((bridge))… on a line of its own is a section
+   heading — add, change or delete them like any other line.
+   ((instrumental)) is an instrumental part: an "Instrumental" heading and a
+   strip of ticks you can put chords and markings on. Several in a row make
+   one longer part (the heading shows once).
+   Songs saved before this used [Verse 1] / [instrumental]; those still
+   read the same and are turned into the new form when the song is opened.
+   ============================================================ */
+function headText(ws){ return (Array.isArray(ws) ? ws.join(' ') : String(ws||'')).trim().replace(/^[\[(]+\s*/,'').replace(/\s*[\])]+$/,''); }
+function headParts(ws){ const raw = headText(ws), m = /^([^:]*?)\s*(?::\s*(.*))?$/.exec(raw) || []; return { name: (m[1]!=null ? m[1] : raw).trim(), rest: (m[2]||'').trim() }; }
+const NOTE_HEAD_RE = /^(capo|key|tempo|repeat|x\d+|\d+x)\b/i;
+isHeaderLine = function(ws){
+  if(!ws || !ws.length) return false;
+  const t = ws.join(' ').trim();
+  if(/^\(\(.*\)\)$/.test(t) || /^\[.*\]$/.test(t)) return true;
+  if(/^\([^()]*\)$/.test(t)){ const inner = t.slice(1,-1).replace(/:.*$/,'').trim(); return SECTION_RE.test(sectionName(inner)) || NOTE_HEAD_RE.test(inner); }
+  return false;
+};
+// an instrumental part: ((instrumental)) (also solo / interlude / break), or
+// a part written with its chords ("((Intro: C G))", "((Outro: instrumental))")
+instrLine = function(ws){
+  if(!isHeaderLine(ws)) return null;
+  const { name, rest } = headParts(ws);
+  const chords = rest.split(/\s+/).filter(x=>/^[A-G]/.test(x));
+  const sec = sectionName(name);
+  if(/^Instrumental\b/.test(sec) || /\binstrumental\b/i.test(rest) || (chords.length && /^(Intro|Outro)\b/.test(sec))) return { kind: name.toLowerCase(), label: name, chords };
+  return null;
+};
+// older [Verse 1] / [Intro] / (Chorus) lines → ((Verse 1)) / ((Intro)) / ((Chorus))
+function normalizeHeads(s){
+  if(!s || !s.lyrics) return false;
+  const all = String(s.lyrics).split('\n'), ch = s.chords || {};
+  const filled = all.map(l=>l.trim()).filter(Boolean);
+  let k = -1, changed = false;
+  const out = all.map(line=>{
+    const t = line.trim(); if(!t) return line;
+    k++;
+    const ws = t.split(/\s+/);
+    if(/^\(\(.*\)\)$/.test(t) || !isHeaderLine(ws)) return line;
+    let txt = headText(ws);
+    const { name, rest } = headParts(ws);
+    if(/^(intro|outro)$/i.test(name) && !rest){
+      // an [Intro] / [Outro] used to be an instrumental part: it stays one if
+      // it has chords on its strip or no singing straight after it
+      const next = filled[k+1];
+      const slots = Object.keys(ch).some(key=>key.indexOf(k+'-i')===0);
+      if(slots || !next || isHeaderLine(next.split(/\s+/))) txt = name+': instrumental';
+    }
+    changed = true;
+    return '(('+txt+'))';
+  });
+  if(changed) s.lyrics = out.join('\n');
+  return changed;
+}
+// chords written in an instrumental's line become chords on its strip
+instrMigrate = function(s){
+  if(!s) return false;
+  let changed = normalizeHeads(s);
+  const lines = parseLyrics(s.lyrics), relabel = {};
+  s.chords = s.chords || {};
+  lines.forEach((ws,li)=>{
+    const il = instrLine(ws); if(!il || !il.chords.length) return;
+    const n = il.chords.length;
+    il.chords.forEach((c,i)=>{ const id = li+'-i'+instrSlotOf(i, n); if(!s.chords[id]) s.chords[id] = c; });
+    relabel[li] = /^Instrumental\b/.test(sectionName(il.label)) ? '(('+il.label+'))' : '(('+il.label+': instrumental))';
+  });
+  if(Object.keys(relabel).length){
+    let k = -1;
+    s.lyrics = String(s.lyrics||'').split('\n').map(raw=>{ if(!raw.trim()) return raw; k++; return relabel[k]!=null ? relabel[k] : raw; }).join('\n');
+    changed = true;
+  }
+  return changed;
+};
+const _applySheetHeads = applySheetToSong;
+applySheetToSong = function(songObj, res, overwriteTitle){
+  const r = _applySheetHeads(songObj, res, overwriteTitle);
+  instrMigrate(songObj);
+  return r;
+};
+const _songRowToLocalHeads = songRowToLocal;
+songRowToLocal = function(row){ const s = _songRowToLocalHeads(row); try{ normalizeHeads(s); }catch(e){} return s; };
+// A heading: its name, as a small label (notes such as "Capo 2" stay plain)
+headerLineHTML = function(l){
+  const { name, rest } = headParts(l.words.map(w=>w.w));
+  const note = NOTE_HEAD_RE.test(name);
+  const shownRest = rest && !/^instrumental$/i.test(rest) ? rest : '';
+  return `<div class="lline lheader${note?'':' lsection'}"><span class="hl">${esc(sectionName(name) || name)}</span>${shownRest?`<span class="hc">${esc(shownRest)}</span>`:''}</div>`;
+};
+// Instrumental strips: the heading once above a run of them, markings on them
+const _buildLinesHeads = buildLines;
+buildLines = function(s, mode, opt){
+  opt = opt || {};
+  const out = _buildLinesHeads(s, mode, opt);
+  const tm = timing(s), lines = tm.lines;
+  const notes = { ...(s.notes||{}), ...(opt.extraNotes||{}) };
+  if(mode==='markings') out.forEach((l,i)=>{ const it = tm.instr && tm.instr[l.li]; if(it && !l.instr) out[i] = { li:l.li, instr:true, markEdit:true, header:false, words:[], chords: it.chords, scale:1, op:1, padTop:0, mb:0 }; });
+  let prevInstr = false;
+  out.forEach(l=>{
+    if(l.instr && l.li>=0){
+      const il = instrLine(lines[l.li]);
+      l.label = il ? (sectionName(il.label) || il.label) : 'Instrumental';
+      l.first = !prevInstr;
+      l.marks = [];
+      for(let k=0;k<INSTR_SLOTS;k++){ const m = notes[l.li+'-i'+k]; if(m) l.marks.push({ slot:k, text:m, id:l.li+'-i'+k }); }
+      prevInstr = true;
+    } else prevInstr = false;
+  });
+  return out;
+};
+function instrMarkEditHTML(l){
+  const by = {}; (l.marks||[]).forEach(m=>{ by[m.slot] = m; });
+  let cells = '';
+  for(let k=0;k<INSTR_SLOTS;k++){
+    const id = l.li+'-i'+k, m = by[k], sel = ST.selWord===id;
+    cells += `<span class="lword islot mslot${sel?' sel':''}" data-act="pickMarkWord" data-id="${id}" title="Add a marking here">${m?`<span class="imk"><span class="mtext">${esc(m.text)}</span><i class="iarr"></i></span>`:''}<span class="itk"><i style="height:${k%2===0?22:15}px"></i><i style="height:15px"></i></span></span>`;
+  }
+  return `<div class="lline linstr iedit imark${l.first?'':' icont'}"><span class="msi inote" style="font-size:20px">music_note</span><div class="islots">${cells}</div></div>`;
+}
+const _instrLineHTMLBase = instrLineHTML;
+instrLineHTML = function(l, big){
+  const head = l.first && l.label ? `<div class="lline lheader lsection"><span class="hl">${esc(l.label)}</span></div>` : '';
+  if(l.markEdit) return head + instrMarkEditHTML(l);
+  let row = _instrLineHTMLBase(l, big);
+  if(l.li>=0 && !l.first) row = row.replace('class="lline linstr', 'class="lline linstr icont');
+  if(l.marks && l.marks.length && !l.edit){
+    const mk = `<div class="imarks">${l.marks.map(m=>`<span class="imk" style="left:${(m.slot/INSTR_SLOTS*100).toFixed(1)}%"><span class="mtext">${esc(m.text)}</span><i class="iarr"></i></span>`).join('')}</div>`;
+    row = row.replace('<div class="itrack">', '<div class="itrack">'+mk);
+  }
+  return head + row;
+};
+(function(){
+  if(document.getElementById('singa-instr-css')) return;
+  const st = document.createElement('style'); st.id = 'singa-instr-css';
+  st.textContent = `
+.lline.linstr.icont{padding-top:0;margin-top:-2px}
+.lline.linstr.icont .inote{visibility:hidden}
+.lline.lheader.lsection + .lline.linstr{margin-top:2px}
+.linstr .imarks{position:relative;height:30px}
+.linstr .imk{position:absolute;bottom:0;display:flex;flex-direction:column;align-items:flex-start;color:var(--chordblue);pointer-events:none;white-space:nowrap}
+.linstr .imk .mtext{font-family:Caveat,cursive;font-size:22px;font-weight:600;line-height:1;color:var(--chordblue)}
+.linstr .imk .iarr{display:block;width:2px;height:9px;background:var(--chordblue);border-radius:1px;margin-left:1px}
+.iedit.imark .islots{height:74px}
+.iedit .mslot{cursor:pointer}
+.iedit .mslot:hover .itk i, .iedit .mslot.sel .itk i{background:#2f8fe0}
+.iedit .mslot.sel{background:#e5f0fc}
+.iedit .mslot .imk{bottom:30px;left:0;z-index:1}
+`;
+  document.head.appendChild(st);
+})();
+// Editing the lyrics (adding or removing a heading, a line…) keeps every
+// chord and marking on the line it was on.
+function remapOnEdit(s, a, b){
+  if(!s) return;
+  const A = parseLyrics(a).map(ws=>ws.join(' ')), B = parseLyrics(b).map(ws=>ws.join(' '));
+  const n = A.length, m = B.length;
+  if(A.join('\n')===B.join('\n') || !n || n*m > 250000) return;
+  const L = Array.from({ length:n+1 }, ()=>new Uint16Array(m+1));
+  for(let i=n-1;i>=0;i--) for(let j=m-1;j>=0;j--) L[i][j] = A[i]===B[j] ? L[i+1][j+1]+1 : Math.max(L[i+1][j], L[i][j+1]);
+  const map = {}, gapA = [], gapB = [];
+  const head = (X,i)=>isHeaderLine(X[i].split(' '));
+  // lines changed in place: paired up in order (headings with headings, lyrics with lyrics)
+  const flush = ()=>{
+    [true,false].forEach(h=>{ const a1 = gapA.filter(i=>head(A,i)===h), b1 = gapB.filter(j=>head(B,j)===h); for(let q=0;q<Math.min(a1.length,b1.length);q++) map[a1[q]] = b1[q]; });
+    gapA.length = 0; gapB.length = 0;
+  };
+  let i = 0, j = 0;
+  while(i<n && j<m){
+    if(A[i]===B[j]){ flush(); map[i] = j; i++; j++; }
+    else if(L[i+1][j] >= L[i][j+1]) gapA.push(i++); else gapB.push(j++);
+  }
+  while(i<n) gapA.push(i++); while(j<m) gapB.push(j++); flush();
+  const remap = obj=>{ const o = {}; Object.keys(obj||{}).forEach(k=>{ const mm = /^(\d+)-(.+)$/.exec(k); if(!mm){ o[k] = obj[k]; return; } const to = map[mm[1]]; if(to!=null) o[to+'-'+mm[2]] = obj[k]; }); return o; };
+  s.chords = remap(s.chords);
+  if(s.notes) s.notes = remap(s.notes);
+}
+// the Lyrics step explains the two formats
+const _renderManualLyricsBase = renderManualLyrics;
+renderManualLyrics = function(d){
+  if(d) normalizeHeads(d);
+  return _renderManualLyricsBase(d)
+    .replace('&#10;Type [instrumental] to add an instrumental line', '&#10;((Chorus)) on its own line starts a section&#10;((instrumental)) adds an instrumental part')
+    .replace(/Type <b>\[instrumental\]<\/b> to add an instrumental line — type it again on the next line to make it longer/,
+      'Type <b>((Chorus))</b>, <b>((Verse 2))</b>, <b>((Bridge))</b>… on a line of its own for a section heading, and <b>((instrumental))</b> for an instrumental part — repeat it on the next lines to make it longer');
+};
 /* ============================================================
    INIT
    ============================================================ */
