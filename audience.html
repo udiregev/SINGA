@@ -109,7 +109,11 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;
 function icon(name,size){ return `<span class="msi" style="font-size:${size||22}px">${name}</span>`; }
 function uid(){ try{ return crypto.randomUUID(); }catch(e){ return 'id'+Date.now()+Math.random().toString(16).slice(2); } }
 function parseLyrics(text){ return (text||'').split('\n').map(l=>l.trim()).filter(Boolean).map(l=>l.split(/\s+/)); }
-function isHeaderLine(ws){ if(!ws || !ws.length) return false; return /^[\[(]/.test(ws[0]) && /[\])]$/.test(ws[ws.length-1]); }
+// a section heading: ((Chorus)), ((instrumental)), or the older [Verse 1] / (Chorus)
+function isHeaderLine(ws){ if(!ws || !ws.length) return false; const t = ws.join(' ').trim();
+  if(/^\(\(.*\)\)$/.test(t) || /^\[.*\]$/.test(t)) return true;
+  return /^\([^()]*\)$/.test(t) && /^(intro|verse|pre-?chorus|chorus|post-?chorus|bridge|outro|hook|refrain|middle|instrumental|solo|interlude|break|coda|climb|capo|key|tempo|repeat)\b/i.test(t.slice(1,-1).trim()); }
+function headLabel(ws){ const s = ws.join(' ').replace(/^[\[(]+\s*/,'').replace(/\s*[\])]+$/,'').replace(/\s*:.*$/,''); return s.charAt(0).toUpperCase()+s.slice(1); }
 function timing(s){
   const lines = parseLyrics(s && s.lyrics); const words = [];
   // same x1 pace as the app: ~2.2 sung words a second + a breath per line
@@ -240,7 +244,9 @@ function renderLyricsTab(){
     }).join('');
     if(li<first || li>=first+4) return '';
     // a section label, without any chords written into it ("[Intro: C G]" → "Intro")
-    if(header) return `<div class="lline lheader">${esc(ws.join(' ').replace(/^[\[(]\s*/,'').replace(/\s*[\])]$/,'').replace(/\s*:.*$/,''))}</div>`;
+    // a run of ((instrumental)) lines shows its heading once
+    if(header && li>0 && isHeaderLine(tm.lines[li-1]) && headLabel(tm.lines[li-1])===headLabel(ws)) return '';
+    if(header) return `<div class="lline lheader">${esc(headLabel(ws))}</div>`;
     return `<div class="lline">${wordsHTML}</div>`;
   }).join('');
   const statusLine = live.listening ? 'Listening for the performer to start singing…' : (!live.playing ? 'Paused' : '');
