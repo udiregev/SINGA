@@ -122,6 +122,8 @@ function nMapCss(css, sheet){
     const p = prop.toLowerCase();
     const map = p==='color' || p==='fill' || p==='caret-color' || p==='text-decoration-color' ? N_TEXT : (p.indexOf('background')===0 ? N_BG : (p==='box-shadow' ? null : N_LINE));
     if(!map) return all;
+    // light see-through overlays (the song menu, the 3-2-1 countdown) become dark ones
+    if(p.indexOf('background')===0) val = val.replace(/rgba\(\s*255\s*,\s*255\s*,\s*255\s*,\s*(0?\.\d+|1)\s*\)/g, (m, a)=> +a>=.5 ? 'rgba(26,14,56,'+Math.max(+a,.88)+')' : m);
     const nv = val.replace(/#[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{3}\b/g, function(hex){
       const k = hex.toLowerCase();
       if(p==='color' && keepWhite && (k==='#fff' || k==='#ffffff')) return hex;
@@ -163,6 +165,7 @@ const N_STAGE_SVG = `<svg class="n-stage n-hand" viewBox="0 0 320 290" aria-hidd
     <linearGradient id="hSkin2" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFB0D0"/><stop offset="0.55" stop-color="#FF3D84"/><stop offset="1" stop-color="#6A4BFF"/></linearGradient>
     <linearGradient id="hArm" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FF5C96"/><stop offset="1" stop-color="#3A6BFF"/></linearGradient>
     <linearGradient id="hHandle" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#140733"/><stop offset="0.55" stop-color="#2A1260"/><stop offset="0.8" stop-color="#5B3DD6"/><stop offset="1" stop-color="#1A0B44"/></linearGradient>
+    <linearGradient id="hPinky" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#FF4D8D"/><stop offset="1" stop-color="#FFB0D0"/></linearGradient>
     <radialGradient id="hHead" cx="0.35" cy="0.3" r="0.8"><stop offset="0" stop-color="#FF9BF5"/><stop offset="0.55" stop-color="#D21CFF"/><stop offset="1" stop-color="#5B14B8"/></radialGradient>
     <pattern id="hStripeH" width="10" height="10" patternUnits="userSpaceOnUse"><rect width="10" height="5" fill="#E61CFF"/></pattern>
     <pattern id="hStripeV" width="9" height="9" patternUnits="userSpaceOnUse"><rect width="4" height="9" fill="#6E14C8"/></pattern>
@@ -202,7 +205,7 @@ const N_STAGE_SVG = `<svg class="n-stage n-hand" viewBox="0 0 320 290" aria-hidd
         <rect x="-30" y="-44" width="66" height="25" rx="12.5" fill="url(#hSkin)"/>
         <rect x="-32" y="-20" width="70" height="25" rx="12.5" fill="url(#hSkin)"/>
         <rect x="-32" y="4" width="68" height="25" rx="12.5" fill="url(#hSkin)"/>
-        <rect x="-26" y="32" width="102" height="19" rx="9.5" transform="rotate(-8 -16 41)" fill="url(#hSkin)"/>
+        <path d="M6 49Q32 48 54 33" fill="none" stroke="rgba(90,0,70,0.35)" stroke-width="19" stroke-linecap="round"/><path d="M6 49Q32 48 54 33" fill="none" stroke="url(#hPinky)" stroke-width="16" stroke-linecap="round"/><ellipse cx="52" cy="34" rx="4.2" ry="3" transform="rotate(-34 52 34)" fill="#FFD6E8" stroke="none" opacity="0.8"/>
         <rect x="-30" y="28" width="40" height="24" rx="12" fill="url(#hSkin2)"/>
       </g>
       <rect x="-54" y="-62" width="66" height="25" rx="12.5" transform="rotate(-14 -21 -50)" fill="url(#hSkin2)" stroke="rgba(90,0,70,0.35)" stroke-width="1.5"/>
@@ -356,13 +359,52 @@ renderGig = function(){
 
 /* ---- render: Night extras after every redraw ---- */
 const _nRender = render;
+let _nScrOverlay = false;
 render = function(){
   ST.perfDark = false;
+  if(!nInChords()) ST.chordArmed = null;
   _nRender();
   document.body.classList.toggle('n-home', ST.screen==='home' && !!ST.userId);
+  nMarkArmed();
+  // an overlay drawn inside the screen (song menu, countdown) is redrawn on
+  // every playback tick: fade it in once, not on every tick (that flickered)
+  const ov = document.querySelectorAll('#screen .modal-backdrop');
+  if(ov.length && _nScrOverlay) ov.forEach(el=>{ el.style.animation = 'none'; });
+  _nScrOverlay = ov.length > 0;
   nSyncNav();
   nQueueFit();
 };
+
+/* ---- chords step: drag a chord onto a word, or tap a chord and then tap words ---- */
+function nInChords(){ return ST.screen==='create' && ST.step==='chords'; }
+function nMarkArmed(){
+  document.body.classList.toggle('chord-armed', !!ST.chordArmed && nInChords());
+  if(!nInChords()) return;
+  document.querySelectorAll('.ctile,.utile').forEach(t=>t.classList.toggle('armed', t.dataset.dragChord===ST.chordArmed));
+}
+const _nUsedRow = renderUsedRow;
+renderUsedRow = function(){
+  const html = _nUsedRow().replace('Drag and drop a chord onto a word', 'Drag a chord onto a word, or tap a chord and then tap the words');
+  if(!ST.chordArmed) return html;
+  return html.replace(/<\/div><\/div>$/, '</div><div class="ce-armed">Tap words to add <b>'+esc(ST.chordArmed)+'</b><button class="ce-armed-x" data-xact="disarmChord" aria-label="Stop adding '+esc(ST.chordArmed)+'">Done</button></div></div>');
+};
+XActions.disarmChord = function(){ ST.chordArmed = null; render(); };
+document.addEventListener('click', function(e){
+  if(!nInChords()) return;
+  const tile = e.target.closest('.ctile,.utile');
+  if(tile){
+    const ch = tile.dataset.dragChord; if(!ch) return;
+    ST.chordArmed = ST.chordArmed===ch ? null : ch;
+    if(ST.chordArmed){ const p = splitChordStr(ch); ST.selRoot = p.root; ST.selSuffix = p.q; }
+    render(); return;
+  }
+  if(!ST.chordArmed || e.target.closest('.chip-x,[data-drag-chord],[data-act],[data-xact]')) return;
+  const w = e.target.closest('.lword[data-drop]'); if(!w) return;
+  const s = D.songs[ST.editId], id = w.dataset.drop;
+  // tapping a word that already has this chord takes it off again
+  if(s && s.chords && s.chords[id]===ST.chordArmed){ Actions.removeChord({ id }); return; }
+  dropChord(ST.chordArmed, null, id);
+});
 /* ---- markings: a note that would run off the right edge goes to the left of its arrow ---- */
 let _nFitQ = 0;
 function nQueueFit(){ if(_nFitQ) return; _nFitQ = requestAnimationFrame(()=>{ _nFitQ = 0; nFitMarks(); }); }

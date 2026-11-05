@@ -274,6 +274,41 @@ body.n-home .nhome{padding-top:calc(22px + env(safe-area-inset-top,0px))}
 .gigplayer-grid #chordDiagramBox{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);border-radius:28px;box-sizing:border-box}
 .gigplayer-grid .land-dia{margin:2px 0 14px;border-left:1px solid rgba(255,255,255,.14)}
 
+
+/* ---- bigger tap targets: small icons get an invisible 44px+ hit area, and
+   anything tappable shows a pointer (iOS only sends taps to those) ---- */
+[data-act],[data-xact]{cursor:pointer}
+:where(.icon-btn){position:relative}
+.icon-btn::after{content:'';position:absolute;inset:-10px;border-radius:50%}
+:where(.chip-x){position:relative}
+.chip-x::after{content:'';position:absolute;inset:-8px}
+.list-row,.nticket,.nhero,.ntile{-webkit-tap-highlight-color:transparent}
+.list-row:active{background:rgba(255,255,255,.06)}
+
+/* ---- song menu and the 3-2-1 countdown: dark, never white ---- */
+.modal-backdrop[data-act="toggleMenu"] .link{color:#fff}
+.modal-backdrop[data-act="toggleMenu"] .link-accent{color:#FFB3C1}
+
+/* ---- chords step, as on the design board ---- */
+.ce-picker{background:rgba(255,255,255,.06);border:1px solid var(--n-line);border-radius:24px;padding:12px 10px;width:124px}
+.ce-main{background:rgba(255,255,255,.04);border:1px solid var(--n-line);border-radius:28px;padding:16px 20px 8px}
+.ctile.armed,.utile.armed{background:#fff;color:var(--n-ink);border-color:#fff;box-shadow:0 0 0 3px rgba(243,184,255,.45)}
+.ce-armed{flex:none;display:flex;align-items:center;gap:10px;margin-left:auto;padding-left:12px;font-size:13px;color:var(--n-mute);white-space:nowrap}
+.ce-armed b{color:var(--n-pink)}
+.ce-armed-x{height:32px;padding:0 14px;border-radius:999px;border:1px solid var(--n-line2);background:transparent;color:#fff;font-size:13px;font-weight:700}
+.ce-used{gap:10px}
+.ce-lyrics .lword .ltext{color:#fff}
+.ce-lyrics .lword .lchord.chip:not(:empty){background:var(--n-pink) !important;color:var(--n-ink) !important;padding:0 9px;margin-left:0}
+.ce-lyrics .lword .lchord.pv,.ce-lyrics .lword .lchord.pv-fill{background:transparent !important;color:var(--n-pink) !important;outline:1.5px dashed rgba(243,184,255,.75);outline-offset:-1.5px;border-radius:999px;padding:0 8px}
+.ce-lyrics .lword .lchord-row{align-self:flex-start;width:max-content;max-width:100%}
+.ce-lyrics .chip-x{top:-9px;left:calc(100% - 9px);width:18px;height:18px;z-index:2;background:var(--n-sheet);border:1px solid rgba(255,255,255,.32);color:#fff;font-size:12px}
+body.chord-armed .ce-lyrics .lword[data-drop]{cursor:copy}
+@media (hover:hover) and (pointer:fine){ body.chord-armed .ce-lyrics .lword[data-drop]:hover{background:rgba(243,184,255,.12) !important;border-radius:8px} }
+/* the performer's markings stay out of the way while placing chords */
+.ce-lyrics .marr-c,.ce-lyrics .mside-abs,.ce-lyrics .lmark{display:none !important}
+.ce-lyrics .lword .ltext{text-decoration:none !important}
+@media (max-height:520px){ .ce-picker{padding:8px 6px;width:112px} .ce-main{padding:10px 14px 4px} }
+
 /* ---- reduced motion: fades only, nothing slides or floats ---- */
 @media (prefers-reduced-motion:reduce){
   .scr{animation:singaFade .2s ease both}
