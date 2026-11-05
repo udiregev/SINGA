@@ -4,79 +4,158 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Singa — Audience</title>
-<meta name="theme-color" content="#1b1b1b">
+<meta name="theme-color" content="#1A0E38">
+<meta name="color-scheme" content="dark">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=Source+Serif+4:opsz,wght@8..60,700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,700&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,300,0..1,0" rel="stylesheet">
 <style>
+/* Singa · Night — deep violet, glass, pink accent (same look as the performer app) */
 :root{
-  --bg:#fff; --fg:#1b1b1b; --muted:#8a8a8a; --line:#ececec; --s1:#ececec; --s2:#e3e3e3;
-  --accent:#f24822; --chordblue:#2f8fe0; --canvas:#ecebe8;
+  --bg:transparent; --fg:#fff; --muted:rgba(255,255,255,.7); --line:rgba(255,255,255,.12); --s1:rgba(255,255,255,.08); --s2:rgba(255,255,255,.12);
+  --accent:#F3B8FF; --ink:#2A1250; --sheet:#2A1250; --canvas:#1A0E38;
+  --ease-out:cubic-bezier(.23,1,.32,1);
+  color-scheme:dark;
 }
-:root[data-theme="dark"]{ --bg:#1b1b1b; --fg:#fff; --muted:#8f8f8f; --line:#353535; --s1:#2a2a2a; --s2:#242424; }
 *{box-sizing:border-box}
-html,body{margin:0;background:var(--canvas);height:100%}
-body{font-family:'Hanken Grotesk',system-ui,sans-serif;color:var(--fg);-webkit-font-smoothing:antialiased;min-height:100vh;display:flex;flex-direction:column;background:var(--bg);transition:background .25s,color .25s}
+html{-webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%;background:#1A0E38}
+html,body{margin:0;height:100%}
+body{font-family:'DM Sans',system-ui,sans-serif;color:#fff;-webkit-font-smoothing:antialiased;min-height:100vh;min-height:100dvh;display:flex;flex-direction:column;background:linear-gradient(172deg,#1A0E38 0%,#33145C 48%,#6E1C78 100%) fixed #1A0E38;overscroll-behavior-y:none}
 .msi{font-family:'Material Symbols Outlined';font-weight:normal;font-style:normal;line-height:1;display:inline-block;vertical-align:middle}
-a{color:inherit}
+a{color:var(--accent)}
 input,textarea,button{font-family:inherit;color:inherit}
-button{cursor:pointer}
-#app{flex:1;display:flex;flex-direction:column;min-height:100vh;max-width:520px;margin:0 auto;width:100%;position:relative}
-#head{flex:none;height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 18px;border-bottom:1px solid var(--line)}
-.darkToggle{display:flex;align-items:center;gap:6px;cursor:pointer}
-.darkToggle .track{width:38px;height:22px;border-radius:11px;border:1.5px solid var(--fg);position:relative}
-.darkToggle .track .dot{position:absolute;top:2px;left:var(--knob,2px);transition:left .25s cubic-bezier(.2,.8,.2,1);width:15px;height:15px;border-radius:50%;background:var(--fg)}
-.wordmark{font-family:'Source Serif 4',serif;font-weight:700;font-size:19px}
-.live{background:var(--accent);color:#fff;font-size:10px;font-weight:800;letter-spacing:.08em;padding:3px 7px;border-radius:4px;margin-left:8px;vertical-align:middle}
-.iconbtn{border:0;background:transparent;display:flex;align-items:center;justify-content:center;color:var(--fg)}
-#main{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column}
-.pad{padding:18px 22px}
-.btn{height:52px;border:0;border-radius:12px;background:var(--fg);color:var(--bg);font-size:16px;font-weight:700}
-.btn-outline{height:46px;border:1.5px solid var(--fg);border-radius:10px;background:transparent;color:var(--fg);font-size:14px;font-weight:700}
-input.field{height:50px;border:1.5px solid var(--line);border-radius:12px;padding:0 16px;font-size:16px;outline:none;background:transparent;color:var(--fg);width:100%}
+button{cursor:pointer;touch-action:manipulation;-webkit-user-select:none;user-select:none;transition:transform 160ms var(--ease-out),background-color .2s ease,color .2s ease}
+button:active{transform:scale(.97)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+::placeholder{color:rgba(255,255,255,.45)}
+#app{flex:1;display:flex;flex-direction:column;min-height:100vh;min-height:100dvh;max-width:560px;margin:0 auto;width:100%;position:relative}
+#head{flex:none;height:60px;display:flex;align-items:center;justify-content:space-between;padding:0 18px;padding-top:env(safe-area-inset-top,0px);height:calc(60px + env(safe-area-inset-top,0px))}
+.wordmark{font-weight:700;font-size:20px;letter-spacing:-.02em;display:flex;align-items:center;gap:10px}
+.wm{display:block;height:1em;width:auto;aspect-ratio:2840/1101;overflow:visible;color:#fff}
+.wordmark .wm{height:26px}
+.tv-brand .wm{height:1.25em}
+.live{background:var(--accent);color:var(--ink);font-size:10px;font-weight:700;letter-spacing:.1em;padding:4px 9px;border-radius:999px;display:inline-flex;align-items:center;gap:5px}
+.live::before{content:'';width:6px;height:6px;border-radius:50%;background:#C2185B}
+.iconbtn{border:0;background:transparent;display:flex;align-items:center;justify-content:center;color:#fff}
+.headbtn{width:42px;height:42px;border-radius:50%;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14)}
+#main{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;padding-bottom:calc(104px + env(safe-area-inset-bottom,0px))}
+.pad{padding:12px 22px}
+.btn{height:54px;border:0;border-radius:999px;background:#fff;color:var(--ink);font-size:16px;font-weight:700}
+.btn-outline{height:44px;border:1px solid rgba(255,255,255,.22);border-radius:999px;background:transparent;color:#fff;font-size:14px;font-weight:600;padding:0 16px}
+input.field{height:50px;border:1px solid rgba(255,255,255,.16);border-radius:18px;padding:0 16px;font-size:16px;outline:none;background:rgba(255,255,255,.08);color:#fff;width:100%;caret-color:var(--accent)}
+input.field:focus{border-color:rgba(243,184,255,.7)}
+/* artwork */
+.nart{position:relative;display:inline-block;flex:none;overflow:hidden;vertical-align:middle}
+.nart i{position:absolute;border-radius:50%;display:block}
+/* ---- Join ---- */
+.join{flex:1;display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px;padding:18px 26px 26px}
+.join .nart{box-shadow:0 24px 60px rgba(14,6,32,.45)}
+.join h1{margin:16px 0 0;font-size:30px;font-weight:300;letter-spacing:-.02em;line-height:1.2}
 /* ---- Lyrics tab ---- */
-.lyrics-wrap{display:flex;flex-direction:column;align-items:flex-start;gap:16px;width:100%;max-width:640px}
-.lline{display:flex;flex-wrap:wrap;column-gap:7px}
+.nowbar{display:flex;align-items:center;gap:12px;padding:6px 22px 4px}
+.nowbar .t{font-size:18px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nowbar .s{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prog{height:3px;border-radius:2px;background:rgba(255,255,255,.14);margin:12px 22px 0;overflow:hidden}
+.prog>div{height:100%;background:var(--accent);border-radius:2px}
+.lyrics-wrap{display:flex;flex-direction:column;align-items:center;gap:26px;width:100%;max-width:820px;text-align:center}
+.lline{display:flex;flex-wrap:wrap;justify-content:center;unicode-bidi:plaintext}
+.lword .ltext{padding:0 .13em}
 .lword{display:flex;flex-direction:column;cursor:default}
-.lword .lchord{height:18px;font-size:13px;font-weight:600;color:var(--chordblue)}
-.lword .ltext{font-size:22px;color:var(--muted);transition:color .15s}
-.lword.cur .ltext{color:var(--fg);font-weight:700}
-.lline.lheader{opacity:.5;font-style:italic;font-size:13px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--muted)}
-.lword.done .ltext{color:var(--muted);opacity:.6}
-.lword.line .ltext{color:var(--fg)}
-/* the audience sees 4 lines at a time (phone or a big monitor) */
-.lyr4{flex:1;min-height:0;overflow:hidden;padding:14px 22px;display:flex;flex-direction:column;align-items:flex-start}
-.lyr4 .lyrics-wrap{gap:18px}
-@media(min-width:900px){#app:has(.lyr4){max-width:none}.lyr4{padding:3vh 6vw;justify-content:center}.lyr4 .lword .ltext{font-size:clamp(28px,3.6vw,64px)}.lyr4 .lword .lchord{font-size:clamp(14px,1.5vw,26px);height:1.4em}.lyr4 .lline{column-gap:clamp(10px,1.1vw,20px)}.lyr4 .lyrics-wrap{max-width:none;gap:3vh}}
+.lword .ltext{font-size:22px;font-weight:300;color:rgba(255,255,255,.5);transition:color .15s ease}
+.lline.cur .lword .ltext{font-size:30px;font-weight:500;color:#fff;letter-spacing:-.01em}
+.lline.cur .lword.cur .ltext,.lline.cur .lword.done .ltext{color:var(--accent)}
+.lword.line .ltext{color:#fff}
+.lline.lheader{align-self:center;height:24px;border-radius:12px;background:rgba(243,184,255,.16);color:var(--accent);padding:0 10px;display:flex;align-items:center;font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}
+.lyr4{flex:1;min-height:0;overflow:hidden;padding:20px 22px;display:flex;flex-direction:column;align-items:center;justify-content:center}
+@media(min-width:900px){#app:has(.lyr4){max-width:none}.lyr4{padding:3vh 6vw}.lyr4 .lword .ltext{font-size:clamp(26px,2.6vw,44px)}.lyr4 .lline.cur .lword .ltext{font-size:clamp(36px,4vw,72px)}.lyr4 .lyrics-wrap{max-width:none;gap:4vh}}
 .empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;padding:40px 24px;color:var(--muted)}
-.empty h2{font-size:18px;color:var(--fg);margin:0}
-/* ---- Tabs ---- */
-#tabbar{flex:none;height:76px;border-top:1px solid var(--line);display:flex;padding:8px 6px 16px;background:var(--bg)}
-#tabbar button{flex:1;border:0;background:transparent;display:flex;flex-direction:column;align-items:center;gap:2px;color:var(--muted)}
-#tabbar button.on{color:var(--fg)}
-#tabbar button span.lbl{font-size:11px;font-weight:700}
+.empty h2{font-size:22px;font-weight:400;letter-spacing:-.01em;color:#fff;margin:0}
+/* ---- Tabs: a floating pill ---- */
+#tabbar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:30;height:68px;width:min(calc(100% - 28px),520px);border-radius:34px;background:rgba(42,18,80,.86);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.16);box-shadow:0 12px 40px rgba(14,6,32,.45);display:flex;align-items:center;justify-content:space-around;padding:0 8px}
+#tabbar button{flex:1;max-width:84px;height:54px;border:0;border-radius:27px;background:transparent;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:rgba(255,255,255,.82)}
+#tabbar button.on{color:#fff;background:rgba(255,255,255,.16)}
+#tabbar button.on .msi{font-variation-settings:'FILL' 1}
+#tabbar button span.lbl{font-size:11px;font-weight:600}
+@media(max-height:520px) and (orientation:landscape){
+  #tabbar{left:auto;right:calc(12px + env(safe-area-inset-right,0px));top:50%;bottom:auto;transform:translateY(-50%);width:72px;height:auto;flex-direction:column;padding:8px 0;gap:4px}
+  #tabbar button{flex:none;width:54px;height:54px}
+  #tabbar button span.lbl{display:none}
+  #main{padding-bottom:20px;padding-right:90px}
+  .lyr4 .lyrics-wrap{gap:14px}
+}
+.htitle{font-size:26px;font-weight:400;letter-spacing:-.02em;margin:0}
+.hsub{font-size:12px;color:var(--muted)}
 /* ---- Photos ---- */
 .photogrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.phototile{position:relative;border-radius:10px;overflow:hidden;background:var(--s1);aspect-ratio:1}
+@media(min-width:600px){.photogrid{grid-template-columns:repeat(3,1fr)}}
+.phototile{position:relative;border-radius:18px;overflow:hidden;background:var(--s1);aspect-ratio:1}
 .phototile img{width:100%;height:100%;object-fit:cover;display:block}
-.phototile .by{position:absolute;left:6px;bottom:6px;font-size:10px;background:rgba(0,0,0,.55);color:#fff;padding:2px 6px;border-radius:5px}
-.phototile .dl{position:absolute;right:6px;top:6px;width:26px;height:26px;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;display:flex;align-items:center;justify-content:center;text-decoration:none}
-.fabPhoto{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);width:58px;height:58px;border-radius:50%;border:0;background:var(--fg);color:var(--bg);display:flex;align-items:center;justify-content:center;box-shadow:0 8px 24px rgba(0,0,0,.2)}
+.phototile .by{position:absolute;left:8px;bottom:8px;font-size:11px;background:rgba(26,14,56,.7);color:#fff;padding:3px 9px;border-radius:999px}
+.phototile .dl{position:absolute;right:8px;top:8px;width:30px;height:30px;border-radius:50%;background:rgba(26,14,56,.7);color:#fff;display:flex;align-items:center;justify-content:center;text-decoration:none}
+.fabPhoto{position:fixed;bottom:calc(98px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);height:54px;padding:0 22px;border-radius:999px;border:0;background:#fff;color:var(--ink);display:flex;align-items:center;gap:8px;font-size:15px;font-weight:700;box-shadow:0 10px 30px rgba(14,6,32,.5);z-index:20}
+.fabPhoto:active{transform:translateX(-50%) scale(.97)}
 /* ---- Chat ---- */
-.chatRow{display:flex;flex-direction:column;gap:3px;max-width:80%}
-.chatRow .who{font-size:11px;color:var(--muted);font-weight:600}
-.chatRow .bub{padding:10px 14px;border-radius:14px;font-size:15px;line-height:1.35}
+.chatRow{display:flex;flex-direction:column;gap:4px;max-width:80%}
+.chatRow .who{font-size:11px;color:var(--muted);font-weight:700}
+.chatRow .bub{padding:10px 14px;border-radius:18px;font-size:15px;line-height:1.35}
 .chatRow .dmtag{font-size:10px;color:var(--muted);display:flex;align-items:center;gap:3px}
 /* ---- Requests ---- */
-.reqRow{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--line)}
-.voteBtn{min-width:58px;height:40px;border-radius:10px;border:1.5px solid var(--fg);background:transparent;color:var(--fg);font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:2px}
-.voteBtn.on{background:var(--fg);color:var(--bg)}
+.reqRow{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:20px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);margin-bottom:10px}
+.reqRow .t{font-size:15px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.reqRow .s{font-size:12px;color:var(--muted);margin-top:2px}
+.voteBtn{min-width:58px;height:40px;border-radius:999px;border:1px solid rgba(255,255,255,.24);background:transparent;color:#fff;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:2px;font-variant-numeric:tabular-nums;flex:none}
+.voteBtn.on{background:var(--accent);border-color:var(--accent);color:var(--ink)}
+.segm{display:flex;height:40px;border-radius:999px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);padding:3px}
+.segm button{flex:1;border:0;border-radius:999px;background:transparent;font-size:13px;font-weight:500;color:#fff}
+.segm button.on{background:#fff;color:var(--ink);font-weight:700}
 /* ---- Share overlay ---- */
-#shareOverlay{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;z-index:40;padding:40px 26px}
-#shareOverlay img{width:220px;height:220px;border-radius:12px;background:#fff;padding:12px}
-.toast{position:fixed;left:50%;bottom:96px;transform:translateX(-50%);background:#1b1b1b;color:#fff;font-size:13px;font-weight:600;padding:10px 16px;border-radius:10px;z-index:50}
+#shareOverlay{position:fixed;inset:0;background:rgba(26,14,56,.96);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;z-index:40;padding:40px 26px}
+#shareOverlay img{width:240px;height:240px;border-radius:24px;background:#fff;padding:14px}
+.toast{position:fixed;left:50%;bottom:calc(100px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:#fff;color:var(--ink);font-size:13px;font-weight:600;padding:10px 18px;border-radius:999px;z-index:50;box-shadow:0 10px 30px rgba(14,6,32,.4)}
+/* ---- TV / monitor ---- */
+body.tv #app{max-width:none;min-height:100vh}
+body.tv #head,body.tv #tabbarWrap{display:none}
+body.tv #main{padding:0;overflow:hidden}
+.tvw{flex:1;min-height:100vh;display:flex;flex-direction:column;padding:4.5vh 5vw 5vh;position:relative;overflow:hidden}
+.tvw::before,.tvw::after{content:'';position:absolute;left:50%;top:50%;border-radius:50%;background:rgba(255,255,255,.028);pointer-events:none}
+.tvw::before{width:140vh;height:140vh;margin:-70vh 0 0 -70vh}
+.tvw::after{width:92vh;height:92vh;margin:-46vh 0 0 -46vh}
+.tv-top{position:relative;display:flex;align-items:center;gap:2vw;font-size:clamp(14px,1.4vw,26px)}
+.tv-brand{display:flex;align-items:center;gap:.6em;font-weight:700;font-size:1.4em;letter-spacing:-.02em}
+.tv-mark{width:1.6em;height:1.6em;border-radius:.5em;background:var(--accent);color:var(--ink);display:flex;align-items:center;justify-content:center}
+.tv-sep{width:1px;height:1.6em;background:rgba(255,255,255,.2)}
+.tv-song{display:flex;align-items:center;gap:.8em;min-width:0}
+.tv-song .t{font-size:1.2em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tv-song .s{font-size:.8em;color:var(--muted)}
+.tv-top .live{margin-left:auto;font-size:.75em}
+.tv-prog{position:relative;height:6px;border-radius:3px;background:rgba(255,255,255,.12);margin-top:3vh;overflow:hidden}
+.tv-prog>div{height:100%;background:var(--accent)}
+.tv-lyrics{position:relative;flex:1;min-height:0;display:flex;align-items:center;justify-content:center}
+.tv-lyrics .lyrics-wrap{max-width:none;gap:5vh}
+.tv-lyrics .lword .ltext{font-size:clamp(24px,2.8vw,56px)}
+.tv-lyrics .lline.cur .lword .ltext{font-size:clamp(36px,5.4vw,110px);letter-spacing:-.02em}
+.tv-lyrics .lline.lheader{font-size:clamp(12px,1vw,18px);height:auto;padding:.4em 1em;border-radius:999px}
+.tv-foot{position:relative;display:flex;align-items:flex-end;justify-content:space-between;gap:3vw;font-size:clamp(13px,1.2vw,22px)}
+.tv-next .k{font-size:.8em;font-weight:700;letter-spacing:.14em;color:rgba(255,255,255,.55)}
+.tv-next .t{font-size:1.6em}
+.tv-next .s{color:rgba(255,255,255,.6)}
+.tv-cta{display:flex;align-items:center;gap:1.2em;border-radius:1.4em;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.16);padding:.8em 1.4em .8em .8em}
+.tv-cta img{width:7em;height:7em;border-radius:.7em;background:#fff;padding:.45em}
+.tv-cta .t{font-size:1.35em;font-weight:500;letter-spacing:-.01em}
+.tv-cta .s{color:rgba(255,255,255,.78)}
+.tv-cta b{color:var(--accent);font-weight:500}
+.tv-wait{position:relative;flex:1;display:flex;align-items:center;gap:6vw}
+.tv-wait img{width:min(34vh,30vw);height:min(34vh,30vw);border-radius:2.2vh;background:#fff;padding:1.6vh;box-shadow:0 0 80px rgba(243,184,255,.35);flex:none}
+.tv-wait h1{margin:0;font-size:clamp(40px,5.5vw,104px);font-weight:300;line-height:1.02;letter-spacing:-.03em}
+.tv-wait .u{font-size:clamp(16px,1.7vw,32px);color:rgba(255,255,255,.78);margin-top:2vh}
+.tv-wait .u b{color:var(--accent);font-weight:500}
+.tv-card{margin-top:5vh;display:flex;align-items:center;gap:1.2em;border-radius:1.4em;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);padding:1em 1.4em;font-size:clamp(14px,1.3vw,24px)}
+.tv-card .k{font-size:.8em;font-weight:700;letter-spacing:.14em;color:var(--accent)}
+.tv-card .t{font-size:1.6em}
+@media (prefers-reduced-motion:reduce){ button{transition:none} }
 </style>
+
 </head>
 <body>
 <div id="app">
@@ -131,10 +210,25 @@ function songTempo(s){
   const synced = !!(s && s.synced) && (t.mode ? t.mode==='synced' : true);
   return { synced, speed: synced ? 1 : (+t.speed || 1) };
 }
+// Artwork: a coloured square with two shapes, made from the name (the same
+// name always gets the same picture — matches the performer app)
+const N_ART = [['#F3B8FF','#6E1C78','#FFD8A8'],['#FFD8A8','#C2185B','#6E1C78'],['#9CC8FF','#2A1250','#FFD8A8'],['#FF9E9E','#6E1C78','#FFD8A8'],['#9FE3D2','#1A4D5C','#F3B8FF'],['#B9A6FF','#2A1250','#F3B8FF']];
+function nHash(str){ let h = 2166136261; str = String(str||''); for(let i=0;i<str.length;i++){ h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return h>>>0; }
+function nArt(seed, size, radius){
+  const h = nHash(seed), p = N_ART[h % N_ART.length], v = (h>>>4) % 3, r = radius!=null ? radius : Math.round(size*0.28);
+  let sh;
+  if(v===0) sh = `<i style="right:-24%;bottom:-24%;width:82%;height:82%;background:${p[1]}"></i><i style="left:14%;top:14%;width:24%;height:24%;background:${p[2]}"></i>`;
+  else if(v===1) sh = `<i style="left:-30%;top:-30%;width:96%;height:96%;background:${p[1]}"></i><i style="right:13%;bottom:13%;width:34%;height:34%;background:${p[2]}"></i>`;
+  else sh = `<i style="left:0;bottom:0;width:100%;height:50%;border-radius:999px 999px 0 0;background:${p[1]}"></i><i style="left:38%;top:14%;width:25%;height:25%;background:${p[2]}"></i>`;
+  return `<span class="nart" aria-hidden="true" style="width:${size}px;height:${size}px;border-radius:${r}px;background:${p[0]}">${sh}</span>`;
+}
+function songArt(s, size){ return nArt('song:'+((s && s.title) || 'Untitled song'), size); }
 function curWord(tm,t){ let i=-1; for(let k=0;k<tm.words.length;k++){ if(tm.words[k].t<=t) i=k; else break; } return i; }
 
 const params = new URLSearchParams(location.search);
 const gigId = params.get('gig');
+// the gig's TV / big-screen view (tv.html, or audience.html?tv=1)
+const TV = params.get('tv')==='1' || /\/tv(\.html)?$/.test(location.pathname);
 
 function lsGet(k,fallback){ try{ const v = localStorage.getItem(k); return v==null?fallback:v; }catch(e){ return fallback; } }
 function lsSet(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
@@ -153,7 +247,7 @@ const ST = {
   live:null, receivedAt:0, ended:false,
   photos:[], photosLoading:true,
   chat:[], chatLoading:true, chatDraft:'', chatDM:false, chatNameGate:false, chatNameDraft: lsGet('singa_aud_name',''),
-  requests:[], reqLoading:true, reqDraft:'',
+  requests:[], reqLoading:true, reqDraft:'', reqSort:'mine',
   toast:null
 };
 let toastTimer=null;
@@ -166,19 +260,17 @@ function applyTheme(){ document.documentElement.setAttribute('data-theme', ST.th
 function toggleTheme(){ ST.theme = ST.theme==='dark' ? 'light' : 'dark'; lsSet('singa_aud_theme', ST.theme); applyTheme(); render(); }
 
 function renderHead(){
-  const knob = ST.theme==='dark' ? 18 : 2;
-  return `<div class="darkToggle" data-act="toggleTheme">
-      <div class="track" style="--knob:${knob}px"><div class="dot"></div></div>
-      <span class="msi" style="font-size:19px">light_mode</span>
-    </div>
-    <span class="wordmark">Singa${ST.live && !ST.ended ? '<span class="live">LIVE</span>' : ''}</span>
-    <button class="iconbtn" data-act="toggleShare" title="Share">${icon(ST.share?'close':'qr_code_2',24)}</button>`;
+  return `<span class="wordmark">${N_WM}${ST.live && !ST.ended ? '<span class="live">LIVE</span>' : ''}</span>
+    <button class="iconbtn headbtn" data-act="toggleShare" title="Share" aria-label="${ST.share?'Close':'Share this gig'}">${icon(ST.share?'close':'qr_code_2',22)}</button>`;
 }
 
+// the guests' link (the TV shows it as a QR code)
+function guestUrl(){ return new URL('audience.html?gig='+encodeURIComponent(gigId||''), location.href).href; }
 async function ensureQr(){
-  if(ST.qrDataUrl || !window.QRCode) return;
+  if(ST.qrDataUrl || ST.qrTried || !window.QRCode) return;
+  ST.qrTried = true;
   try{
-    ST.qrDataUrl = await QRCode.toDataURL(location.href, { width:440, margin:1, color:{ dark:'#1b1b1b', light:'#ffffff' } });
+    ST.qrDataUrl = await QRCode.toDataURL(guestUrl(), { width:440, margin:1, color:{ dark:'#2A1250', light:'#ffffff' } });
     render();
   }catch(e){ console.error('Singa audience: QR generation failed', e); }
 }
@@ -188,7 +280,7 @@ function renderShareOverlay(){
   return `<div id="shareOverlay">
     <div style="font-size:21px;font-weight:700;text-align:center">Bring a friend</div>
     ${ST.qrDataUrl ? `<img src="${ST.qrDataUrl}" alt="QR code">` : `<div style="width:220px;height:220px;border-radius:12px;background:var(--s1)"></div>`}
-    <div style="font-size:13px;font-weight:600;word-break:break-all;text-align:center">${esc(location.href)}</div>
+    <div style="font-size:13px;font-weight:600;word-break:break-all;text-align:center">${esc(guestUrl())}</div>
   </div>`;
 }
 
@@ -197,14 +289,14 @@ function renderShareOverlay(){
    ============================================================ */
 function renderJoin(){
   const g = ST.gig;
-  return `<div class="pad" style="flex:1;display:flex;flex-direction:column;gap:14px">
-    <div style="font-size:13px;color:var(--muted);font-weight:600">You're invited to</div>
-    <div style="font-size:28px;font-weight:700;line-height:1.2">${esc(g.title||'Gig')}</div>
-    <div style="font-size:14px;color:var(--muted)">${g.owner_nickname?'Hosted by '+esc(g.owner_nickname)+' · ':''}${esc(g.date_label||'')}</div>
-    <div style="flex:1"></div>
-    <input class="field" placeholder="Your name (optional)" value="${esc(ST.nameDraft)}" data-bind="nameDraft">
-    <button class="btn" data-act="join">Join the gig</button>
-    <div style="font-size:12px;color:var(--muted);text-align:center">Follow the lyrics, request songs, share photos.</div>
+  return `<div class="join">
+    ${nArt('gig:'+(g.id||g.title), 240, 40)}
+    <h1>${esc(g.title||'Gig')}</h1>
+    <div style="font-size:14px;color:var(--muted)">${g.owner_nickname ? 'Hosted by '+esc(g.owner_nickname) : 'You\'re invited'}</div>
+    <div style="flex:1;min-height:16px"></div>
+    <label style="align-self:stretch;display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--muted);text-align:left">Your name (optional)<input class="field" placeholder="So others know who's singing" value="${esc(ST.nameDraft)}" data-bind="nameDraft" autocomplete="nickname"></label>
+    <button class="btn" style="align-self:stretch" data-act="join">Join the gig</button>
+    <div style="font-size:12px;color:var(--muted)">Follow the lyrics, request songs, share photos.<br>No account needed.</div>
   </div>`;
 }
 
@@ -247,14 +339,14 @@ function renderLyricsTab(){
     // a run of ((instrumental)) lines shows its heading once
     if(header && li>0 && isHeaderLine(tm.lines[li-1]) && headLabel(tm.lines[li-1])===headLabel(ws)) return '';
     if(header) return `<div class="lline lheader">${esc(headLabel(ws))}</div>`;
-    return `<div class="lline">${wordsHTML}</div>`;
+    const curLine = li===curLi && tempo.synced;
+    return `<div class="lline${curLine?' cur':''}" dir="auto">${wordsHTML}</div>`;
   }).join('');
+  if(TV) return renderTvLyrics(s, html, t/Math.max(1,tm.total));
   const statusLine = live.listening ? 'Listening for the performer to start singing…' : (!live.playing ? 'Paused' : '');
-  return `<div style="padding:14px 22px 4px">
-      <div style="font-size:11px;font-weight:800;letter-spacing:.08em;color:var(--accent)">${live.playing?'NOW PLAYING':(live.listening?'LISTENING':'PAUSED')}</div>
-      <div style="font-size:16px;font-weight:700;margin-top:2px">${esc(s.title||'Untitled song')}</div>
-      ${statusLine?`<div style="font-size:12px;color:var(--muted);margin-top:2px">${statusLine}</div>`:''}
-    </div>
+  const pct = Math.round(Math.min(1, t/Math.max(1,tm.total))*100);
+  return `<div class="nowbar">${songArt(s, 48)}<div style="min-width:0"><div class="t">${esc(s.title||'Untitled song')}</div><div class="s">${esc(statusLine || s.sub || (live.playing?'Now playing':''))}</div></div></div>
+    <div class="prog"><div style="width:${pct}%"></div></div>
     <div class="lyr4">
       <div class="lyrics-wrap">${html}</div>
     </div>`;
@@ -288,23 +380,37 @@ async function toggleVote(id){
   try{ const res = await sb.from('gig_requests').update({ votes:r.votes, voter_ids:r.voter_ids }).eq('id', id); if(res.error) console.error('Singa audience: vote update failed', res.error); }
   catch(e){ console.error('Singa audience: vote update failed', e); }
 }
+// Requests: yours first (the ones you asked for or voted on), or everyone's by votes, or the newest
 function renderRequestsTab(){
-  const rows = ST.requests.slice().sort((a,b)=> (b.votes-a.votes) || (new Date(a.created_at)-new Date(b.created_at)));
+  const all = ST.requests.slice();
+  const mineOf = r => (r.voter_ids||[]).includes(guestId);
+  const myCount = all.filter(mineOf).length;
+  const k = ST.reqSort;
+  let rows;
+  if(k==='mine') rows = all.filter(mineOf).sort((a,b)=> (b.votes-a.votes));
+  else if(k==='new') rows = all.sort((a,b)=> new Date(b.created_at||0)-new Date(a.created_at||0));
+  else rows = all.sort((a,b)=> (b.votes-a.votes) || (new Date(a.created_at)-new Date(b.created_at)));
+  const others = all.length - myCount;
+  const seg = [['mine','Mine'+(myCount?' · '+myCount:'')],['top','Popular'],['new','Newest']]
+    .map(([v,l])=>`<button class="${k===v?'on':''}" role="tab" aria-selected="${k===v}" data-act="setReqSort" data-id="${v}">${l}</button>`).join('');
+  const rowHTML = r=>{
+    const mine = mineOf(r), n = r.votes||0;
+    return `<div class="reqRow">${nArt('song:'+(r.title||''), 44, 12)}<div style="flex:1;min-width:0"><div class="t">${esc(r.title)}</div><div class="s">${esc(r.sub||'')}</div></div>
+      <button class="voteBtn ${mine?'on':''}" aria-pressed="${mine}" aria-label="${mine?'Remove your vote':'Vote'} for ${esc(r.title)} — ${n} vote${n===1?'':'s'}" data-act="toggleVote" data-id="${esc(r.id)}">${icon('arrow_drop_up',22)}${n}</button></div>`;
+  };
+  let body;
+  if(ST.reqLoading) body = `<div style="color:var(--muted);padding:16px 0">Loading…</div>`;
+  else if(rows.length) body = rows.map(rowHTML).join('') + (k==='mine' && others>0 ? `<div class="reqRow" style="border-style:dashed;background:transparent"><div style="flex:1;font-size:13px;color:var(--muted)">${others} more song${others===1?'':'s'} requested by others. Vote to move them up.</div><button class="btn-outline" data-act="setReqSort" data-id="top">See popular</button></div>` : '');
+  else if(k==='mine') body = `<div style="color:var(--muted);padding:16px 0">You haven't requested or voted for a song yet.</div>${others>0?`<button class="btn-outline" data-act="setReqSort" data-id="top">See what others asked for</button>`:''}`;
+  else body = `<div style="color:var(--muted);padding:16px 0">No requests yet — be the first.</div>`;
   return `<div class="pad" style="display:flex;flex-direction:column;gap:12px;flex:1;min-height:0">
-    <div style="font-size:24px;font-weight:700">Requests</div>
-    <div style="font-size:13px;color:var(--muted)">Vote for what's next. The band sees the top of the list.</div>
+    <div><div class="hsub">${esc(ST.gig.title||'')}</div><h1 class="htitle">Requests</h1></div>
     <div style="display:flex;gap:8px">
-      <input class="field" style="height:46px" placeholder="Request a song" value="${esc(ST.reqDraft)}" data-bind="reqDraft" data-enter="sendRequest">
-      <button class="btn" style="height:46px;width:auto;padding:0 18px" data-act="sendRequest">Send</button>
+      <input class="field" style="height:48px;border-radius:24px" placeholder="Request a song…" aria-label="Request a song" enterkeyhint="send" value="${esc(ST.reqDraft)}" data-bind="reqDraft" data-enter="sendRequest">
+      <button class="iconbtn" aria-label="Send request" data-act="sendRequest" style="width:48px;height:48px;border-radius:50%;background:#fff;color:var(--ink);flex:none">${icon('arrow_forward',22)}</button>
     </div>
-    <div style="overflow:auto;flex:1">
-      ${ST.reqLoading ? `<div style="color:var(--muted);padding:16px 0">Loading…</div>` :
-        (rows.length ? rows.map(r=>{
-          const mine = (r.voter_ids||[]).includes(guestId);
-          return `<div class="reqRow"><div style="flex:1"><div style="font-size:15px;font-weight:600">${esc(r.title)}</div><div style="font-size:12px;color:var(--muted);margin-top:2px">${esc(r.sub||'')}</div></div>
-            <button class="voteBtn ${mine?'on':''}" data-act="toggleVote" data-id="${esc(r.id)}">${icon('arrow_drop_up',20)}${r.votes||0}</button></div>`;
-        }).join('') : `<div style="color:var(--muted);padding:16px 0">No requests yet — be the first.</div>`)}
-    </div>
+    <div class="segm" role="tablist" aria-label="Sort requests">${seg}</div>
+    <div style="overflow:auto;flex:1;padding-top:4px">${body}</div>
   </div>`;
 }
 
@@ -336,14 +442,14 @@ async function uploadPhoto(file){
 }
 function renderPhotosTab(){
   return `<div class="pad" style="display:flex;flex-direction:column;gap:14px;flex:1;min-height:0;position:relative">
-    <div><div style="font-size:13px;font-weight:700">Photos</div><div style="font-size:22px;font-weight:700;line-height:1.25">${esc(ST.gig.title||'')}</div></div>
+    <div><div class="hsub">${esc(ST.gig.title||'')}</div><h1 class="htitle">Photos</h1></div>
     <div style="flex:1;overflow:auto;padding-bottom:70px">
       ${ST.photosLoading ? `<div style="color:var(--muted)">Loading…</div>` :
         (ST.photos.length ? `<div class="photogrid">${ST.photos.map(p=>`<div class="phototile"><img src="${esc(p.url)}" loading="lazy" alt="Photo by ${esc(p.author_name)}"><span class="by">${esc(p.author_name||'Someone')}</span><a class="dl" href="${esc(p.url)}" download title="Download">${icon('download',16)}</a></div>`).join('')}</div>`
           : `<div style="color:var(--muted);padding:16px 0">No photos yet — add the first one.</div>`)}
     </div>
     <input id="photoInput" type="file" accept="image/*" capture="environment" style="display:none">
-    <button class="fabPhoto" data-act="pickPhoto">${icon('photo_camera',26)}</button>
+    <button class="fabPhoto" data-act="pickPhoto">${icon('photo_camera',22)}Share a photo</button>
   </div>`;
 }
 
@@ -393,23 +499,74 @@ function renderChatTab(){
   const chatHTML = rows.map(m=>{
     const mine = m.guest_id===guestId && !m.is_owner;
     const align = (mine) ? 'flex-end' : 'flex-start';
-    const bg = m.is_owner ? 'var(--accent)' : (mine ? 'var(--fg)' : 'var(--s1)');
-    const col = (m.is_owner||mine) ? 'var(--bg)' : 'var(--fg)';
+    const bg = m.is_owner ? 'rgba(243,184,255,.22)' : (mine ? 'var(--accent)' : 'rgba(255,255,255,.1)');
+    const col = mine ? 'var(--ink)' : '#fff';
     return `<div class="chatRow" style="align-self:${align}">
       <span class="who" style="align-self:${align}">${esc(m.author_name||'Someone')}${m.is_owner?' · the band':''}</span>
-      <div class="bub" style="background:${bg};color:${col}">${esc(m.text)}</div>
+      <div class="bub" style="background:${bg};color:${col};border-radius:${mine?'18px 18px 6px 18px':'18px 18px 18px 6px'}">${esc(m.text)}</div>
       ${m.is_dm?`<span class="dmtag" style="align-self:${align}">${icon('lock',12)}Only you and the band can see this</span>`:''}
     </div>`;
   }).join('');
   return `<div class="pad" style="display:flex;flex-direction:column;gap:10px;flex:1;min-height:0">
-    <div style="font-size:24px;font-weight:700">Chat</div>
+    <div><div class="hsub">${esc(ST.gig.title||'')}</div><h1 class="htitle">Chat</h1></div>
     <div id="chatScroll" style="flex:1;overflow:auto;display:flex;flex-direction:column;gap:10px">
       ${ST.chatLoading ? `<div style="color:var(--muted)">Loading…</div>` : (chatHTML || `<div style="color:var(--muted)">No messages yet — say hi.</div>`)}
     </div>
     <div style="display:flex;gap:8px">
-      ${gs.dm ? `<button class="iconbtn" title="Message the band privately" data-act="toggleChatDM" style="height:46px;padding:0 12px;border-radius:23px;border:1.5px solid var(--fg);background:${ST.chatDM?'var(--fg)':'transparent'};color:${ST.chatDM?'var(--bg)':'var(--fg)'};font-size:12px;font-weight:700;gap:4px">${icon('lock',18)}Band</button>` : ''}
+      ${gs.dm ? `<button class="iconbtn" title="Message the band privately" data-act="toggleChatDM" style="height:46px;padding:0 12px;border-radius:23px;border:1px solid rgba(255,255,255,.24);background:${ST.chatDM?'#fff':'transparent'};color:${ST.chatDM?'var(--ink)':'#fff'};font-size:12px;font-weight:700;gap:4px">${icon('lock',18)}Band</button>` : ''}
       <input class="field" style="height:46px;border-radius:23px" placeholder="${ST.chatDM?'Message the band privately…':'Say something to everyone…'}" value="${esc(ST.chatDraft)}" data-bind="chatDraft" data-enter="sendChat">
-      <button class="iconbtn" data-act="sendChat" style="width:46px;height:46px;border-radius:50%;background:var(--fg);color:var(--bg)">${icon('arrow_upward',22)}</button>
+      <button class="iconbtn" aria-label="Send" data-act="sendChat" style="width:46px;height:46px;border-radius:50%;background:#fff;color:var(--ink);flex:none">${icon('arrow_upward',22)}</button>
+    </div>
+  </div>`;
+}
+
+/* ============================================================
+   TV / BIG SCREEN — the gig's lyrics for everyone in the room: no
+   chords, no markings, the next song, and a QR code that sends people
+   to the guest page to request what's next.
+   ============================================================ */
+const N_WM = `<svg class="wm" role="img" aria-label="Singa" viewBox="32 -226 2840 1101"><path fill="currentColor" d="M32 417H201Q204 446 228 464Q252 482 287 482Q319 482 336 470Q354 457 354 437Q354 413 329 402Q304 390 248 376Q188 362 148 346Q108 331 79 298Q50 264 50 207Q50 159 76 120Q103 80 154 57Q206 34 277 34H606V161H272Q242 161 226 172Q210 184 210 204Q210 228 236 240Q261 252 315 264Q377 280 416 296Q455 311 484 346Q514 380 515 438Q515 487 488 526Q460 564 408 586Q357 608 289 608Q216 608 159 583Q102 558 69 514Q36 471 32 417Z M757 42V600H586V42Z M1402 274V600H1232V297Q1232 241 1203 210Q1174 179 1125 179Q1076 179 1047 210Q1018 241 1018 297V600H847V42H1018V116Q1044 79 1088 58Q1132 36 1187 36Q1285 36 1344 100Q1402 163 1402 274Z M1871 121V42H2042V599Q2042 676 2012 738Q1981 801 1918 838Q1856 875 1763 875Q1639 875 1562 816Q1485 758 1474 658H1643Q1651 690 1681 708Q1711 727 1755 727Q1808 727 1840 696Q1871 666 1871 599V520Q1846 559 1802 584Q1758 608 1699 608Q1630 608 1574 572Q1518 537 1486 472Q1453 406 1453 320Q1453 234 1486 169Q1518 104 1574 69Q1630 34 1699 34Q1758 34 1802 58Q1847 82 1871 121ZM1749 183Q1698 183 1662 220Q1627 256 1627 320Q1627 384 1662 422Q1698 459 1749 459Q1800 459 1836 422Q1871 385 1871 321Q1871 257 1836 220Q1800 183 1749 183Z M2344 34Q2403 34 2448 58Q2492 82 2516 121V42H2687V600H2516V521Q2491 560 2446 584Q2402 608 2343 608Q2275 608 2219 572Q2163 537 2130 472Q2098 406 2098 320Q2098 234 2130 169Q2163 104 2219 69Q2275 34 2344 34ZM2394 183Q2343 183 2308 220Q2272 256 2272 320Q2272 384 2308 422Q2343 459 2394 459Q2445 459 2480 422Q2516 385 2516 321Q2516 257 2480 220Q2445 183 2394 183Z"/><path d="M2602 270V274C2602 407 2709 514 2842 514H2872" fill="none" stroke="currentColor" stroke-width="171"/><circle cx="672" cy="-122" r="104" fill="#F3B8FF" class="wm-dot"/></svg>`;
+const TV_MARK = `<span class="tv-mark" aria-hidden="true"><svg width="58%" height="58%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></svg></span>`;
+function tvNextSong(){
+  const ids = (ST.gig && ST.gig.setlist) || [];
+  if(!ST.live) return ids.length ? ST.songsById[ids[0]] : null;
+  const i = ids.indexOf(ST.live.songId);
+  return i>=0 && i+1<ids.length ? ST.songsById[ids[i+1]] : null;
+}
+function tvShortUrl(){ return guestUrl().replace(/^https?:\/\//,''); }
+function tvCta(){
+  ensureQr();
+  return `<div class="tv-cta">${ST.qrDataUrl?`<img src="${ST.qrDataUrl}" alt="QR code for the guest page">`:''}<div><div class="t">Choose the next song</div><div class="s">Scan, or visit <b>${esc(tvShortUrl())}</b><br>to request a song and vote.</div></div></div>`;
+}
+function renderTvLyrics(s, linesHTML, frac){
+  const nx = tvNextSong();
+  return `<div class="tvw">
+    <div class="tv-top"><span class="tv-brand">${N_WM}</span><span class="tv-sep"></span>
+      <span class="tv-song">${songArt(s, 52)}<span style="min-width:0"><div class="t">${esc(s.title||'Untitled song')}</div>${s.sub?`<div class="s">${esc(s.sub)}</div>`:''}</span></span>
+      <span class="live">LIVE</span></div>
+    <div class="tv-prog"><div style="width:${Math.round(Math.min(1,frac)*100)}%"></div></div>
+    <div class="tv-lyrics"><div class="lyrics-wrap">${linesHTML}</div></div>
+    <div class="tv-foot">${nx?`<div class="tv-next"><div class="k">UP NEXT</div><div class="t">${esc(nx.title||'Untitled song')}</div>${nx.sub?`<div class="s">${esc(nx.sub)}</div>`:''}</div>`:'<div></div>'}${tvCta()}</div>
+  </div>`;
+}
+function renderTv(){
+  if(!ST.ended && ST.live && ST.songsById[ST.live.songId] && !(ST.live.vcd>0)){
+    const html = renderLyricsTab();
+    if(html.indexOf('class="tvw"')>=0) return html;
+  }
+  ensureQr();
+  const first = tvNextSong();
+  const msg = ST.ended ? 'Thanks for singing along' : (ST.live && ST.live.vcd>0 ? 'Starting in '+Math.max(1,Math.ceil(ST.live.vcd))+'…' : 'Scan to<br>sing along');
+  return `<div class="tvw">
+    <div class="tv-top"><span class="tv-brand">${N_WM}</span><span style="margin-left:auto;color:var(--muted)">${esc(ST.gig.title||'')}</span></div>
+    <div class="tv-wait">
+      ${ST.qrDataUrl?`<img src="${ST.qrDataUrl}" alt="QR code for the guest page">`:''}
+      <div style="min-width:0">
+        <h1>${msg}</h1>
+        <div class="u">or visit <b>${esc(tvShortUrl())}</b></div>
+        ${first && !ST.ended ? `<div class="tv-card">${songArt(first, 72)}<div><div class="k">${ST.live?'UP NEXT':'FIRST UP'}</div><div class="t">${esc(first.title||'Untitled song')}</div>${first.sub?`<div style="color:var(--muted)">${esc(first.sub)}</div>`:''}</div></div>` : ''}
+        <div class="tv-card" style="margin-top:2vh;background:rgba(243,184,255,.14);border-color:rgba(243,184,255,.4)"><span class="msi" style="font-size:1.6em;color:var(--accent)">favorite</span><span>Request the songs you want to hear — the crowd votes on what's next.</span></div>
+      </div>
     </div>
   </div>`;
 }
@@ -421,10 +578,10 @@ function renderSetlistTab(){
   const ids = (ST.gig && ST.gig.setlist) || [];
   const cur = ST.live && !ST.ended ? ST.live.songId : null;
   return `<div class="pad" style="display:flex;flex-direction:column;gap:12px;flex:1;min-height:0">
-    <div style="font-size:24px;font-weight:700">Setlist</div>
+    <div><div class="hsub">${esc(ST.gig.title||'')}</div><h1 class="htitle">Setlist</h1></div>
     <div style="overflow:auto;flex:1">
       ${ids.length ? ids.map((id,i)=>{ const x = ST.songsById[id] || {}; const on = id===cur;
-        return `<div class="reqRow"><div style="width:26px;color:var(--muted);font-weight:700">${i+1}</div><div style="flex:1"><div style="font-size:15px;font-weight:${on?800:600}">${esc(x.title||'Untitled song')}</div><div style="font-size:12px;color:${on?'var(--accent)':'var(--muted)'};margin-top:2px;font-weight:${on?700:400}">${on?'Now playing':esc(x.sub||'')}</div></div></div>`; }).join('')
+        return `<div class="reqRow">${songArt(x, 40)}<div style="flex:1"><div style="font-size:15px;font-weight:${on?800:600}">${esc(x.title||'Untitled song')}</div><div style="font-size:12px;color:${on?'var(--accent)':'var(--muted)'};margin-top:2px;font-weight:${on?700:400}">${on?'Now playing':esc(x.sub||'')}</div></div></div>`; }).join('')
         : `<div style="color:var(--muted);padding:16px 0">The setlist is empty.</div>`}
     </div>
   </div>`;
@@ -441,10 +598,11 @@ function tabList(){
 function renderTabbar(){
   if(!ST.joined) return '';
   const tabs = tabList();
-  return `<div id="tabbar">${tabs.map(([v,ic,label])=>`<button class="${ST.tab===v?'on':''}" data-act="${v==='chat'?'openChatTab':'setTab'}" data-id="${v}">${icon(ic,22)}<span class="lbl">${label}</span></button>`).join('')}</div>`;
+  return `<div id="tabbar">${tabs.map(([v,ic,label])=>`<button class="${ST.tab===v?'on':''}"${ST.tab===v?' aria-current="page"':''} data-act="${v==='chat'?'openChatTab':'setTab'}" data-id="${v}">${icon(ic,22)}<span class="lbl">${label}</span></button>`).join('')}</div>`;
 }
 function renderMain(){
   if(ST.loading) return `<div class="empty"><h2>Loading…</h2></div>`;
+  if(TV && !ST.notFoundReason) return renderTv();
   if(ST.notFoundReason) return `<div class="empty"><h2>${esc(ST.notFoundReason.title)}</h2><div>${esc(ST.notFoundReason.sub)}</div></div>`;
   if(!ST.joined) return renderJoin();
   if(ST.tab==='requests') return renderRequestsTab();
@@ -454,7 +612,7 @@ function renderMain(){
   return renderLyricsTab();
 }
 function render(){
-  document.getElementById('head').innerHTML = (ST.loading||ST.notFoundReason) ? `<span class="wordmark">Singa</span>` : renderHead();
+  document.getElementById('head').innerHTML = (ST.loading||ST.notFoundReason) ? `<span class="wordmark">${N_WM}</span>` : renderHead();
   document.getElementById('main').innerHTML = renderMain();
   document.getElementById('tabbarWrap').innerHTML = renderTabbar();
   if(ST.share) document.body.insertAdjacentHTML('beforeend', renderShareOverlay());
@@ -483,12 +641,13 @@ document.body.addEventListener('click', e=>{
 });
 
 const ACTIONS = {
-  toggleTheme, toggleShare(){ ST.share=!ST.share; render(); },
+  toggleShare(){ ST.share=!ST.share; render(); },
   join(){ ST.name = ST.nameDraft.trim(); lsSet('singa_aud_name', ST.name); ST.joined=true; lsSet('singa_joined_'+gigId,'1'); ST.tab='lyrics'; render(); },
   setTab(id){ ST.tab=id; render(); },
   openChatTab,
   saveChatName,
   sendRequest, toggleVote,
+  setReqSort(id){ ST.reqSort=id; render(); },
   pickPhoto,
   toggleChatDM(){ ST.chatDM=!ST.chatDM; render(); },
   sendChat
@@ -498,7 +657,7 @@ const ACTIONS = {
    INIT + LIVE SYNC
    ============================================================ */
 async function init(){
-  applyTheme();
+  if(TV){ document.body.classList.add('tv'); ST.joined = true; ST.tab = 'lyrics'; document.title = 'Singa — TV'; }
   if(!gigId){ ST.loading=false; ST.notFoundReason={ title:'No gig link', sub:'This link is missing a gig.' }; render(); return; }
   let gigRes;
   try{ gigRes = await sb.from('gigs').select('*').eq('id', gigId).eq('is_public', true).maybeSingle(); }
@@ -525,7 +684,8 @@ async function init(){
     if(ST.live.ended){ ST.ended=true; ST.live=null; }
     render();
   }).subscribe(status=>{
-    if(status==='SUBSCRIBED'){ try{ channel.track({ role:'guest', name: ST.name||'' }); }catch(e){} }
+    // the TV isn't a guest, so it isn't counted
+    if(status==='SUBSCRIBED' && !TV){ try{ channel.track({ role:'guest', name: ST.name||'' }); }catch(e){} }
   });
 
   const dataChannel = sb.channel('gig-data-'+gigId);
