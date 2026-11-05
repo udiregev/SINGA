@@ -1,0 +1,285 @@
+/* ============================================================
+   Singa · Night design
+   Deep violet ground, frosted-glass surfaces, pink accent, white
+   pill buttons. Loaded last so it wins over the older light styles.
+   (Colours inside the screens themselves are swapped by nightify()
+   in singa-script-part11.js.)
+   ============================================================ */
+:root{
+  --n-bg1:#1A0E38; --n-bg2:#33145C; --n-bg3:#6E1C78; --n-ink:#2A1250; --n-sheet:#2A1250;
+  --n-pink:#F3B8FF; --n-lav:#B9A6FF; --n-peach:#FFD8A8; --n-mint:#9FE3D2; --n-sky:#9CC8FF; --n-coral:#FF9E9E; --n-danger:#FFB3C1;
+  --n-glass:rgba(255,255,255,.08); --n-glass2:rgba(255,255,255,.12); --n-glass3:rgba(255,255,255,.16);
+  --n-line:rgba(255,255,255,.12); --n-line2:rgba(255,255,255,.2);
+  --n-mute:rgba(255,255,255,.72); --n-mute2:rgba(255,255,255,.58);
+  /* motion (Emil Kowalski): strong ease-out for things that react, drawer curve for sheets */
+  --ease-out:cubic-bezier(.23,1,.32,1); --ease-in-out:cubic-bezier(.77,0,.175,1); --ease-drawer:cubic-bezier(.32,.72,0,1);
+  /* the old light palette, re-pointed */
+  --bg:transparent; --canvas:#1A0E38; --fg:#FFFFFF;
+  --m1:rgba(255,255,255,.72); --m2:rgba(255,255,255,.66); --m3:rgba(255,255,255,.74); --m4:rgba(255,255,255,.55);
+  --accent:#F3B8FF; --b1:rgba(255,255,255,.14); --b2:rgba(255,255,255,.1); --b3:rgba(255,255,255,.12); --b4:rgba(255,255,255,.12);
+  --chordblue:#F3B8FF;
+  color-scheme:dark;
+}
+html{-webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%;background:var(--n-bg1)}
+html,body{background:var(--n-bg1)}
+body{
+  font-family:'DM Sans',system-ui,sans-serif;color:#fff;
+  background:linear-gradient(172deg,var(--n-bg1) 0%,var(--n-bg2) 48%,var(--n-bg3) 100%) fixed var(--n-bg1);
+  min-height:100vh;min-height:100dvh;overscroll-behavior-y:none;
+}
+body.dark-invert{filter:none}
+#appRoot{background:transparent}
+a{color:var(--n-pink)}
+::placeholder{color:rgba(255,255,255,.45)}
+::selection{background:rgba(243,184,255,.35)}
+button,a,[data-act],[data-xact]{touch-action:manipulation}
+button,.btn,.seg button,.nnav-b,.chip,.ctile,.utile,.ce-root{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+input,textarea,select{font-size:16px}
+input,textarea{caret-color:var(--n-pink)}
+:focus-visible{outline:2px solid var(--n-pink);outline-offset:2px}
+
+/* ---- top bar ---- */
+#topbar{height:60px;padding-top:env(safe-area-inset-top,0px);height:calc(60px + env(safe-area-inset-top,0px))}
+#topbar .wordmark{font-family:'DM Sans',system-ui,sans-serif;font-weight:700;font-size:21px;letter-spacing:-.02em;color:#fff}
+#darkToggle{display:none !important}
+
+/* ---- screens ---- */
+.scr{animation:singaIn .28s var(--ease-out) both}
+@keyframes singaIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes singaPop{from{opacity:0;transform:scale(.96) translateY(6px)}to{opacity:1;transform:none}}
+body.has-nav .scr{padding-bottom:calc(120px + env(safe-area-inset-bottom,0px))}
+
+/* ---- buttons: pills, white primary, glass secondary; they press in ---- */
+.btn{border-radius:999px;font-weight:700;letter-spacing:.005em;transition:transform 160ms var(--ease-out),background-color .2s ease,color .2s ease,opacity .2s ease}
+.btn:active{transform:scale(.97)}
+.btn-dark{background:#fff;color:var(--n-ink)}
+.btn-outline{background:transparent;border:1px solid var(--n-line2);color:#fff}
+.btn-accent{background:var(--n-pink);color:var(--n-ink)}
+.btn-grey{background:var(--n-glass2);color:#fff}
+.btn-disabled{background:rgba(255,255,255,.14);color:rgba(255,255,255,.5)}
+.icon-btn{transition:transform 160ms var(--ease-out)}
+.icon-btn:active{transform:scale(.92)}
+.playbtn{background:#fff;color:var(--n-ink);box-shadow:0 8px 24px rgba(14,6,32,.35)}
+.link{color:var(--n-pink)}
+.link-muted{color:var(--n-mute)}
+.link-accent{color:var(--n-pink)}
+
+/* ---- inputs ---- */
+input[type=text],input:not([type]),input[type=email],input[type=password],input[type=search],.ipt{
+  background:var(--n-glass);border:1px solid var(--n-line2);border-radius:16px;color:#fff;
+  transition:border-color .2s ease,background-color .2s ease}
+input[type=text]:focus,input:not([type]):focus,input[type=password]:focus,.ipt:focus{border-color:rgba(243,184,255,.7);background:rgba(255,255,255,.1)}
+.search-field{background:var(--n-glass);border:1px solid var(--n-line2);border-radius:999px;color:#fff}
+.search-field input{background:transparent !important;border:0 !important;font-size:16px}
+select{background:transparent;color:#fff}
+select option{background:var(--n-sheet);color:#fff}
+
+/* ---- segmented controls, toggles ---- */
+.seg{border:1px solid var(--n-line2);background:var(--n-glass);border-radius:999px}
+.seg button{border-radius:999px;color:#fff;transition:background-color .2s ease,color .2s ease}
+.seg button.on{background:#fff;color:var(--n-ink)}
+.toggle,.darktoggle .pill{border-color:var(--n-line2)}
+
+/* ---- lists ---- */
+.list-row{border-bottom:1px solid var(--n-line)}
+.list-row .t{font-weight:500}
+.list-row .s{color:var(--n-mute)}
+.chev{color:var(--n-mute2)}
+@media (hover:hover) and (pointer:fine){ .list-row{transition:background-color .15s ease} .list-row:hover{background:rgba(255,255,255,.04)} }
+.nrow{gap:14px}
+.nsm{display:flex;align-items:center;gap:14px}
+.nsm-t{min-width:0;flex:1}
+.nrow .t,.nrow .tt{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* ---- artwork ---- */
+.nart{position:relative;display:inline-block;flex:none;overflow:hidden;vertical-align:middle}
+.nart i{position:absolute;border-radius:50%;display:block}
+.nstub{position:relative;flex:none;width:58px;align-self:stretch;min-height:58px;overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.05}
+.nstub i{position:absolute;right:-12px;top:-12px;width:30px;height:30px;border-radius:50%;opacity:.9}
+.nstub i.b{left:-22px;right:auto;top:auto;bottom:-26px;width:60px;height:60px;opacity:.28}
+.nstub b{position:relative;font-weight:700}
+.nstub .mon{font-size:10px;letter-spacing:.12em}
+.nstub .day{font-size:20px;letter-spacing:-.02em}
+.nstub.big{width:92px}
+.nstub.big .mon{font-size:12px}
+.nstub.big .day{font-size:36px}
+.nstub.big i{width:44px;height:44px;right:-14px;top:-14px}
+.nstub.big i.b{width:96px;height:96px;left:-34px;bottom:-40px}
+
+/* ---- gig tickets ---- */
+.nticket{display:flex;align-items:stretch;border-radius:18px;overflow:hidden;background:var(--n-glass);border:1px solid var(--n-line);cursor:pointer;margin-bottom:10px;transition:transform 160ms var(--ease-out),background-color .15s ease}
+.nticket:active{transform:scale(.985)}
+.nticket .nt-body{flex:1;min-width:0;padding:11px 14px;border-left:2px dashed rgba(255,255,255,.18);display:flex;flex-direction:column;justify-content:center}
+.nticket .t{font-size:15px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nticket .s{font-size:12px;color:var(--n-mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+.nticket>.msi{align-self:center;margin-right:10px;color:var(--n-mute2)}
+.nlive{align-self:center;margin-right:12px;font-size:10px;font-weight:700;letter-spacing:.1em;background:var(--n-pink);color:var(--n-ink);padding:4px 8px;border-radius:999px}
+@media (hover:hover) and (pointer:fine){ .nticket:hover{background:var(--n-glass2)} }
+
+/* ---- Home ---- */
+.nhome{max-width:1180px;width:100%;margin:0 auto}
+.nh-head{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.nh-hi{font-size:14px;color:var(--n-mute)}
+.nh-name{font-size:28px;font-weight:500;letter-spacing:-.02em;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nh-avatar{flex:none;width:46px;height:46px;border-radius:50%;background:var(--n-pink) !important;color:var(--n-ink) !important;font-size:18px;font-weight:700}
+.nh-search{margin:16px 0 22px;max-width:520px;gap:10px;padding:0 16px}
+.nh-col{display:flex;flex-direction:column;gap:26px;min-width:0}
+.nh-h{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.nh-h h2{margin:0;font-size:18px;font-weight:500;cursor:pointer}
+.nh-add{width:34px;height:34px;border-radius:50%;background:var(--n-glass) !important;border:1px solid var(--n-line) !important;color:#fff}
+.nh-all{margin-left:auto;font-size:13px}
+.nh-more{display:inline-block;margin-top:14px;font-size:14px}
+.nh-h .hsort{margin-left:auto}
+.nhero{display:flex;align-items:stretch;border-radius:26px;overflow:hidden;background:rgba(255,255,255,.1);border:1px solid var(--n-glass3);cursor:pointer;min-height:132px;transition:transform 160ms var(--ease-out)}
+.nhero:active{transform:scale(.985)}
+.nhero .nh-body{flex:1;min-width:0;border-left:2px dashed rgba(255,255,255,.22);padding:16px 18px;display:flex;flex-direction:column;gap:8px}
+.nh-k{font-size:11px;font-weight:700;letter-spacing:.14em;color:var(--n-coral)}
+.nh-t{font-size:20px;line-height:1.25;letter-spacing:-.01em;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.nh-go{margin-top:auto;align-self:flex-start;display:inline-flex;align-items:center;gap:6px;height:38px;padding:0 16px;border-radius:999px;background:#fff;color:var(--n-ink);font-size:14px;font-weight:700}
+.ntiles{display:flex;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;margin-right:calc(-1 * var(--pad));padding-right:var(--pad);overscroll-behavior-x:contain}
+.ntiles::-webkit-scrollbar{display:none}
+.ntile{flex:none;width:112px;display:flex;flex-direction:column;gap:6px;cursor:pointer;scroll-snap-align:start;transition:transform 160ms var(--ease-out)}
+.ntile:active{transform:scale(.97)}
+.ntile .t{font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ntile .s{font-size:12px;color:var(--n-mute);margin-top:-4px}
+.nhome .home-grid{gap:26px}
+@media(min-width:760px){ .nhome .home-grid{gap:48px} .nh-name{font-size:32px} }
+.hsort select{color:#fff}
+
+/* ---- bottom tab bar ---- */
+#nNav{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:90;height:64px;border-radius:32px;background:rgba(42,18,80,.86);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.16);box-shadow:0 12px 40px rgba(14,6,32,.45);display:flex;align-items:center;gap:4px;padding:0 8px}
+#nNav[hidden]{display:none}
+.nnav-b{height:50px;min-width:50px;border-radius:25px;border:0;background:transparent;color:#fff;display:flex;align-items:center;justify-content:center;gap:8px;padding:0 13px;font-size:14px;font-weight:500;transition:background-color .2s ease,transform 160ms var(--ease-out)}
+.nnav-b:active{transform:scale(.94)}
+.nnav-b span:not(.msi){display:none}
+.nnav-b.on{background:rgba(255,255,255,.16)}
+.nnav-b.on .msi{font-variation-settings:'FILL' 1}
+@media(min-width:700px){ .nnav-b{padding:0 18px} .nnav-b span:not(.msi){display:inline} }
+/* phones on their side: the bar becomes a rail on the left */
+@media(max-height:520px) and (orientation:landscape){
+  #nNav{left:calc(10px + env(safe-area-inset-left,0px));top:50%;bottom:auto;transform:translateY(-50%);height:auto;width:60px;flex-direction:column;padding:8px 0}
+  body.has-nav #screen{padding-left:76px}
+  body.has-nav .scr{padding-bottom:40px}
+  .nnav-b{width:46px;min-width:46px;height:46px;padding:0}
+  .nnav-b span:not(.msi){display:none !important}
+  .srow .s-content{width:150px}
+  .srow .s-status{width:auto}
+  .n-stage{width:190px}
+}
+.srow .s-status:empty{display:none}
+
+/* ---- toasts, modals, side panels ---- */
+.toast{background:#fff;color:var(--n-ink);border-radius:999px;font-weight:600;box-shadow:0 12px 30px rgba(14,6,32,.4);animation:toastUp .28s var(--ease-out) both}
+body.has-nav .toast-box{bottom:calc(96px + env(safe-area-inset-bottom,0px))}
+.modal-backdrop{background:rgba(14,6,32,.62)}
+.modal{background:var(--n-sheet);border:1px solid var(--n-line2);border-radius:28px;color:#fff;box-shadow:0 24px 70px rgba(0,0,0,.45);animation:singaPop .24s var(--ease-out) both}
+.modal .msub{color:var(--n-mute)}
+.sidepanel-backdrop{background:rgba(14,6,32,.55)}
+.sidepanel{background:var(--n-sheet);color:#fff;box-shadow:-12px 0 40px rgba(0,0,0,.4);animation:slideInR .32s var(--ease-drawer) both;overscroll-behavior:contain;padding-bottom:calc(40px + env(safe-area-inset-bottom,0px))}
+.ap-h{color:var(--n-mute2)}
+.gigmenu-item{color:#fff}
+@media (hover:hover) and (pointer:fine){ .gigmenu-item:hover{background:var(--n-glass);color:#fff} }
+@media(max-width:759px){ .gigmenu{background:var(--n-sheet)} }
+.gigmenu-backdrop.open{background:rgba(14,6,32,.55)}
+.ntv-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;width:100%;margin-top:6px;padding:12px 14px;border-radius:18px;background:var(--n-glass);border:1px solid var(--n-line);font-size:13px}
+.qrgrid div{border-radius:1px}
+
+/* ---- lyrics ---- */
+.lword .ltext{color:rgba(255,255,255,.86)}
+.lline.lheader .hc{color:#fff}
+.lword.editable{transition:background-color .15s ease}
+@media (hover:none){ .lword.editable:hover{background:transparent} }
+.lword .lchord.chip{background:rgba(255,255,255,.1)}
+.lword.drop-on{background:rgba(243,184,255,.18) !important}
+.chord-ghost{background:#fff;color:var(--n-ink)}
+.nextbar,.jobbar{background:rgba(255,255,255,.16)}
+.nextbar>div{background:var(--n-pink)}
+.jobbar>div{background:var(--n-pink)}
+.lyr-win,.lyr-scroll{direction:inherit}
+.lline{unicode-bidi:plaintext}
+
+/* ---- markings: the note sits beside a curved arrow that lands on its word,
+   and the word itself is underlined, so it's clear which word it means ---- */
+.lline .mtext,.markbubble .mtext,.lmark .mtext{color:var(--n-pink)}
+.marr-c{position:relative;flex:none;align-self:stretch;width:16px;margin:-6px 0 -3px 3px;color:var(--n-pink);pointer-events:none}
+.marr-c .marr-svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible;fill:none;stroke:currentColor;stroke-width:2.2px;stroke-linecap:round;stroke-linejoin:round}
+.marr-c .mt-c{position:absolute;left:12px;bottom:100%;margin-bottom:-6px;white-space:nowrap;font-family:Caveat,cursive;font-size:25px;font-weight:600;line-height:1;color:var(--n-pink)}
+.lchord-row.solo .marr-c{margin-left:calc(50% - 4px)}
+.lword:has(.marr-c) .ltext,.ltext:has(.mside-abs){text-decoration:underline;text-decoration-color:rgba(243,184,255,.85);text-decoration-thickness:2px;text-underline-offset:.2em;text-decoration-skip-ink:none}
+.mside-abs{color:var(--n-pink)}
+.mside-abs .marr-h{color:var(--n-pink)}
+.mside-abs.l .marr-h{margin-top:12px}
+.mside-abs.r .marr-h{margin-top:12px}
+
+/* ---- marking editor: a dark pink note ---- */
+.sticky{background:var(--n-sheet);border:1px solid rgba(243,184,255,.5);box-shadow:0 18px 40px rgba(14,6,32,.5);color:#fff;transform:rotate(-1deg)}
+.sticky .sticky-ipt{color:var(--n-pink);border-bottom-color:rgba(243,184,255,.4)}
+.sticky-ipt::placeholder{color:rgba(243,184,255,.5)}
+.sticky-x,.sticky-acts a{color:var(--n-pink)}
+.sticky-acts a.save{color:#fff}
+
+/* ---- chords step ---- */
+.ctile,.utile{background:var(--n-glass);border:1px solid var(--n-line2);color:#fff;border-radius:14px;transition:transform 160ms var(--ease-out),background-color .15s ease}
+.ctile:active,.utile:active{transform:scale(.96)}
+.ctile.on,.utile.on{background:#fff;color:var(--n-ink);border-color:#fff}
+.ce-root{color:rgba(255,255,255,.4)}
+.ce-root.on{color:#fff}
+.ce-acc{border-color:var(--n-line2);color:var(--n-mute)}
+.ce-acc.on{background:#fff;border-color:#fff;color:var(--n-ink)}
+.ce-used{border-bottom-color:var(--n-line)}
+.chiprow-chevron{background:var(--n-glass);border-color:var(--n-line2);color:#fff}
+
+/* ---- players and chord diagrams ---- */
+.piano{border-color:rgba(255,255,255,.5)}
+.diaNext{color:rgba(255,255,255,.55)}
+.land-dia{border-left-color:var(--n-line)}
+.gigplayer-side{border-color:var(--n-line)}
+.phototile{background:repeating-linear-gradient(135deg,rgba(255,255,255,.06) 0 8px,rgba(255,255,255,.1) 8px 16px)}
+.job{border-color:var(--n-line)}
+
+/* ---- sign in ---- */
+.n-stage{width:min(320px,82vw);height:auto;margin-top:6px}
+.n-stage .n-note{animation:nFloat 4s ease-in-out infinite}
+.n-stage .n-note2{animation-delay:-2s}
+.n-hand{display:block;width:min(300px,76vw);margin:2px auto 0}
+@media(max-height:520px) and (orientation:landscape){ .n-hand{width:160px} }
+@keyframes nFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+
+
+/* ---- wordmark ---- */
+.wm{display:block;height:1em;width:auto;aspect-ratio:2840/1101;overflow:visible;color:#fff}
+#topbar .wordmark{font-size:26px;line-height:0;display:flex;justify-content:center}
+#topbar .wordmark .wm{height:26px}
+.nh-brand{margin:0;line-height:0;cursor:pointer}
+.nh-brand .wm{height:40px}
+@media(min-width:760px){ .nh-brand .wm{height:46px} }
+/* Home has its own header with the wordmark, so the top bar steps aside */
+body.n-home #topbar{display:none}
+body.n-home .nhome{padding-top:calc(22px + env(safe-area-inset-top,0px))}
+
+/* ---- gig tickets: the third line (time or year), and the artwork stub for gigs with no date ---- */
+.nstub .yr{position:relative;font-size:10px;font-weight:700;letter-spacing:.04em;opacity:.78;margin-top:3px}
+.nstub.big .yr{font-size:12px}
+.nstub.art i{opacity:1}
+.nstub.art i.b{opacity:1;width:64px;height:64px;left:-20px;bottom:-24px}
+.nstub.big.art i.b{width:104px;height:104px;left:-30px;bottom:-38px}
+.nstub .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* ---- markings: room above every row a marked line wraps onto, so a note never sits on the lyrics ---- */
+.lline:has(.marr-c){row-gap:26px;padding-top:6px}
+.marr-c.flip .mt-c{left:auto;right:12px}
+.marr-c.flip .marr-svg{transform:scaleX(-1)}
+
+/* ---- gig player: the chord sits on a glass panel, in every orientation ---- */
+.gigplayer-grid #chordDiagramBox{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);border-radius:28px;box-sizing:border-box}
+.gigplayer-grid .land-dia{margin:2px 0 14px;border-left:1px solid rgba(255,255,255,.14)}
+
+/* ---- reduced motion: fades only, nothing slides or floats ---- */
+@media (prefers-reduced-motion:reduce){
+  .scr{animation:singaFade .2s ease both}
+  .modal{animation:singaFade .2s ease both}
+  .sidepanel{animation:singaFade .2s ease both}
+  .n-stage .n-note{animation:none}
+  .n-hand .n-mic{animation:none}
+  .lline{transition:opacity .3s ease !important}
+}
