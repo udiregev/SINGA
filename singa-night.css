@@ -122,7 +122,8 @@ select option{background:var(--n-sheet);color:#fff}
 .nh-hi{font-size:14px;color:var(--n-mute)}
 .nh-name{font-size:28px;font-weight:500;letter-spacing:-.02em;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .nh-avatar{flex:none;width:46px;height:46px;border-radius:50%;background:var(--n-pink) !important;color:var(--n-ink) !important;font-size:18px;font-weight:700}
-.nh-search{margin:16px 0 22px;max-width:520px;gap:10px;padding:0 16px}
+.nh-search{margin:16px 0 22px;max-width:520px;gap:4px;padding:0 4px 0 18px;cursor:text}
+.nh-sbtn{width:44px;height:44px;flex:none;border-radius:50%;color:#fff}
 .nh-col{display:flex;flex-direction:column;gap:26px;min-width:0}
 .nh-h{display:flex;align-items:center;gap:8px;margin-bottom:12px}
 .nh-h h2{margin:0;font-size:18px;font-weight:500;cursor:pointer}
@@ -308,6 +309,13 @@ body.chord-armed .ce-lyrics .lword[data-drop]{cursor:copy}
 .ce-lyrics .marr-c,.ce-lyrics .mside-abs,.ce-lyrics .lmark{display:none !important}
 .ce-lyrics .lword .ltext{text-decoration:none !important}
 @media (max-height:520px){ .ce-picker{padding:8px 6px;width:112px} .ce-main{padding:10px 14px 4px} }
+
+
+/* ---- the old "Play Sample" button is retired ---- */
+[data-act="playSample"]{display:none !important}
+/* ---- "Got it!" illustration ---- */
+.n-horns{display:block;width:min(280px,72vw);height:auto;margin:0 auto}
+@media(max-height:520px) and (orientation:landscape){ .n-horns{width:150px} }
 
 /* ---- reduced motion: fades only, nothing slides or floats ---- */
 @media (prefers-reduced-motion:reduce){

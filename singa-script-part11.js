@@ -143,7 +143,7 @@ function nightify(html){
   // markings above a word: the text moves next to a curved arrow that lands on the word
   html = html.replace(/<span class="mk mk-c"([^>]*)><span class="mtext">([\s\S]*?)<\/span><\/span><\/span>([\s\S]*?)<span class="marr-v"( style="[^"]*")?><\/span>/g,
     (m, mkStyle, txt, between, arrStyle)=>`</span>${between}<span class="marr-c"${arrStyle||''}>${N_CURVE}<span class="mtext mt-c">${txt}</span></span>`);
-  if(html.indexOf('class="mascot"')>=0) html = html.replace(/<svg class="mascot"[\s\S]*?<\/svg>/, N_STAGE_SVG).replace(/make some noise!/, 'Let’s make some noise');
+  if(html.indexOf('class="mascot"')>=0 && html.indexOf('make some noise!')>=0) html = html.replace(/<svg class="mascot"[\s\S]*?<\/svg>/, N_STAGE_SVG).replace(/make some noise!/, 'Let’s make some noise');
   return html;
 }
 const N_CURVE = `<svg class="marr-svg" viewBox="0 0 18 30" preserveAspectRatio="none" aria-hidden="true"><path d="M17 1.5C8 2 3.5 9 4.2 26.5" vector-effect="non-scaling-stroke"/><path d="M0.8 21.5L4.3 27.8L8.4 22" vector-effect="non-scaling-stroke"/></svg>`;
@@ -165,7 +165,6 @@ const N_STAGE_SVG = `<svg class="n-stage n-hand" viewBox="0 0 320 290" aria-hidd
     <linearGradient id="hSkin2" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFB0D0"/><stop offset="0.55" stop-color="#FF3D84"/><stop offset="1" stop-color="#6A4BFF"/></linearGradient>
     <linearGradient id="hArm" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FF5C96"/><stop offset="1" stop-color="#3A6BFF"/></linearGradient>
     <linearGradient id="hHandle" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#140733"/><stop offset="0.55" stop-color="#2A1260"/><stop offset="0.8" stop-color="#5B3DD6"/><stop offset="1" stop-color="#1A0B44"/></linearGradient>
-    <linearGradient id="hPinky" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#FF4D8D"/><stop offset="1" stop-color="#FFB0D0"/></linearGradient>
     <radialGradient id="hHead" cx="0.35" cy="0.3" r="0.8"><stop offset="0" stop-color="#FF9BF5"/><stop offset="0.55" stop-color="#D21CFF"/><stop offset="1" stop-color="#5B14B8"/></radialGradient>
     <pattern id="hStripeH" width="10" height="10" patternUnits="userSpaceOnUse"><rect width="10" height="5" fill="#E61CFF"/></pattern>
     <pattern id="hStripeV" width="9" height="9" patternUnits="userSpaceOnUse"><rect width="4" height="9" fill="#6E14C8"/></pattern>
@@ -205,8 +204,7 @@ const N_STAGE_SVG = `<svg class="n-stage n-hand" viewBox="0 0 320 290" aria-hidd
         <rect x="-30" y="-44" width="66" height="25" rx="12.5" fill="url(#hSkin)"/>
         <rect x="-32" y="-20" width="70" height="25" rx="12.5" fill="url(#hSkin)"/>
         <rect x="-32" y="4" width="68" height="25" rx="12.5" fill="url(#hSkin)"/>
-        <path d="M6 49Q32 48 54 33" fill="none" stroke="rgba(90,0,70,0.35)" stroke-width="19" stroke-linecap="round"/><path d="M6 49Q32 48 54 33" fill="none" stroke="url(#hPinky)" stroke-width="16" stroke-linecap="round"/><ellipse cx="52" cy="34" rx="4.2" ry="3" transform="rotate(-34 52 34)" fill="#FFD6E8" stroke="none" opacity="0.8"/>
-        <rect x="-30" y="28" width="40" height="24" rx="12" fill="url(#hSkin2)"/>
+        <rect x="-30" y="28" width="60" height="24" rx="12" fill="url(#hSkin)"/>
       </g>
       <rect x="-54" y="-62" width="66" height="25" rx="12.5" transform="rotate(-14 -21 -50)" fill="url(#hSkin2)" stroke="rgba(90,0,70,0.35)" stroke-width="1.5"/>
       <ellipse cx="-2" cy="-58" rx="7" ry="5" transform="rotate(-14 -2 -58)" fill="#FFD6E8" opacity="0.7"/>
@@ -243,8 +241,13 @@ songRowHome = function(s){
 };
 const _nSongRowList = songRowList;
 songRowList = function(id, badgeText, badgeCol, from, rowAct, compact){
-  const html = _nSongRowList(id, badgeText, badgeCol, from, rowAct, compact);
   const s = song(id);
+  // a song someone else made, in your Songs list: it can be removed (from your songs) like yours can be deleted
+  if(!rowAct && from==='list' && ST.screen==='list' && ST.listKind==='songs' && s.mine===false && D.order.includes(id)){
+    const pl = ST.listPl ? D.playlists.find(p=>p.id===ST.listPl) : null;
+    if(!pl || pl.auto) rowAct = 'unlib';
+  }
+  const html = _nSongRowList(id, badgeText, badgeCol, from, rowAct, compact);
   return html.replace('<div class="sm">', `<div class="sm nsm">${nArt('song:'+songTitle(s), 44)}<div class="nsm-t">`).replace('\n    <div class="scol s-content">', '</div>\n    <div class="scol s-content">').replace('class="list-row has-act srow', 'class="list-row has-act srow nrow');
 };
 playlistRow = function(p){
@@ -303,10 +306,10 @@ renderHome = function(){
       <h1 class="nh-brand" data-act="goHome">${N_WM}</h1>
       <button class="icon-btn nh-avatar" title="Account & settings" aria-label="Account and settings" data-act="openAccount">${initial}</button>
     </div>
-    <div class="search-field nh-search">
-      ${icon('search',20)}
+    <label class="search-field nh-search">
       <input placeholder="Search songs, playlists or gigs" aria-label="Search" value="${esc(ST.homeQuery)}" data-bind="homeQuery" data-key="runSearch" inputmode="search" enterkeyhint="search">
-    </div>
+      <button class="icon-btn nh-sbtn" aria-label="Search" data-act="runSearch">${icon('search',22)}</button>
+    </label>
     <div class="home-grid">
       <div class="nh-col">
         ${hero ? nHeroGig(hero) : `<div class="nhero empty" data-act="newItem" data-kind="gig"><span class="nstub big" style="background:#B9A6FF;color:#2A1250"><span class="msi" style="font-size:30px">add</span></span><div class="nh-body"><span class="nh-k">GIGS</span><span class="nh-t">Plan your first gig</span></div></div>`}
@@ -405,6 +408,127 @@ document.addEventListener('click', function(e){
   if(s && s.chords && s.chords[id]===ST.chordArmed){ Actions.removeChord({ id }); return; }
   dropChord(ST.chordArmed, null, id);
 });
+
+/* ---- the remove button for songs you added from someone else ---- */
+const _nRowAct = rowActHTML;
+rowActHTML = function(kind, id){
+  if(kind!=='unlib') return _nRowAct(kind, id);
+  return `<button class="row-act" data-act="askRowAction" data-kind="unlib" data-id="${esc(id)}" title="Remove from my songs" aria-label="Remove from my songs">${icon('delete',20)}</button>`;
+};
+/* ---- song menu: on someone else's song, "Copy and edit" goes first ---- */
+const _nSongMenu = renderSongMenu;
+renderSongMenu = function(){
+  let h = _nSongMenu();
+  const m = h.match(/<a class="link"[^>]*data-act="copySong">[^<]*<\/a>/);
+  if(!m) return h;
+  h = h.replace(m[0], '');
+  return h.replace('close</span></span>', 'close</span></span>\n      '+m[0]);
+};
+/* ---- nickname: typing in the box now reaches Save ---- */
+Binds.nickInput = function(v){ ST.editNick = v; };
+/* ---- a deleted song leaves every playlist and gig straight away ---- */
+const _nDeleteEverywhere = deleteSongEverywhere;
+deleteSongEverywhere = function(id){
+  const gigs = D.gigs.filter(g=>(g.setlist||[]).includes(id)).map(g=>g.id);
+  const pls = D.playlists.filter(p=>!p.auto && (p.ids||[]).includes(id)).map(p=>p.id);
+  _nDeleteEverywhere(id);
+  ST.played = (ST.played||[]).filter(x=>x!==id);
+  gigs.forEach(gid=>{ const g = D.gigs.find(x=>x.id===gid); if(g){ clearTimeout(_saveTimers['gig:'+gid]); saveGigRow(g); } });
+  pls.forEach(pid=>{ const p = D.playlists.find(x=>x.id===pid); if(p){ clearTimeout(_saveTimers['pl:'+pid]); savePlaylistRow(p); } });
+};
+// ...and songs deleted earlier (or on another device) are cleared out of your gigs and playlists when they load
+const _nLoadUserData = loadUserData;
+loadUserData = async function(){
+  await _nLoadUserData();
+  if(!ST.userId) return;
+  try{
+    const want = new Set();
+    D.gigs.forEach(g=>{ if(g.mine!==false) (g.setlist||[]).forEach(id=>{ if(!D.songs[id]) want.add(id); }); });
+    D.playlists.forEach(p=>{ if(!p.auto && p.mine!==false) (p.ids||[]).forEach(id=>{ if(!D.songs[id]) want.add(id); }); });
+    if(!want.size) return;
+    const res = await sb.from('songs').select('id').in('id', [...want]);
+    if(res.error) return;
+    const alive = new Set((res.data||[]).map(r=>r.id));
+    const gone = new Set([...want].filter(id=>!alive.has(id)));
+    if(!gone.size) return;
+    D.gigs.forEach(g=>{ if(g.mine===false) return; const n = (g.setlist||[]).filter(id=>!gone.has(id)); if(n.length!==(g.setlist||[]).length){ g.setlist = n; saveGigRow(g); } });
+    D.playlists.forEach(p=>{ if(p.auto || p.mine===false) return; const n = (p.ids||[]).filter(id=>!gone.has(id)); if(n.length!==(p.ids||[]).length){ p.ids = n; savePlaylistRow(p); } });
+    render();
+  }catch(e){ console.error('Singa: tidying deleted songs failed', e); }
+};
+/* ---- gig: tapping another song in the list loads it; the performer presses Play ---- */
+Actions.pickGigSong = function(d){
+  const g = gigObj(); if(!g) return;
+  const cur = gigSongId();
+  if(d.id===cur) return;
+  const gStarted = ST.playing || ST.t>0;
+  const played = (gStarted && cur && !ST.played.includes(cur)) ? [...ST.played, cur] : ST.played;
+  stopOnsetListening();
+  ST.vcd = 0; ST.gigCur = d.id; ST.played = played.filter(x=>x!==d.id); ST.t = 0; ST.playing = false; ST.gListening = false;
+  render();
+};
+const _nGigPlayer = renderGigPlayer;
+renderGigPlayer = function(){
+  const cur = gigSongId();
+  return _nGigPlayer().replace(/(cursor:pointer;justify-content:space-between" )data-act="startGig" data-id="([^"]*)"/g,
+    (m, pre, id)=> id===cur ? m : pre+'data-act="pickGigSong" data-id="'+id+'"');
+};
+/* ---- "Got it!" after an upload: a hand throwing the horns, and files (not songs) ---- */
+const N_HORNS_SVG = `<svg class="n-stage n-horns" viewBox="0 0 320 290" aria-hidden="true" style="overflow:visible">
+  <defs>
+    <linearGradient id="gBgL" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F01CFF"/><stop offset="1" stop-color="#9418E8"/></linearGradient>
+    <linearGradient id="gBgR" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4524B8"/><stop offset="1" stop-color="#2E1A8C"/></linearGradient>
+    <linearGradient id="gSkin" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFC2DA"/><stop offset="0.55" stop-color="#FF4D8D"/><stop offset="1" stop-color="#7A4BFF"/></linearGradient>
+    <linearGradient id="gSkin2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFB0D0"/><stop offset="0.6" stop-color="#FF3D84"/><stop offset="1" stop-color="#4E5BFF"/></linearGradient>
+    <linearGradient id="gArm" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FF5C96"/><stop offset="1" stop-color="#3A6BFF"/></linearGradient>
+    <pattern id="gStripeH" width="10" height="10" patternUnits="userSpaceOnUse"><rect width="10" height="5" fill="#E61CFF"/></pattern>
+    <pattern id="gStripeV" width="9" height="9" patternUnits="userSpaceOnUse"><rect width="4" height="9" fill="#6E14C8"/></pattern>
+    <clipPath id="gHalfL"><rect x="0" y="0" width="160" height="290"/></clipPath>
+    <clipPath id="gHalfR"><rect x="160" y="0" width="160" height="290"/></clipPath>
+    <linearGradient id="gFadeG" x1="0" y1="0" x2="0" y2="1"><stop offset="0.8" stop-color="#FFFFFF"/><stop offset="1" stop-color="#000000"/></linearGradient>
+    <mask id="gFade"><rect x="-20" y="-20" width="360" height="330" fill="url(#gFadeG)"/></mask>
+  </defs>
+  <g mask="url(#gFade)">
+    <circle cx="160" cy="150" r="128" fill="url(#gBgL)" clip-path="url(#gHalfL)"/>
+    <circle cx="160" cy="150" r="128" fill="url(#gBgR)" clip-path="url(#gHalfR)"/>
+    <circle cx="74" cy="70" r="44" fill="url(#gStripeH)"/>
+    <circle cx="252" cy="222" r="50" fill="url(#gStripeV)" opacity="0.8"/>
+    <path d="M206 64C214 36 254 30 274 50C292 68 280 98 254 102C228 106 200 90 206 64Z" fill="#1B0E5C" opacity="0.65"/>
+    <path d="M36 196C30 168 62 152 90 162C114 172 116 202 96 216C74 230 42 222 36 196Z" fill="#5A0D9E" opacity="0.55"/>
+    <circle cx="282" cy="140" r="8" fill="#1B0E5C"/><circle cx="42" cy="128" r="6" fill="#E61CFF" opacity="0.8"/>
+    <g fill="#FFD8A8"><path d="M232 128l4 10 10 4-10 4-4 10-4-10-10-4 10-4z"/><path d="M92 112l3 7 7 3-7 3-3 7-3-7-7-3 7-3z"/></g>
+    <g transform="translate(160 176) rotate(-6)">
+      <path d="M-46 44L42 44L36 150L-52 150Z" fill="url(#gArm)"/>
+      <path d="M-48 96L36 96L32 152L-52 152Z" fill="#1B0E5C"/>
+      <path d="M-49 108H35M-50 124H34M-51 140H33" stroke="#3A1E9C" stroke-width="5"/>
+      <g stroke="rgba(90,0,70,0.35)" stroke-width="1.5">
+        <rect x="-56" y="-118" width="27" height="112" rx="13.5" transform="rotate(-15 -42 -10)" fill="url(#gSkin)"/>
+        <rect x="31" y="-92" width="23" height="86" rx="11.5" transform="rotate(17 42 -10)" fill="url(#gSkin)"/>
+        <rect x="-56" y="-24" width="112" height="84" rx="34" fill="url(#gSkin2)"/>
+        <rect x="-29" y="-40" width="30" height="44" rx="15" fill="url(#gSkin)"/>
+        <rect x="1" y="-37" width="28" height="41" rx="14" fill="url(#gSkin)"/>
+        <rect x="-50" y="2" width="84" height="25" rx="12.5" transform="rotate(-8 -8 14)" fill="url(#gSkin2)"/>
+      </g>
+      <ellipse cx="-67" cy="-103" rx="7" ry="5" transform="rotate(-15 -67 -103)" fill="#FFE0EE" opacity="0.75"/>
+      <ellipse cx="63" cy="-80" rx="6" ry="4.4" transform="rotate(17 63 -80)" fill="#FFE0EE" opacity="0.75"/>
+      <path d="M-30 30c8 6 22 7 34 2" stroke="rgba(90,0,70,0.3)" stroke-width="2" fill="none" stroke-linecap="round"/>
+    </g>
+    <g fill="none" stroke="#FFB3F3" stroke-width="3" stroke-linecap="round">
+      <path d="M108 52c-10 6-16 16-16 28"/><path d="M98 34c-16 9-26 25-26 44" opacity="0.6"/>
+      <path d="M226 74c9 6 14 15 14 26"/><path d="M238 58c14 9 22 23 22 40" opacity="0.6"/>
+    </g>
+  </g>
+</svg>`;
+const _nQueued = renderQueued;
+renderQueued = function(){
+  const q = ST.queued || [];
+  let h = _nQueued().replace(/<svg class="mascot"[\s\S]*?<\/svg>/, N_HORNS_SVG);
+  const docs = q.length===1 && /^(\d+) documents$/.exec(q[0]||'');
+  if(q.length>1) h = h.replace(q.length+' songs<br>are being added', q.length+' files<br>are being read');
+  else if(docs) h = h.replace('“'+esc(q[0])+'”<br>is being added', docs[1]+' files<br>are being read');
+  if(q.length>1 || docs) h = h.replace(/We'll let you know when (they're|it's) ready — you'll find (them|it) in/, "We'll let you know when your songs are ready — you'll find them in");
+  return h;
+};
 /* ---- markings: a note that would run off the right edge goes to the left of its arrow ---- */
 let _nFitQ = 0;
 function nQueueFit(){ if(_nFitQ) return; _nFitQ = requestAnimationFrame(()=>{ _nFitQ = 0; nFitMarks(); }); }
