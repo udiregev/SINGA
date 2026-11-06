@@ -68,7 +68,16 @@ input.field:focus{border-color:rgba(243,184,255,.7)}
 .lword.line .ltext{color:#fff}
 .lline.lheader{align-self:center;height:24px;border-radius:12px;background:rgba(243,184,255,.16);color:var(--accent);padding:0 10px;display:flex;align-items:center;font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}
 .lyr4{flex:1;min-height:0;overflow:hidden;padding:20px 22px;display:flex;flex-direction:column;align-items:center;justify-content:center}
-@media(min-width:900px){#app:has(.lyr4){max-width:none}.lyr4{padding:3vh 6vw}.lyr4 .lword .ltext{font-size:clamp(26px,2.6vw,44px)}.lyr4 .lline.cur .lword .ltext{font-size:clamp(36px,4vw,72px)}.lyr4 .lyrics-wrap{max-width:none;gap:4vh}}
+/* guests can scroll the whole song; it follows the singer until they scroll, then a pill takes them back */
+#main:has(.lyrBox){padding-bottom:0}
+.lyrBox{flex:1;min-height:0;position:relative;display:flex;flex-direction:column}
+.lyrBox .lyr4{display:block;overflow-y:auto;overscroll-behavior:contain;position:relative;padding:30vh 22px 55vh;scrollbar-width:none;-webkit-mask-image:linear-gradient(transparent 0,#000 9%,#000 78%,transparent 96%);mask-image:linear-gradient(transparent 0,#000 9%,#000 78%,transparent 96%)}
+.lyrBox .lyr4::-webkit-scrollbar{display:none}
+.lyrBox .lyrics-wrap{margin:0 auto}
+.lyrBox .lline:not(.cur) .lword.done .ltext{color:rgba(255,255,255,.34)}
+.lyrNow{position:absolute;left:50%;bottom:calc(100px + env(safe-area-inset-bottom,0px));transform:translate(-50%,12px);opacity:0;pointer-events:none;height:44px;border:0;border-radius:22px;padding:0 18px 0 12px;background:#fff;color:var(--ink);font-size:14px;font-weight:700;display:flex;align-items:center;gap:6px;box-shadow:0 10px 30px rgba(14,6,32,.5);transition:opacity .2s ease,transform .2s ease;white-space:nowrap;cursor:pointer}
+.lyrBox.free .lyrNow{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+@media(min-width:900px){#app:has(.lyr4){max-width:none}.lyr4{padding:3vh 6vw}.lyrBox .lyr4{padding:30vh 6vw 55vh}.lyr4 .lword .ltext{font-size:clamp(26px,2.6vw,44px)}.lyr4 .lline.cur .lword .ltext{font-size:clamp(36px,4vw,72px)}.lyr4 .lyrics-wrap{max-width:none;gap:4vh}}
 .empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;padding:40px 24px;color:var(--muted)}
 .empty h2{font-size:22px;font-weight:400;letter-spacing:-.01em;color:#fff;margin:0}
 /* ---- Tabs: a floating pill ---- */
@@ -83,6 +92,7 @@ input.field:focus{border-color:rgba(243,184,255,.7)}
   #tabbar button span.lbl{display:none}
   #main{padding-bottom:20px;padding-right:90px}
   .lyr4 .lyrics-wrap{gap:14px}
+  .lyrNow{bottom:16px}
 }
 .htitle{font-size:26px;font-weight:400;letter-spacing:-.02em;margin:0}
 .hsub{font-size:12px;color:var(--muted)}
@@ -100,12 +110,21 @@ input.field:focus{border-color:rgba(243,184,255,.7)}
 .chatRow .who{font-size:11px;color:var(--muted);font-weight:700}
 .chatRow .bub{padding:10px 14px;border-radius:18px;font-size:15px;line-height:1.35}
 .chatRow .dmtag{font-size:10px;color:var(--muted);display:flex;align-items:center;gap:3px}
-/* ---- Requests ---- */
+/* ---- Vote on what's next ---- */
 .reqRow{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:20px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);margin-bottom:10px}
 .reqRow .t{font-size:15px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .reqRow .s{font-size:12px;color:var(--muted);margin-top:2px}
 .voteBtn{min-width:58px;height:40px;border-radius:999px;border:1px solid rgba(255,255,255,.24);background:transparent;color:#fff;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:2px;font-variant-numeric:tabular-nums;flex:none}
 .voteBtn.on{background:var(--accent);border-color:var(--accent);color:var(--ink)}
+.voteBtn .msi{font-size:18px}
+.voteBtn.on .msi{font-variation-settings:'FILL' 1}
+.voteRow{margin-bottom:0;padding:10px 10px 10px 8px}
+.voteRow.mine{border-color:rgba(243,184,255,.45);background:rgba(243,184,255,.1)}
+.vpos{flex:none;width:28px;text-align:center;font-size:15px;font-weight:700;color:var(--muted);font-variant-numeric:tabular-nums}
+.vhelp{font-size:13px;color:var(--muted);margin-top:6px;line-height:1.4}
+.vnow{display:flex;flex-direction:column;gap:2px;padding:10px 14px;border-radius:16px;border:1px dashed rgba(255,255,255,.22)}
+.vnow .k{font-size:10px;font-weight:800;letter-spacing:.12em;color:var(--accent)}
+.vnow .t{font-size:15px;font-weight:500}
 .segm{display:flex;height:40px;border-radius:999px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);padding:3px}
 .segm button{flex:1;border:0;border-radius:999px;background:transparent;font-size:13px;font-weight:500;color:#fff}
 .segm button.on{background:#fff;color:var(--ink);font-weight:700}
@@ -222,7 +241,7 @@ function nArt(seed, size, radius){
   else sh = `<i style="left:0;bottom:0;width:100%;height:50%;border-radius:999px 999px 0 0;background:${p[1]}"></i><i style="left:38%;top:14%;width:25%;height:25%;background:${p[2]}"></i>`;
   return `<span class="nart" aria-hidden="true" style="width:${size}px;height:${size}px;border-radius:${r}px;background:${p[0]}">${sh}</span>`;
 }
-function songArt(s, size){ return nArt('song:'+((s && s.title) || 'Untitled song'), size); }
+// (songs have no artwork; gigs and playlists do)
 function curWord(tm,t){ let i=-1; for(let k=0;k<tm.words.length;k++){ if(tm.words[k].t<=t) i=k; else break; } return i; }
 
 const params = new URLSearchParams(location.search);
@@ -253,7 +272,12 @@ const ST = {
 let toastTimer=null;
 function toast(msg){ ST.toast=msg; render(); clearTimeout(toastTimer); toastTimer=setTimeout(()=>{ ST.toast=null; render(); }, 2200); }
 
-function gigSettings(g){ return { photos:true, chat:true, dm:false, order:false, requests:true, browse:true, ...((g&&g.settings)||{}) }; }
+function gigSettings(g){
+  const own = (g&&g.settings)||{}, gs = { photos:true, chat:true, dm:false, order:false, requests:true, browse:true, ...own };
+  // guests vote on the order of the setlist (on unless the performer switched it off)
+  gs.order = own.order!=null ? !!own.order : true; gs.requests = gs.order;
+  return gs;
+}
 
 /* ============================================================ */
 function applyTheme(){ document.documentElement.setAttribute('data-theme', ST.theme); }
@@ -296,13 +320,29 @@ function renderJoin(){
     <div style="flex:1;min-height:16px"></div>
     <label style="align-self:stretch;display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--muted);text-align:left">Your name (optional)<input class="field" placeholder="So others know who's singing" value="${esc(ST.nameDraft)}" data-bind="nameDraft" autocomplete="nickname"></label>
     <button class="btn" style="align-self:stretch" data-act="join">Join the gig</button>
-    <div style="font-size:12px;color:var(--muted)">Follow the lyrics, request songs, share photos.<br>No account needed.</div>
+    <div style="font-size:12px;color:var(--muted)">Follow the lyrics, vote for what's next, share photos.<br>No account needed.</div>
   </div>`;
 }
 
 /* ============================================================
    LYRICS TAB
    ============================================================ */
+// Where the song is right now (null when there are no lyrics to show)
+function lyrNow(){
+  if(ST.ended || !ST.live) return null;
+  const live = ST.live, s = ST.songsById[live.songId];
+  if(!s || live.vcd>0 || !s.lyrics || !s.lyrics.trim()) return null;
+  const tm = timing(s), tempo = songTempo(s);
+  // (the performer sends the state a few times a second; if that stops,
+  //  the words stop too instead of running on by themselves)
+  const elapsed = live.playing ? Math.min(performance.now() - ST.receivedAt, 2500) / 1000 * tempo.speed : 0;
+  const t = Math.min(tm.total, (live.t||0) + elapsed);
+  const ci = tempo.synced ? curWord(tm, t) : -1;
+  const curLi = ci>=0 ? tm.words[ci].li : 0;
+  const stale = live.playing && performance.now() - ST.receivedAt > 2500;
+  const statusLine = live.listening ? 'Listening for the performer to start singing…' : (!live.playing || stale ? 'Paused' : '');
+  return { live, s, tm, tempo, t, ci, curLi, sub: statusLine || s.sub || (live.playing?'Now playing':''), frac: Math.min(1, t/Math.max(1,tm.total)) };
+}
 function renderLyricsTab(){
   if(ST.ended){
     return `<div class="empty"><h2>This gig has ended</h2><div>Thanks for watching! Photos and chat are still here below.</div></div>`;
@@ -317,12 +357,9 @@ function renderLyricsTab(){
   if(live.vcd>0){ return `<div class="empty"><h2>Starting in ${Math.max(1,Math.ceil(live.vcd))}…</h2></div>`; }
   if(!s.lyrics || !s.lyrics.trim()){ return `<div class="empty"><h2>No synced lyrics for this song yet</h2></div>`; }
 
-  const tm = timing(s), tempo = songTempo(s);
-  const elapsed = live.playing ? (performance.now() - ST.receivedAt) / 1000 * tempo.speed : 0;
-  const t = Math.min(tm.total, (live.t||0) + elapsed);
-  const ci = curWord(tm, t);
-  const curLi = ci>=0 ? tm.words[ci].li : 0;
-  // only 4 lines at a time: the one before, the current one and the next two
+  const N = lyrNow(), { tm, tempo, ci, curLi } = N;
+  // the TV shows 4 lines at a time (the one before, the current one and the
+  // next two); a guest's phone has the whole song to scroll through
   const first = Math.max(0, curLi-1);
   let k=-1;
   const html = tm.lines.map((ws,li)=>{
@@ -332,24 +369,83 @@ function renderLyricsTab(){
       k++;
       // guests see the words only — no chords, no performer's markings
       const cls = !tempo.synced ? 'line' : (k===ci?'cur':(k<ci?'done':''));
-      return `<div class="lword ${cls}"><div class="ltext">${esc(w)}</div></div>`;
+      return `<div class="lword ${cls}" data-k="${k}"><div class="ltext">${esc(w)}</div></div>`;
     }).join('');
-    if(li<first || li>=first+4) return '';
+    if(TV && (li<first || li>=first+4)) return '';
     // a section label, without any chords written into it ("[Intro: C G]" → "Intro")
     // a run of ((instrumental)) lines shows its heading once
     if(header && li>0 && isHeaderLine(tm.lines[li-1]) && headLabel(tm.lines[li-1])===headLabel(ws)) return '';
-    if(header) return `<div class="lline lheader">${esc(headLabel(ws))}</div>`;
+    if(header) return `<div class="lline lheader" data-li="${li}">${esc(headLabel(ws))}</div>`;
     const curLine = li===curLi && tempo.synced;
-    return `<div class="lline${curLine?' cur':''}" dir="auto">${wordsHTML}</div>`;
+    return `<div class="lline${curLine?' cur':''}" data-li="${li}" dir="auto">${wordsHTML}</div>`;
   }).join('');
-  if(TV) return renderTvLyrics(s, html, t/Math.max(1,tm.total));
-  const statusLine = live.listening ? 'Listening for the performer to start singing…' : (!live.playing ? 'Paused' : '');
-  const pct = Math.round(Math.min(1, t/Math.max(1,tm.total))*100);
-  return `<div class="nowbar">${songArt(s, 48)}<div style="min-width:0"><div class="t">${esc(s.title||'Untitled song')}</div><div class="s">${esc(statusLine || s.sub || (live.playing?'Now playing':''))}</div></div></div>
-    <div class="prog"><div style="width:${pct}%"></div></div>
-    <div class="lyr4">
-      <div class="lyrics-wrap">${html}</div>
+  if(TV) return renderTvLyrics(s, html, N.frac);
+  return `<div class="nowbar"><div style="min-width:0"><div class="t">${esc(s.title||'Untitled song')}</div><div class="s">${esc(N.sub)}</div></div></div>
+    <div class="prog"><div style="width:${Math.round(N.frac*100)}%"></div></div>
+    <div class="lyrBox${ST.lyrFree?' free':''}">
+      <div class="lyr4" id="lyrScroll" data-song="${esc(live.songId)}" data-n="${tm.words.length}" data-ci="${ci}" data-li="${curLi}">
+        <div class="lyrics-wrap">${html}</div>
+      </div>
+      <button class="lyrNow" data-act="lyrFollow">${icon('music_note',18)}Back to now</button>
     </div>`;
+}
+// While the song plays, update the words in place (so a guest's scrolling
+// isn't interrupted) instead of drawing the page again. Returns false when
+// the page needs a full render (another song, a new tab, …).
+function patchLyrics(){
+  if(TV || !ST.joined || ST.tab!=='lyrics') return false;
+  const el = document.getElementById('lyrScroll'); if(!el) return false;
+  const N = lyrNow(); if(!N) return false;
+  if(el.dataset.song!==String(N.live.songId) || el.dataset.n!==String(N.tm.words.length)) return false;
+  const main = document.getElementById('main');
+  const sub = main.querySelector('.nowbar .s'); if(sub && sub.textContent!==N.sub) sub.textContent = N.sub;
+  const bar = main.querySelector('.prog>div'); if(bar) bar.style.width = Math.round(N.frac*100)+'%';
+  if(String(N.ci)!==el.dataset.ci){
+    el.dataset.ci = N.ci;
+    el.querySelectorAll('.lword').forEach(w=>{
+      const k = +w.dataset.k, want = k===N.ci ? 'cur' : (k<N.ci ? 'done' : '');
+      if(!w.classList.contains('line')){ w.classList.toggle('cur', want==='cur'); w.classList.toggle('done', want==='done'); }
+    });
+    if(String(N.curLi)!==el.dataset.li){
+      el.dataset.li = N.curLi;
+      el.querySelectorAll('.lline').forEach(l=> l.classList.toggle('cur', +l.dataset.li===N.curLi && N.tempo.synced && !l.classList.contains('lheader')));
+      lyrScrollToCur(true);
+    }
+  }
+  // a guest who scrolled away and then left it alone for a while is taken back
+  if(ST.lyrFree && performance.now() - (ST.lyrUserAt||0) > 12000) ACTIONS.lyrFollow();
+  return true;
+}
+function lyrScrollToCur(smooth){
+  if(ST.lyrFree) return;
+  const el = document.getElementById('lyrScroll'); if(!el) return;
+  const line = el.querySelector('.lline.cur') || el.querySelector('.lline[data-li="'+el.dataset.li+'"]') || el.querySelector('.lline');
+  if(!line) return;
+  const top = Math.max(0, line.offsetTop + line.offsetHeight/2 - el.clientHeight*0.4);
+  ST._lyrAutoAt = performance.now();
+  el.scrollTo({ top, behavior: smooth ? 'smooth' : 'auto' });
+}
+// Scrolling by the guest (finger, wheel, keys, dragging the scrollbar) lets
+// them read anywhere; the song's own scrolling doesn't count.
+function bindLyrScroll(){
+  const el = document.getElementById('lyrScroll'); if(!el || el._bound) return;
+  el._bound = true;
+  const box = el.parentNode;
+  let touching = false, wheelAt = 0, keyAt = 0, mouseDown = false;
+  el.addEventListener('touchstart', ()=>{ touching = true; }, { passive:true });
+  el.addEventListener('touchend', ()=>{ touching = false; }, { passive:true });
+  el.addEventListener('touchcancel', ()=>{ touching = false; }, { passive:true });
+  el.addEventListener('wheel', ()=>{ wheelAt = performance.now(); }, { passive:true });
+  el.addEventListener('keydown', ()=>{ keyAt = performance.now(); });
+  el.addEventListener('mousedown', ()=>{ mouseDown = true; });
+  window.addEventListener('mouseup', ()=>{ mouseDown = false; });
+  el.addEventListener('scroll', ()=>{
+    const now = performance.now();
+    if(touching || mouseDown || now-wheelAt<400 || now-keyAt<700){
+      ST.lyrUserAt = now;
+      if(!ST.lyrFree){ ST.lyrFree = true; box.classList.add('free'); }
+    }
+  }, { passive:true });
 }
 
 /* ============================================================
@@ -363,54 +459,54 @@ async function loadRequests(){
   }catch(e){ console.error('Singa audience: failed to load requests', e); }
   ST.reqLoading=false; render();
 }
-async function sendRequest(){
-  const t = (ST.reqDraft||'').trim(); if(!t) return;
-  ST.reqDraft='';
-  const row = { id:'r'+Date.now()+Math.random().toString(16).slice(2,6), gig_id:gigId, title:t, sub:'Requested by '+(ST.name.trim()||'Someone'), votes:1, voter_ids:[guestId] };
-  ST.requests = [row, ...ST.requests]; render();
-  try{ const r = await sb.from('gig_requests').insert(row); if(r.error) console.error('Singa audience: request insert failed', r.error); }
-  catch(e){ console.error('Singa audience: request insert failed', e); }
+// Voting on the order: one row per setlist song (id "v_<gig>_<song>");
+// a guest's vote is their id in voter_ids.
+function voteId(songId){ return 'v_'+gigId+'_'+songId; }
+function voteRow(songId){ return ST.requests.find(x=>x.id===voteId(songId)) || null; }
+function voteCount(songId){ const r = voteRow(songId); return r ? (r.voter_ids||[]).length || (+r.votes||0) : 0; }
+function votedByMe(songId){ const r = voteRow(songId); return !!(r && (r.voter_ids||[]).includes(guestId)); }
+// The songs still to come, in the order they'll be played: most votes first,
+// then the setlist order (the performer's app sorts them the same way)
+function upcomingIds(){
+  const ids = (ST.gig && ST.gig.setlist) || [], live = ST.live;
+  let up;
+  if(live && Array.isArray(live.up)) up = live.up.filter(id=>ids.includes(id));
+  else { const played = (live && live.played) || []; up = ids.filter(id=> id!==(live && live.songId) && !played.includes(id)); }
+  if(!ST.settings.order) return up;
+  return up.map((id,i)=>({ id, i: ids.indexOf(id), v: voteCount(id) })).sort((a,b)=> b.v-a.v || a.i-b.i).map(x=>x.id);
 }
-async function toggleVote(id){
-  const r = ST.requests.find(x=>x.id===id); if(!r) return;
-  const voters = r.voter_ids||[]; const mine = voters.includes(guestId);
-  r.voter_ids = mine ? voters.filter(x=>x!==guestId) : [...voters, guestId];
-  r.votes = (r.votes||0) + (mine?-1:1);
+async function toggleVote(songId){
+  if(!songId) return;
+  const id = voteId(songId), s = ST.songsById[songId] || {};
+  let r = voteRow(songId);
+  if(!r){ r = { id, gig_id:gigId, title:s.title||'', sub:'', votes:0, voter_ids:[] }; ST.requests = [...ST.requests, r]; }
+  const mine = (r.voter_ids||[]).includes(guestId);
+  r.voter_ids = mine ? r.voter_ids.filter(x=>x!==guestId) : [...(r.voter_ids||[]), guestId];
+  r.votes = r.voter_ids.length;
   render();
-  try{ const res = await sb.from('gig_requests').update({ votes:r.votes, voter_ids:r.voter_ids }).eq('id', id); if(res.error) console.error('Singa audience: vote update failed', res.error); }
-  catch(e){ console.error('Singa audience: vote update failed', e); }
+  try{
+    // read the latest votes first, so other guests' votes aren't lost
+    const cur = await sb.from('gig_requests').select('*').eq('id', id).maybeSingle();
+    let voters = ((cur && cur.data && cur.data.voter_ids) || []).filter(x=>x!==guestId);
+    if(!mine) voters.push(guestId);
+    const res = (cur && cur.data)
+      ? await sb.from('gig_requests').update({ votes:voters.length, voter_ids:voters }).eq('id', id)
+      : await sb.from('gig_requests').insert({ id, gig_id:gigId, title:s.title||'', sub:'', votes:voters.length, voter_ids:voters });
+    if(res && res.error){ console.error('Singa audience: vote failed', res.error); toast("Your vote didn't go through — try again"); }
+    else { r.voter_ids = voters; r.votes = voters.length; render(); }
+  }catch(e){ console.error('Singa audience: vote failed', e); toast("Your vote didn't go through — try again"); }
 }
-// Requests: yours first (the ones you asked for or voted on), or everyone's by votes, or the newest
 function renderRequestsTab(){
-  const all = ST.requests.slice();
-  const mineOf = r => (r.voter_ids||[]).includes(guestId);
-  const myCount = all.filter(mineOf).length;
-  const k = ST.reqSort;
-  let rows;
-  if(k==='mine') rows = all.filter(mineOf).sort((a,b)=> (b.votes-a.votes));
-  else if(k==='new') rows = all.sort((a,b)=> new Date(b.created_at||0)-new Date(a.created_at||0));
-  else rows = all.sort((a,b)=> (b.votes-a.votes) || (new Date(a.created_at)-new Date(b.created_at)));
-  const others = all.length - myCount;
-  const seg = [['mine','Mine'+(myCount?' · '+myCount:'')],['top','Popular'],['new','Newest']]
-    .map(([v,l])=>`<button class="${k===v?'on':''}" role="tab" aria-selected="${k===v}" data-act="setReqSort" data-id="${v}">${l}</button>`).join('');
-  const rowHTML = r=>{
-    const mine = mineOf(r), n = r.votes||0;
-    return `<div class="reqRow">${nArt('song:'+(r.title||''), 44, 12)}<div style="flex:1;min-width:0"><div class="t">${esc(r.title)}</div><div class="s">${esc(r.sub||'')}</div></div>
-      <button class="voteBtn ${mine?'on':''}" aria-pressed="${mine}" aria-label="${mine?'Remove your vote':'Vote'} for ${esc(r.title)} — ${n} vote${n===1?'':'s'}" data-act="toggleVote" data-id="${esc(r.id)}">${icon('arrow_drop_up',22)}${n}</button></div>`;
-  };
-  let body;
-  if(ST.reqLoading) body = `<div style="color:var(--muted);padding:16px 0">Loading…</div>`;
-  else if(rows.length) body = rows.map(rowHTML).join('') + (k==='mine' && others>0 ? `<div class="reqRow" style="border-style:dashed;background:transparent"><div style="flex:1;font-size:13px;color:var(--muted)">${others} more song${others===1?'':'s'} requested by others. Vote to move them up.</div><button class="btn-outline" data-act="setReqSort" data-id="top">See popular</button></div>` : '');
-  else if(k==='mine') body = `<div style="color:var(--muted);padding:16px 0">You haven't requested or voted for a song yet.</div>${others>0?`<button class="btn-outline" data-act="setReqSort" data-id="top">See what others asked for</button>`:''}`;
-  else body = `<div style="color:var(--muted);padding:16px 0">No requests yet — be the first.</div>`;
+  const up = upcomingIds(), cur = ST.live && !ST.ended ? ST.songsById[ST.live.songId] : null;
+  const rows = up.map((id,i)=>{
+    const x = ST.songsById[id] || {}, n = voteCount(id), mine = votedByMe(id);
+    return `<div class="reqRow voteRow${mine?' mine':''}"><span class="vpos">${i+1}</span><div style="flex:1;min-width:0"><div class="t">${esc(x.title||'Untitled song')}</div>${x.sub?`<div class="s">${esc(x.sub)}</div>`:''}</div>
+      <button class="voteBtn ${mine?'on':''}" aria-pressed="${mine}" aria-label="${mine?'Take back your vote':'Vote'} for ${esc(x.title||'this song')} — ${n} vote${n===1?'':'s'}" data-act="toggleVote" data-id="${esc(id)}">${icon('favorite',18)}${n}</button></div>`;
+  }).join('');
   return `<div class="pad" style="display:flex;flex-direction:column;gap:12px;flex:1;min-height:0">
-    <div><div class="hsub">${esc(ST.gig.title||'')}</div><h1 class="htitle">Requests</h1></div>
-    <div style="display:flex;gap:8px">
-      <input class="field" style="height:48px;border-radius:24px" placeholder="Request a song…" aria-label="Request a song" enterkeyhint="send" value="${esc(ST.reqDraft)}" data-bind="reqDraft" data-enter="sendRequest">
-      <button class="iconbtn" aria-label="Send request" data-act="sendRequest" style="width:48px;height:48px;border-radius:50%;background:#fff;color:var(--ink);flex:none">${icon('arrow_forward',22)}</button>
-    </div>
-    <div class="segm" role="tablist" aria-label="Sort requests">${seg}</div>
-    <div style="overflow:auto;flex:1;padding-top:4px">${body}</div>
+    <div><div class="hsub">${esc(ST.gig.title||'')}</div><h1 class="htitle">What's next?</h1><div class="vhelp">Vote for the songs you want to hear. The most votes are played first.</div></div>
+    ${cur ? `<div class="vnow"><span class="k">NOW PLAYING</span><span class="t">${esc(cur.title||'Untitled song')}</span></div>` : ''}
+    <div style="overflow:auto;flex:1;padding-top:2px;display:flex;flex-direction:column;gap:8px">${rows || `<div style="color:var(--muted);padding:16px 0">${ST.ended ? 'The gig has ended.' : 'No more songs on the setlist.'}</div>`}</div>
   </div>`;
 }
 
@@ -469,7 +565,7 @@ function scrollChatToBottom(){
 }
 async function sendChat(){
   const t = (ST.chatDraft||'').trim(); if(!t || !ST.name.trim()) return;
-  ST.chatDraft='';
+  ST.chatDraft=''; const ci = document.querySelector('[data-bind="chatDraft"]'); if(ci) ci.value='';
   const row = { id:'c'+Date.now()+Math.random().toString(16).slice(2,6), gig_id:gigId, guest_id:guestId, author_name:ST.name.trim(), is_owner:false, is_dm:ST.chatDM, text:t };
   ST.chat = [...ST.chat, row]; render(); scrollChatToBottom();
   try{ const r = await sb.from('gig_chat_messages').insert(row); if(r.error) console.error('Singa audience: chat insert failed', r.error); }
@@ -529,20 +625,20 @@ const N_WM = `<svg class="wm" role="img" aria-label="Singa" viewBox="32 -226 284
 const TV_MARK = `<span class="tv-mark" aria-hidden="true"><svg width="58%" height="58%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></svg></span>`;
 function tvNextSong(){
   const ids = (ST.gig && ST.gig.setlist) || [];
-  if(!ST.live) return ids.length ? ST.songsById[ids[0]] : null;
-  const i = ids.indexOf(ST.live.songId);
-  return i>=0 && i+1<ids.length ? ST.songsById[ids[i+1]] : null;
+  if(!ST.live) return ids.length ? ST.songsById[upcomingIds()[0] || ids[0]] : null;
+  const up = upcomingIds();
+  return up.length ? ST.songsById[up[0]] : null;
 }
 function tvShortUrl(){ return guestUrl().replace(/^https?:\/\//,''); }
 function tvCta(){
   ensureQr();
-  return `<div class="tv-cta">${ST.qrDataUrl?`<img src="${ST.qrDataUrl}" alt="QR code for the guest page">`:''}<div><div class="t">Choose the next song</div><div class="s">Scan, or visit <b>${esc(tvShortUrl())}</b><br>to request a song and vote.</div></div></div>`;
+  return `<div class="tv-cta">${ST.qrDataUrl?`<img src="${ST.qrDataUrl}" alt="QR code for the guest page">`:''}<div><div class="t">Choose the next song</div><div class="s">Scan, or visit <b>${esc(tvShortUrl())}</b><br>to vote for the next song.</div></div></div>`;
 }
 function renderTvLyrics(s, linesHTML, frac){
   const nx = tvNextSong();
   return `<div class="tvw">
     <div class="tv-top"><span class="tv-brand">${N_WM}</span><span class="tv-sep"></span>
-      <span class="tv-song">${songArt(s, 52)}<span style="min-width:0"><div class="t">${esc(s.title||'Untitled song')}</div>${s.sub?`<div class="s">${esc(s.sub)}</div>`:''}</span></span>
+      <span class="tv-song"><span style="min-width:0"><div class="t">${esc(s.title||'Untitled song')}</div>${s.sub?`<div class="s">${esc(s.sub)}</div>`:''}</span></span>
       <span class="live">LIVE</span></div>
     <div class="tv-prog"><div style="width:${Math.round(Math.min(1,frac)*100)}%"></div></div>
     <div class="tv-lyrics"><div class="lyrics-wrap">${linesHTML}</div></div>
@@ -564,8 +660,8 @@ function renderTv(){
       <div style="min-width:0">
         <h1>${msg}</h1>
         <div class="u">or visit <b>${esc(tvShortUrl())}</b></div>
-        ${first && !ST.ended ? `<div class="tv-card">${songArt(first, 72)}<div><div class="k">${ST.live?'UP NEXT':'FIRST UP'}</div><div class="t">${esc(first.title||'Untitled song')}</div>${first.sub?`<div style="color:var(--muted)">${esc(first.sub)}</div>`:''}</div></div>` : ''}
-        <div class="tv-card" style="margin-top:2vh;background:rgba(243,184,255,.14);border-color:rgba(243,184,255,.4)"><span class="msi" style="font-size:1.6em;color:var(--accent)">favorite</span><span>Request the songs you want to hear — the crowd votes on what's next.</span></div>
+        ${first && !ST.ended ? `<div class="tv-card"><div><div class="k">${ST.live?'UP NEXT':'FIRST UP'}</div><div class="t">${esc(first.title||'Untitled song')}</div>${first.sub?`<div style="color:var(--muted)">${esc(first.sub)}</div>`:''}</div></div>` : ''}
+        <div class="tv-card" style="margin-top:2vh;background:rgba(243,184,255,.14);border-color:rgba(243,184,255,.4)"><span class="msi" style="font-size:1.6em;color:var(--accent)">favorite</span><span>Vote for the songs you want to hear next. The most votes go first.</span></div>
       </div>
     </div>
   </div>`;
@@ -581,7 +677,7 @@ function renderSetlistTab(){
     <div><div class="hsub">${esc(ST.gig.title||'')}</div><h1 class="htitle">Setlist</h1></div>
     <div style="overflow:auto;flex:1">
       ${ids.length ? ids.map((id,i)=>{ const x = ST.songsById[id] || {}; const on = id===cur;
-        return `<div class="reqRow">${songArt(x, 40)}<div style="flex:1"><div style="font-size:15px;font-weight:${on?800:600}">${esc(x.title||'Untitled song')}</div><div style="font-size:12px;color:${on?'var(--accent)':'var(--muted)'};margin-top:2px;font-weight:${on?700:400}">${on?'Now playing':esc(x.sub||'')}</div></div></div>`; }).join('')
+        return `<div class="reqRow"><div style="flex:1"><div style="font-size:15px;font-weight:${on?800:600}">${esc(x.title||'Untitled song')}</div><div style="font-size:12px;color:${on?'var(--accent)':'var(--muted)'};margin-top:2px;font-weight:${on?700:400}">${on?'Now playing':esc(x.sub||'')}</div></div></div>`; }).join('')
         : `<div style="color:var(--muted);padding:16px 0">The setlist is empty.</div>`}
     </div>
   </div>`;
@@ -590,7 +686,7 @@ function tabList(){
   const gs = ST.settings;
   const t = [['lyrics','lyrics','Lyrics']];
   if(gs.browse) t.push(['setlist','format_list_numbered','Setlist']);
-  if(gs.requests) t.push(['requests','queue_music','Requests']);
+  if(gs.order) t.push(['requests','how_to_vote','Vote']);
   if(gs.photos) t.push(['photos','photo_library','Photos']);
   if(gs.chat) t.push(['chat','chat_bubble','Chat']);
   return t;
@@ -613,7 +709,26 @@ function renderMain(){
 }
 function render(){
   document.getElementById('head').innerHTML = (ST.loading||ST.notFoundReason) ? `<span class="wordmark">${N_WM}</span>` : renderHead();
-  document.getElementById('main').innerHTML = renderMain();
+  const patched = patchLyrics();
+  if(!patched){
+    const prevEl = document.getElementById('lyrScroll');
+    const prevSong = prevEl ? prevEl.dataset.song : null, prevTop = prevEl ? prevEl.scrollTop : 0;
+    const main = document.getElementById('main'), fe = document.activeElement;
+    const view = [ST.loading, ST.notFoundReason?1:0, ST.joined, ST.tab, ST.chatNameGate].join('|');
+    if(fe && main.contains(fe) && /^(INPUT|TEXTAREA)$/.test(fe.tagName) && fe.type!=='file' && main.dataset.view===view){
+      // someone is typing: redrawing would close their phone's keyboard, so
+      // only the parts that change by themselves (the chat) are updated
+      const tmp = document.createElement('div'); tmp.innerHTML = renderMain();
+      ['chatScroll'].forEach(id=>{ const a = document.getElementById(id), b = tmp.querySelector('#'+id); if(a && b && a.innerHTML!==b.innerHTML) a.innerHTML = b.innerHTML; });
+    } else { main.innerHTML = renderMain(); main.dataset.view = view; }
+    const el = document.getElementById('lyrScroll');
+    if(el){
+      // a new song (or coming back to the tab) starts at the line being sung
+      if(el.dataset.song!==prevSong){ ST.lyrFree = false; el.parentNode.classList.remove('free'); }
+      bindLyrScroll();
+      if(ST.lyrFree) el.scrollTop = prevTop; else lyrScrollToCur(false);
+    }
+  }
   document.getElementById('tabbarWrap').innerHTML = renderTabbar();
   if(ST.share) document.body.insertAdjacentHTML('beforeend', renderShareOverlay());
   else { const ov=document.getElementById('shareOverlay'); if(ov) ov.remove(); }
@@ -646,8 +761,9 @@ const ACTIONS = {
   setTab(id){ ST.tab=id; render(); },
   openChatTab,
   saveChatName,
-  sendRequest, toggleVote,
+  toggleVote,
   setReqSort(id){ ST.reqSort=id; render(); },
+  lyrFollow(){ ST.lyrFree=false; const el=document.getElementById('lyrScroll'); if(el){ el.parentNode.classList.remove('free'); lyrScrollToCur(true); } },
   pickPhoto,
   toggleChatDM(){ ST.chatDM=!ST.chatDM; render(); },
   sendChat
