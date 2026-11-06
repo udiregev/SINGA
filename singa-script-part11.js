@@ -27,7 +27,7 @@ const N_ART = [
   ['#B9A6FF','#2A1250','#F3B8FF']
 ];
 function nHash(str){ let h = 2166136261; str = String(str||''); for(let i=0;i<str.length;i++){ h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return h>>>0; }
-// Artwork for a song / playlist: a coloured square with two shapes. The
+// Artwork for a playlist / gig: a coloured square with two shapes. The
 // same name always gets the same picture.
 function nArt(seed, size, radius, cls){
   const h = nHash(seed), p = N_ART[h % N_ART.length], v = (h>>>4) % 3;
@@ -143,6 +143,11 @@ function nightify(html){
   // markings above a word: the text moves next to a curved arrow that lands on the word
   html = html.replace(/<span class="mk mk-c"([^>]*)><span class="mtext">([\s\S]*?)<\/span><\/span><\/span>([\s\S]*?)<span class="marr-v"( style="[^"]*")?><\/span>/g,
     (m, mkStyle, txt, between, arrStyle)=>`</span>${between}<span class="marr-c"${arrStyle||''}>${N_CURVE}<span class="mtext mt-c">${txt}</span></span>`);
+  // search boxes: a Search key on the keyboard, and the magnifier is a real button
+  html = html.replace(/<input ([^>]*?)inputmode="search"/g, (m, pre)=> /type="/.test(pre) ? m : '<input type="search" autocomplete="off" '+pre+'inputmode="search"');
+  html = html.replace(/(<input [^>]*data-bind="(searchQuery|listQuery|spQuery)"[^>]*>)<span class="msi" style="font-size:(\d+)px">search<\/span>/g,
+    (m, inp, bind, sz)=> inp.replace(/>$/, (/data-key=/.test(inp) ? '' : ' data-key="searchGo"')+(/enterkeyhint=/.test(inp) ? '' : ' enterkeyhint="search"')+'>')
+      + `<button type="button" class="icon-btn nh-sbtn" aria-label="Search" data-act="searchGo" data-id="${bind}"><span class="msi" style="font-size:${sz}px">search</span></button>`);
   if(html.indexOf('class="mascot"')>=0 && html.indexOf('make some noise!')>=0) html = html.replace(/<svg class="mascot"[\s\S]*?<\/svg>/, N_STAGE_SVG).replace(/make some noise!/, 'Let’s make some noise');
   return html;
 }
@@ -222,19 +227,45 @@ document.querySelectorAll('style').forEach(st=>{ if(st.id!=='nightCss') st.textC
     Object.defineProperty(el, 'innerHTML', {
       configurable:true,
       get(){ return desc.get.call(this); },
-      set(v){ desc.set.call(this, nightify(v)); }
+      set(v){ const h = nightify(v); if(!nKeepFocus(this, h)) desc.set.call(this, h); }
     });
   });
 })();
 
-/* ---- rows with artwork ---- */
+/* ---- typing: a redraw never replaces the field you're typing in ----
+   Replacing it closes a phone's or tablet's keyboard after every letter.
+   Everything around the field is redrawn as usual; the field itself (and
+   the boxes it sits in) stay, and just take the new attributes. */
+function nKeepFocus(el, html){
+  const ae = document.activeElement;
+  if(!ae || ae===el || !el.contains(ae) || !/^(INPUT|TEXTAREA)$/.test(ae.tagName) || /^(range|file|checkbox|radio|button)$/i.test(ae.type||'')) return false;
+  const tpl = document.createElement('template'); tpl.innerHTML = html;
+  return nMorph(el, tpl.content, ae);
+}
+function nSyncAttrs(a, b, keepValue){
+  Array.from(a.attributes).forEach(at=>{ if(!b.hasAttribute(at.name) && !(keepValue && at.name==='value')) a.removeAttribute(at.name); });
+  Array.from(b.attributes).forEach(at=>{ if(keepValue && (at.name==='value' || at.name==='autofocus')) return; if(a.getAttribute(at.name)!==at.value) a.setAttribute(at.name, at.value); });
+}
+function nMorph(live, neu, ae){
+  const a = Array.from(live.childNodes), b = Array.from(neu.childNodes);
+  const i = a.findIndex(n=>n===ae || (n.nodeType===1 && n.contains(ae)));
+  if(i<0 || a.length!==b.length) return false;
+  const nb = b[i];
+  if(nb.nodeType!==1 || nb.tagName!==a[i].tagName) return false;
+  if(a[i]===ae){ if(ae.getAttribute('data-bind')!==nb.getAttribute('data-bind')) return false; }
+  else if(!nMorph(a[i], nb, ae)) return false;
+  for(let k=0;k<a.length;k++){ if(k!==i) live.replaceChild(b[k], a[k]); }
+  nSyncAttrs(a[i], nb, a[i]===ae);
+  return true;
+}
+
+/* ---- rows (artwork on playlists and gigs only, never on songs) ---- */
 function nSub(t){ return t ? `<div class="s">${esc(t)}</div>` : ''; }
 songRowHome = function(s){
   const j = songJob(s), b = songBadge(s), sub = songSubLine(s);
   const ind = (hasFlag('mark', s.id) ? `<span class="msi" title="Marked" style="font-size:17px;font-variation-settings:'FILL' 1;color:#FFFFFF">bookmark</span>` : '')
     + (hasFlag('fav', s.id) ? `<span class="msi" title="Loved" style="font-size:17px;font-variation-settings:'FILL' 1;color:${N_PINK}">favorite</span>` : '');
   return `<div class="list-row hrow nrow" data-act="openSongFrom" data-id="${s.id}" data-from="home">
-    ${nArt('song:'+songTitle(s), 44)}
     <div style="min-width:0;flex:1"><div class="t"><span class="tt">${esc(songTitle(s))}</span>${ind ? `<span class="hind">${ind}</span>` : ''}</div>${j ? jobBarHTML(s) : (sub ? `<div class="s"${s.failed?' style="color:#FFB3C1"':''}>${esc(sub)}</div>` : '')}</div>
     ${b[0] ? `<span class="sbadge" style="font-size:11px;font-weight:800;letter-spacing:.05em;white-space:nowrap;color:${b[1]}">${b[0]}</span>` : ''}
   </div>`;
@@ -248,7 +279,8 @@ songRowList = function(id, badgeText, badgeCol, from, rowAct, compact){
     if(!pl || pl.auto) rowAct = 'unlib';
   }
   const html = _nSongRowList(id, badgeText, badgeCol, from, rowAct, compact);
-  return html.replace('<div class="sm">', `<div class="sm nsm">${nArt('song:'+songTitle(s), 44)}<div class="nsm-t">`).replace('\n    <div class="scol s-content">', '</div>\n    <div class="scol s-content">').replace('class="list-row has-act srow', 'class="list-row has-act srow nrow');
+  // songs have no artwork (only playlists and gigs do)
+  return html.replace('class="list-row has-act srow', 'class="list-row has-act srow nrow');
 };
 playlistRow = function(p){
   const ids = p.auto ? D.order : p.ids;
@@ -292,13 +324,15 @@ function nHeroGig(g){
 renderHome = function(){
   const name = (ST.nickname || nicknameFromEmail(ST.email) || '').trim();
   const hero = nNextGig();
-  const otherGigs = nGigOrder(D.gigs).filter(g=>!hero || g.id!==hero.id).slice(0,3);
+  const otherGigs = nGigOrder(D.gigs).filter(g=>!hero || g.id!==hero.id).slice(0, window.matchMedia && matchMedia('(min-width:700px) and (orientation:portrait)').matches ? 5 : 3);
   const tiles = D.playlists.slice(0,8).map(p=>{
     const ids = p.auto ? D.order : p.ids, n = ids.length;
     const sub = p.src ? (p.src==='spotify' ? 'Spotify' : 'YouTube') : n+' song'+(n===1?'':'s');
     return `<div class="ntile" data-act="openPlaylist" data-id="${p.id}">${nArt('pl:'+(p.title||p.id), 112, 24)}<span class="t">${esc(p.title)}</span><span class="s">${esc(sub)}</span></div>`;
   }).join('');
-  const recent = homeSongIds().slice(0,6).map(id=>songRowHome(song(id))).join('');
+  // a tablet held upright has room for more
+  const tall = window.matchMedia && matchMedia('(min-width:700px) and (orientation:portrait)').matches;
+  const recent = homeSongIds().slice(0, tall ? 10 : 6).map(id=>songRowHome(song(id))).join('');
   const hk = homeSort(), emptyNote = hk==='fav' ? 'No loved songs yet — tap ♡ on a song in All Songs.' : hk==='marked' ? 'No marked songs yet.' : 'No songs yet — tap + to add one.';
   const initial = esc((name || '?').charAt(0).toUpperCase());
   return `<div class="scr nhome">
@@ -384,6 +418,10 @@ function nMarkArmed(){
   document.body.classList.toggle('chord-armed', !!ST.chordArmed && nInChords());
   if(!nInChords()) return;
   document.querySelectorAll('.ctile,.utile').forEach(t=>t.classList.toggle('armed', t.dataset.dragChord===ST.chordArmed));
+  // a chord list that fits on screen never scrolls, so its chords drag in any direction from the first touch
+  const v = document.querySelector('.ce-variants'), u = document.querySelector('.ce-used-row');
+  if(v) v.classList.toggle('nfits', v.scrollHeight <= v.clientHeight+2);
+  if(u) u.classList.toggle('nfits', u.scrollWidth <= u.clientWidth+2);
 }
 const _nUsedRow = renderUsedRow;
 renderUsedRow = function(){
@@ -553,3 +591,682 @@ try{ document.querySelector('meta[name="theme-color"]').setAttribute('content', 
 
 // part10 already started the app; draw it again in the Night design
 render();
+
+/* ============================================================
+   CHORDS STEP: a keyboard to play chords on
+   ------------------------------------------------------------
+   Play a chord with the mouse or a finger (tap the notes, they stay
+   down; one note alone is its major chord), the computer keyboard
+   (A W S E D F T G Y H U J K O L P ; — Z / X move an octave) or a MIDI
+   keyboard. The chord is named as you play.
+   · Tap a word, then play: the chord goes on that word.
+   · Play first: the chord is picked up, then tap the words to add it.
+   · Record: a marker moves through the lyrics at the speed you choose
+     (x0.5–x3); play each chord as its word comes and it lands there.
+   ============================================================ */
+const KB_LO = 48, KB_HI = 71;                       // C3–B4 on screen
+const KB_SPEEDS = [0.5, 1, 1.5, 2, 2.5, 3];
+const KB_CODES = ['KeyA','KeyW','KeyS','KeyE','KeyD','KeyF','KeyT','KeyG','KeyY','KeyH','KeyU','KeyJ','KeyK','KeyO','KeyL','KeyP','Semicolon','Quote'];
+const KB_CODE_LBL = ['A','W','S','E','D','F','T','G','Y','H','U','J','K','O','L','P',';',"'"];
+// chord shapes, as semitones above the root (the 5th may be left out)
+const KB_SHAPES = [['',[0,4,7]],['m',[0,3,7]],['7',[0,4,7,10]],['m7',[0,3,7,10]],['maj7',[0,4,7,11]],['sus4',[0,5,7]],['sus2',[0,2,7]],
+  ['6',[0,4,7,9]],['m6',[0,3,7,9]],['dim',[0,3,6]],['dim7',[0,3,6,9]],['aug',[0,4,8]],['add9',[0,2,4,7]],['9',[0,2,4,7,10]],['m9',[0,2,3,7,10]]];
+const KB = { held:new Set(), latched:new Set(), group:null, last:'', rec:null, raf:0, oct:0, midi:null, midiName:'', ctx:null, keyNotes:{} };
+function kbNames(){
+  const k = songKey(D.songs[ST.editId]);
+  if(!k) return ['C','C#','D','Eb','E','F','F#','G','G#','A','Bb','B'];
+  const n = keyName(k.root, k.minor, true);
+  if(n==='C' || n==='Am') return ['C','C#','D','Eb','E','F','F#','G','G#','A','Bb','B'];
+  return FLAT_KEYS.has(n) ? NOTE_FLAT : NOTE_SHARP;
+}
+// The chord a set of notes makes (lowest note preferred as the root), or ''
+function kbDetect(notes){
+  notes = Array.from(notes); if(!notes.length) return '';
+  const pcs = Array.from(new Set(notes.map(n=>((n%12)+12)%12)));
+  const bass = ((Math.min.apply(null, notes)%12)+12)%12, names = kbNames();
+  if(pcs.length===1) return names[pcs[0]];
+  let best = null;
+  pcs.forEach(r=>{
+    const rel = pcs.map(p=>(p-r+12)%12);
+    KB_SHAPES.forEach(([q, sh], si)=>{
+      if(!rel.every(x=>sh.includes(x))) return;                 // a note the chord doesn't have
+      const miss = sh.filter(x=>!rel.includes(x));
+      // only the 5th may be missing — or, with just two notes, the 3rd (a power chord reads as major)
+      const ok = miss.every(x=>x===7) || (pcs.length===2 && rel.includes(7) && q==='' );
+      if(!ok) return;
+      const score = (miss.length ? 0 : 10) + (r===bass ? 4 : 0) - si*0.1;
+      if(!best || score>best.score) best = { score, name: names[r]+q };
+    });
+  });
+  return best ? best.name : '';
+}
+function kbShown(){ return new Set([...KB.held, ...KB.latched, ...(KB.group ? KB.group.notes : [])]); }
+function kbFold(n){ return KB_LO + ((((n-KB_LO)%24)+24)%24); }
+function kbTone(n){
+  if(ST.kbMute) return;
+  try{
+    const C = KB.ctx || (KB.ctx = new (window.AudioContext || window.webkitAudioContext)());
+    if(C.state==='suspended') C.resume();
+    const f = 440*Math.pow(2,(n-69)/12), t = C.currentTime, g = C.createGain();
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.16, t+0.008); g.gain.exponentialRampToValueAtTime(0.0008, t+1.3);
+    g.connect(C.destination);
+    [['triangle',1,1],['sine',2,0.35]].forEach(([type, mul, lvl])=>{
+      const o = C.createOscillator(), og = C.createGain(); o.type = type; o.frequency.value = f*mul; og.gain.value = lvl;
+      o.connect(og); og.connect(g); o.start(t); o.stop(t+1.35);
+    });
+  }catch(e){}
+}
+// physical keys (computer keyboard, MIDI): a chord is everything pressed
+// together; it's placed when the last key is let go, at the moment it began
+function kbNoteOn(n){
+  if(!KB.held.size) KB.group = { at: performance.now(), notes: new Set() };
+  KB.held.add(n); KB.group.notes.add(n); kbTone(n); kbPaint();
+}
+function kbNoteOff(n){
+  if(!KB.held.delete(n)) return;
+  if(!KB.held.size && KB.group){
+    const name = kbDetect(KB.group.notes), at = KB.group.at; KB.group = null;
+    if(name){ KB.last = name; kbPlace(name, at); }
+  }
+  kbPaint();
+}
+function kbAllOff(){ KB.held.clear(); KB.group = null; }
+// Where a played chord goes
+function kbPlace(name, at){
+  const s = D.songs[ST.editId]; if(!s || !name) return;
+  if(KB.rec){
+    if(KB.rec.phase!=='run') return;
+    const tm = KB.rec.tm, t = kbRecTime(at);
+    let bi = -1, bd = 1e9; tm.words.forEach((w,i)=>{ const d = Math.abs(w.t-t); if(d<bd){ bd = d; bi = i; } });
+    if(bi<0) return;
+    const w = tm.words[bi], id = w.li+'-'+w.wi;
+    s.chords[id] = name; recordRecentChord(name); KB.flash = { id, until: performance.now()+700 };
+    render(); queueSaveSong(ST.editId); return;
+  }
+  if(ST.kbTarget){
+    const id = ST.kbTarget; ST.kbTarget = null;
+    if(s.chords[id]){ s.chords[id] = name; recordRecentChord(name); const p = splitChordStr(name); ST.selRoot = p.root; ST.selSuffix = p.q; render(); queueSaveSong(ST.editId); }
+    else dropChord(name, null, id);
+    return;
+  }
+  // no word picked: hold on to the chord, then tap the words to add it
+  ST.chordArmed = name; const p = splitChordStr(name); ST.selRoot = p.root; ST.selSuffix = p.q; render();
+}
+
+/* ---- recording: a marker moves through the words in time ---- */
+function kbRecTime(at){ const r = KB.rec; return r.startT + Math.max(0, at - r.t0)/1000*r.speed; }
+function kbRecStart(){
+  const s = D.songs[ST.editId]; if(!s) return;
+  const tm = timing(s); if(!tm.words.length){ toast('Add some lyrics first'); return; }
+  let first = tm.words[0];
+  if(ST.kbTarget){ const w = tm.words.find(w=>w.li+'-'+w.wi===ST.kbTarget); if(w) first = w; ST.kbTarget = null; }
+  const speed = ST.kbSpeed || 1;
+  ST.chordArmed = null; KB.latched.clear();
+  // a 3-second count-in, then about a second and a half before the first word
+  KB.rec = { tm, speed, phase:'count', t0: performance.now()+3000, startT: Math.max(0, first.t - 1.5*speed), end: tm.words[tm.words.length-1].t + 2*speed, li:-1 };
+  render();
+  cancelAnimationFrame(KB.raf); KB.raf = requestAnimationFrame(kbRecTick);
+}
+function kbRecStop(){
+  cancelAnimationFrame(KB.raf); KB.rec = null;
+  document.querySelectorAll('.kb-caret').forEach(c=>c.remove());
+  document.querySelectorAll('.lword.kb-cur').forEach(w=>w.classList.remove('kb-cur'));
+  kbPaint();
+}
+function kbRecTick(){
+  const r = KB.rec; if(!r || !nInChords()){ if(r) kbRecStop(); return; }
+  const now = performance.now();
+  r.phase = now < r.t0 ? 'count' : 'run';
+  const t = kbRecTime(now);
+  if(r.phase==='run' && t > r.end){ kbRecStop(); toast('Recording finished'); return; }
+  const tm = r.tm, i = Math.max(0, curWord(tm, t)), w = tm.words[i], nx = tm.words[i+1];
+  const box = document.getElementById('editorLyricsScroll'), wrap = box && box.querySelector('.lyrics-wrap');
+  if(wrap){
+    const el = box.querySelector('.lword[data-drop="'+w.li+'-'+w.wi+'"]');
+    box.querySelectorAll('.lword.kb-cur').forEach(x=>{ if(x!==el) x.classList.remove('kb-cur'); });
+    if(el){
+      const started = r.phase==='run' && t >= w.t;
+      el.classList.toggle('kb-cur', started);
+      let car = wrap.querySelector('.kb-caret');
+      if(!car){ car = document.createElement('i'); car.className = 'kb-caret'; wrap.appendChild(car); }
+      const wr = wrap.getBoundingClientRect(), txt = el.querySelector('.ltext') || el, a = txt.getBoundingClientRect();
+      // glide from this word towards the next one (or to the end of the word at a line's end)
+      let x = a.left;
+      if(started){
+        const frac = nx ? Math.max(0, Math.min(1, (t - w.t)/Math.max(0.05, nx.t - w.t))) : 1;
+        const nel = nx && nx.li===w.li ? box.querySelector('.lword[data-drop="'+nx.li+'-'+nx.wi+'"] .ltext') : null;
+        const bx = nel ? nel.getBoundingClientRect().left : a.right;
+        x = a.left + (bx - a.left)*frac;
+      }
+      car.style.transform = `translate(${(x - wr.left - 1).toFixed(1)}px,${(a.top - wr.top - 4).toFixed(1)}px)`;
+      car.style.height = (a.height + 8)+'px';
+      car.classList.toggle('wait', !started);
+      // keep the line being sung in view
+      if(r.li!==w.li){
+        r.li = w.li;
+        const br = box.getBoundingClientRect();
+        const target = box.scrollTop + (a.top - br.top) - box.clientHeight*0.35;
+        box.scrollTo({ top: Math.max(0, target), behavior: 'smooth' });
+      }
+    }
+  }
+  kbPaintRec();
+  KB.raf = requestAnimationFrame(kbRecTick);
+}
+
+/* ---- MIDI ---- */
+function kbMidiBind(){
+  const acc = KB.midi; if(!acc) return;
+  const names = [];
+  acc.inputs.forEach(inp=>{
+    names.push(inp.name || 'MIDI keyboard');
+    inp.onmidimessage = function(e){
+      if(!nInChords() || !ST.kbOpen) return;
+      const [st, n, v] = e.data, cmd = st & 0xf0;
+      if(cmd===0x90 && v>0) kbNoteOn(n);
+      else if(cmd===0x80 || (cmd===0x90 && v===0)) kbNoteOff(n);
+    };
+  });
+  KB.midiName = names[0] || '';
+  kbPaint();
+}
+XActions.kbMidi = function(){
+  if(KB.midi){ kbMidiBind(); toast(KB.midiName ? 'Playing from '+KB.midiName : 'No MIDI keyboard found — plug one in'); return; }
+  if(!navigator.requestMIDIAccess){ toast("This browser can't use MIDI keyboards"); return; }
+  navigator.requestMIDIAccess().then(acc=>{
+    KB.midi = acc; acc.onstatechange = kbMidiBind; kbMidiBind();
+    toast(KB.midiName ? 'Playing from '+KB.midiName : 'No MIDI keyboard found — plug one in');
+  }).catch(()=>toast('MIDI was blocked — allow it in the browser to use your keyboard'));
+};
+
+/* ---- the panel ---- */
+function kbKeysHTML(){
+  const whites = [], blacks = [], isB = n=>[1,3,6,8,10].includes(n%12);
+  let wi = 0;
+  for(let n=KB_LO; n<=KB_HI; n++){
+    const ci = n - KB_LO - KB.oct*12, lbl = ci>=0 && ci<KB_CODES.length ? KB_CODE_LBL[ci] : '';
+    if(isB(n)) blacks.push(`<span class="kb-key kb-b" data-note="${n}" style="left:calc(${wi}*100%/14 - 100%/14*0.3)" role="button" aria-label="${NOTE_SHARP[n%12]}"><b class="kb-lbl">${esc(lbl)}</b></span>`);
+    else { whites.push(`<span class="kb-key kb-w" data-note="${n}" role="button" aria-label="${NOTE_SHARP[n%12]}${Math.floor(n/12)-1}"><b class="kb-lbl">${esc(lbl)}</b>${n%12===0?`<i class="kb-c">C${Math.floor(n/12)-1}</i>`:''}</span>`); wi++; }
+  }
+  return whites.join('') + blacks.join('');
+}
+function kbPanelHTML(){
+  const sp = ST.kbSpeed || 1;
+  return `<div class="kb" id="kbPanel">
+    <div class="kb-bar">
+      <div class="kb-read"><button class="kb-chord" id="kbChord" data-xact="kbAdd" aria-label="The chord you're playing"></button><span class="kb-hint" id="kbHint"></span></div>
+      <button class="kb-add" id="kbAdd" data-xact="kbAdd"></button>
+      <div class="kb-ctrls">
+        <label class="kb-speed" title="Recording speed"><span class="msi" style="font-size:18px">speed</span><select data-xchange="kbSpeed" aria-label="Recording speed">${KB_SPEEDS.map(v=>`<option value="${v}"${v===sp?' selected':''}>x${v}</option>`).join('')}</select></label>
+        <button class="kb-rec" id="kbRec" data-xact="kbRec"><i class="kb-dot"></i><span id="kbRecTxt">Record</span></button>
+        ${navigator.requestMIDIAccess ? `<button class="kb-ico kb-midi" id="kbMidi" data-xact="kbMidi" title="Use a MIDI keyboard" aria-label="Use a MIDI keyboard"><span class="msi" style="font-size:20px">cable</span></button>` : ''}
+        <button class="kb-ico" data-xact="kbMute" title="${ST.kbMute?'Sound on':'Sound off'}" aria-label="${ST.kbMute?'Sound on':'Sound off'}"><span class="msi" style="font-size:20px">${ST.kbMute?'volume_off':'volume_up'}</span></button>
+        <button class="kb-ico" data-xact="kbToggle" title="Close the keyboard" aria-label="Close the keyboard"><span class="msi" style="font-size:20px">close</span></button>
+      </div>
+    </div>
+    <div class="kb-keys" id="kbKeys">${kbKeysHTML()}</div>
+  </div>`;
+}
+const _nSongBodyKb = renderSongBody;
+renderSongBody = function(d){
+  let html = _nSongBodyKb(d);
+  if(ST.step!=='chords') return html;
+  html = html.replace('<div class="ce-main">', `<div class="ce-main"><button class="ce-kbbtn${ST.kbOpen?' on':''}" data-xact="kbToggle" aria-pressed="${!!ST.kbOpen}" title="Play chords on a keyboard"><span class="msi" style="font-size:20px">piano</span><span class="lbl">Keyboard</span></button>`);
+  if(ST.kbOpen) html = html.replace('<div class="ce-wrap">', '<div class="ce-wrap kb-on">').replace(/(\n\s*<div class="ce-foot")/, '\n'+kbPanelHTML()+'$1');
+  return html;
+};
+function kbWordText(id){ const el = document.querySelector('.lword[data-drop="'+id+'"] .ltext'); return el ? el.textContent.trim() : ''; }
+function kbPaintRec(){
+  const b = document.getElementById('kbRec'), tx = document.getElementById('kbRecTxt'); if(!b || !tx) return;
+  const r = KB.rec;
+  b.classList.toggle('on', !!r);
+  const label = !r ? 'Record' : r.phase==='count' ? 'Starting in '+Math.max(1, Math.ceil((r.t0-performance.now())/1000)) : 'Stop';
+  if(tx.textContent!==label) tx.textContent = label;
+  const h = document.getElementById('kbHint');
+  if(r && h){ const t = r.phase==='count' ? 'Get ready — the marker starts at the first word' : 'Play each chord as its word comes'; if(h.textContent!==t) h.textContent = t; }
+  if(KB.flash){
+    const on = performance.now() < KB.flash.until;
+    document.querySelectorAll('.lword[data-drop="'+KB.flash.id+'"]').forEach(w=>w.classList.toggle('kb-flash', on));
+    if(!on) KB.flash = null;
+  }
+}
+function kbPaint(){
+  const open = !!ST.kbOpen && nInChords();
+  document.body.classList.toggle('kb-open', open);
+  document.querySelectorAll('.lword.kb-target').forEach(w=>{ if(!open || w.dataset.drop!==ST.kbTarget) w.classList.remove('kb-target'); });
+  if(!open) return;
+  if(ST.kbTarget) document.querySelectorAll('.lword[data-drop="'+ST.kbTarget+'"]').forEach(w=>w.classList.add('kb-target'));
+  const panel = document.getElementById('kbPanel'); if(!panel) return;
+  const shown = new Set([...kbShown()].map(kbFold));
+  panel.querySelectorAll('.kb-key').forEach(k=>k.classList.toggle('on', shown.has(+k.dataset.note)));
+  const live = KB.held.size || KB.group ? kbDetect(KB.group ? KB.group.notes : KB.held) : '';
+  const lat = KB.latched.size ? kbDetect(KB.latched) : '';
+  const name = live || lat || KB.last;
+  const ch = document.getElementById('kbChord');
+  if(ch){ ch.textContent = name || (KB.latched.size ? '?' : '—'); ch.classList.toggle('dim', !live && !lat); ch.classList.toggle('can-add', !!lat && !KB.held.size); }
+  const add = document.getElementById('kbAdd');
+  if(add){
+    const show = !!lat && !KB.held.size;
+    add.style.display = show ? '' : 'none';
+    add.textContent = !show ? '' : KB.rec ? 'Play '+lat : ST.kbTarget ? 'Add '+lat : 'Use '+lat;
+  }
+  const h = document.getElementById('kbHint');
+  if(h && !KB.rec){
+    const w = ST.kbTarget ? kbWordText(ST.kbTarget) : '';
+    const t = KB.latched.size && !lat ? "That isn't a chord Singa knows yet"
+      : ST.kbTarget ? (w ? 'Play the chord for “'+w+'”' : 'Play the chord for this spot')
+      : ST.chordArmed ? 'Now tap the words to add it'
+      : 'Tap a word, then play its chord';
+    if(h.textContent!==t) h.textContent = t;
+  }
+  const m = document.getElementById('kbMidi');
+  if(m){ m.classList.toggle('on', !!KB.midiName); m.title = KB.midiName ? 'Playing from '+KB.midiName : 'Use a MIDI keyboard'; }
+  kbPaintRec();
+}
+XActions.kbToggle = function(){
+  ST.kbOpen = !ST.kbOpen;
+  if(!ST.kbOpen){ kbRecStop(); kbAllOff(); KB.latched.clear(); ST.kbTarget = null; KB.last = ''; }
+  render();
+};
+XActions.kbAdd = function(){
+  const name = kbDetect(KB.latched); if(!name) return;
+  KB.latched.clear(); KB.last = name;
+  kbPlace(name, performance.now()); kbPaint();
+};
+XActions.kbRec = function(){ if(KB.rec) kbRecStop(); else kbRecStart(); };
+XActions.kbMute = function(){ ST.kbMute = !ST.kbMute; render(); };
+XActions.kbSpeed = function(d, v){ ST.kbSpeed = +v || 1; if(KB.rec && KB.rec.phase==='run'){ const now = performance.now(); KB.rec.startT = kbRecTime(now); KB.rec.t0 = now; KB.rec.speed = ST.kbSpeed; } };
+// tapping keys (mouse / touch): each note stays down until tapped again
+document.addEventListener('pointerdown', function(e){
+  const k = e.target.closest && e.target.closest('.kb-key'); if(!k || !nInChords()) return;
+  e.preventDefault();
+  const n = +k.dataset.note;
+  if(KB.latched.has(n)) KB.latched.delete(n); else { KB.latched.add(n); kbTone(n); }
+  KB.last = '';
+  kbPaint();
+}, true);
+// picking the word a chord goes on
+document.addEventListener('click', function(e){
+  if(!nInChords() || !ST.kbOpen || ST.chordArmed || KB.rec) return;
+  if(e.target.closest('.chip-x,[data-drag-chord],[data-act],[data-xact],.kb')) return;
+  const w = e.target.closest('.lword[data-drop]'); if(!w) return;
+  ST.kbTarget = ST.kbTarget===w.dataset.drop ? null : w.dataset.drop;
+  kbPaint();
+});
+// while recording, tapping a chord in the list plays it at the marker
+document.addEventListener('click', function(e){
+  if(!nInChords() || !KB.rec) return;
+  const tile = e.target.closest('.ctile,.utile'); if(!tile || !tile.dataset.dragChord) return;
+  e.stopImmediatePropagation(); e.preventDefault();
+  kbPlace(tile.dataset.dragChord, performance.now());
+}, true);
+// the computer keyboard
+function kbTyping(e){ const t = e.target; return t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)); }
+document.addEventListener('keydown', function(e){
+  if(!nInChords() || !ST.kbOpen || kbTyping(e) || e.metaKey || e.ctrlKey || e.altKey) return;
+  const i = KB_CODES.indexOf(e.code);
+  if(i>=0){ e.preventDefault(); if(e.repeat || KB.keyNotes[e.code]!=null) return; const n = KB_LO + KB.oct*12 + i; KB.keyNotes[e.code] = n; kbNoteOn(n); return; }
+  if(e.code==='KeyZ' || e.code==='KeyX'){ e.preventDefault(); KB.oct = Math.max(-2, Math.min(2, KB.oct + (e.code==='KeyX'?1:-1))); const kk = document.getElementById('kbKeys'); if(kk){ kk.innerHTML = kbKeysHTML(); kbPaint(); } toast('Keys from C'+(3+KB.oct)); return; }
+  if(e.key==='Enter' && KB.latched.size){ e.preventDefault(); XActions.kbAdd(); return; }
+  if(e.code==='Space'){ e.preventDefault(); XActions.kbRec(); return; }
+  if(e.key==='Escape'){ if(KB.rec) kbRecStop(); else if(KB.latched.size){ KB.latched.clear(); kbPaint(); } else if(ST.kbTarget){ ST.kbTarget = null; kbPaint(); } }
+});
+document.addEventListener('keyup', function(e){
+  const n = KB.keyNotes[e.code]; if(n==null) return;
+  delete KB.keyNotes[e.code]; kbNoteOff(n);
+});
+window.addEventListener('blur', function(){ KB.keyNotes = {}; if(KB.held.size){ kbAllOff(); kbPaint(); } });
+// after every redraw: keys, the picked word, the marker
+const _nRenderKb = render;
+render = function(){
+  if(!nInChords()){ if(KB.rec) kbRecStop(); if(ST.kbOpen){ ST.kbOpen = false; ST.kbTarget = null; KB.latched.clear(); kbAllOff(); } }
+  _nRenderKb();
+  kbPaint();
+};
+
+/* ============================================================
+   THE CROWD, LIVE
+   · Guests vote on the order of the setlist (no new-song requests):
+     the songs with the most votes move up the queue.
+   · The crowd chat (not only direct messages) reaches the performer,
+     as it happens, with a count on the gig player.
+   · Pausing (or leaving the player) reaches the guests straight away.
+   ============================================================ */
+const _nGigSettings = gigSettings;
+gigSettings = function(g){
+  const gs = _nGigSettings(g), own = (g && g.settings) || {};
+  // voting on the order is on unless it was switched off; "requests" now means the same thing
+  gs.order = own.order!=null ? !!own.order : true;
+  gs.requests = gs.order;
+  return gs;
+};
+const _nGigSettingsModal = renderGigSettingsModal;
+renderGigSettingsModal = function(){
+  return _nGigSettingsModal()
+    .replace(/<div class="row"[^>]*data-id="requests">[\s\S]*?<\/div><\/div><\/div>/, '')
+    .replace('Allow audience to choose songs order', 'Let the audience vote on the order')
+    .replace('Guest votes reorder the upcoming songs', 'Guests vote for the songs they want next; the most votes go first');
+};
+Actions.toggleGigSetting = function(d){
+  const g = gigObj(); const gs = gigSettings(g);
+  const v = !gs[d.id];
+  g.settings = { ...(g.settings||{}), [d.id]: v };
+  if(d.id==='order') g.settings.requests = v;
+  render(); saveGigRow(g);
+};
+/* votes: one row per setlist song in gig_requests, id "v_<gig>_<song>" */
+function nVoteSong(row, gigId){ const p = 'v_'+gigId+'_'; return row && String(row.id).indexOf(p)===0 ? String(row.id).slice(p.length) : null; }
+function nTakeVotes(rows, gigId){
+  (rows||[]).forEach(r=>{ const id = nVoteSong(r, gigId); if(id) ST.orderVotes[id] = Math.max(0, +r.votes||0); });
+}
+let _nCrowdCh = null, _nCrowdGig = null;
+function nCrowdJoin(gigId){
+  if(!gigId || _nCrowdGig===gigId) return;
+  nCrowdLeave();
+  _nCrowdGig = gigId; ST.orderVotes = {}; ST.gigUnread = 0; ST.gigPhotos = []; ST.gigThreads = nThreadsFrom([]); ST._crowdLoaded = false;
+  sb.from('gig_requests').select('*').eq('gig_id', gigId).then(res=>{ if(_nCrowdGig!==gigId) return; nTakeVotes(res.data, gigId); render(); }).catch(()=>{});
+  // the crowd's photos and messages so far
+  Promise.all([
+    sb.from('gig_photos').select('*').eq('gig_id', gigId).order('created_at', { ascending:false }),
+    loadGigThreads(gigId)
+  ]).then(([ph, threads])=>{
+    if(_nCrowdGig!==gigId) return;
+    ST.gigPhotos = ((ph && ph.data) || []).map(nPhotoUrl);
+    ST.gigThreads = threads; ST._crowdLoaded = true; render();
+  }).catch(e=>console.error('Singa: crowd load failed', e));
+  try{
+    _nCrowdCh = sb.channel('gig-crowd-'+gigId)
+      .on('postgres_changes', { event:'*', schema:'public', table:'gig_requests', filter:'gig_id=eq.'+gigId }, p=>{
+        if(_nCrowdGig!==gigId || !p.new) return; nTakeVotes([p.new], gigId); render();
+      })
+      .on('postgres_changes', { event:'INSERT', schema:'public', table:'gig_photos', filter:'gig_id=eq.'+gigId }, p=>{
+        if(_nCrowdGig!==gigId || !p.new || (ST.gigPhotos||[]).some(x=>x.id===p.new.id)) return;
+        ST.gigPhotos = [nPhotoUrl(p.new), ...(ST.gigPhotos||[])]; render();
+      })
+      .on('postgres_changes', { event:'INSERT', schema:'public', table:'gig_chat_messages', filter:'gig_id=eq.'+gigId }, p=>{
+        if(_nCrowdGig!==gigId || !p.new || p.new.is_owner) return;
+        nAddMsg(p.new);
+        if(ST.screen!=='gigmessages') ST.gigUnread = (ST.gigUnread||0) + 1;
+        render();
+      })
+      .subscribe();
+  }catch(e){ console.error('Singa: crowd channel failed', e); }
+}
+function nCrowdLeave(){ if(_nCrowdCh){ try{ sb.removeChannel(_nCrowdCh); }catch(e){} } _nCrowdCh = null; _nCrowdGig = null; }
+const _nJoinGigCh = joinGigChannel;
+joinGigChannel = function(gigId){ _nJoinGigCh(gigId); nCrowdJoin(gigId); };
+const _nLeaveGigCh = leaveGigChannel;
+leaveGigChannel = function(){ _nLeaveGigCh(); nCrowdLeave(); };
+/* messages: the crowd chat first, then each guest's direct messages */
+const N_CROWD = '__crowd';
+function nThreadsFrom(rows){
+  const crowd = { guestId:N_CROWD, name:'Crowd chat', crowd:true, messages:[] }, byGuest = {};
+  (rows||[]).forEach(m=>{
+    if(!m.is_dm){ crowd.messages.push(m); return; }
+    const key = m.guest_id || 'unknown';
+    if(!byGuest[key]) byGuest[key] = { guestId:key, name:'Guest', messages:[] };
+    if(!m.is_owner && m.author_name) byGuest[key].name = m.author_name;
+    byGuest[key].messages.push(m);
+  });
+  const dms = Object.values(byGuest).sort((a,b)=> new Date(b.messages[b.messages.length-1].created_at||0) - new Date(a.messages[a.messages.length-1].created_at||0));
+  return [crowd, ...dms];
+}
+loadGigThreads = async function(gigId){
+  try{
+    const res = await sb.from('gig_chat_messages').select('*').eq('gig_id', gigId).order('created_at', { ascending:true });
+    return nThreadsFrom(res.data);
+  }catch(e){ console.error('Singa: failed to load gig messages', e); return nThreadsFrom([]); }
+};
+function nAddMsg(m){
+  if(!ST.gigThreads || !ST.gigThreads.length) ST.gigThreads = nThreadsFrom([]);
+  if(ST.gigThreads.some(t=>t.messages.some(x=>x.id===m.id))) return;
+  let t = ST.gigThreads.find(x=> m.is_dm ? x.guestId===(m.guest_id||'unknown') : x.crowd);
+  if(!t){ t = { guestId:m.guest_id||'unknown', name:m.author_name||'Guest', messages:[] }; ST.gigThreads.splice(1, 0, t); }
+  if(m.is_dm && !m.is_owner && m.author_name) t.name = m.author_name;
+  t.messages.push({ created_at:new Date().toISOString(), ...m });
+  if(ST.screen==='gigmessages' && ST.gigMsgThread===t.guestId) requestAnimationFrame(()=>{ const el = document.getElementById('gigMsgScroll'); if(el) el.scrollTop = el.scrollHeight; });
+}
+Actions.gigMessagesOpen = async function(){
+  ST._msgBack = ST.screen==='gigplayer' ? 'gigplayer' : 'gig';
+  ST.gigUnread = 0;
+  const g = gigObj();
+  ST.screen = 'gigmessages'; ST.gigMsgThread = null;
+  const have = _nCrowdGig===g.id && ST._crowdLoaded;
+  ST.gigMsgLoading = !have; render();
+  const threads = await loadGigThreads(g.id);
+  if(ST.screen!=='gigmessages') { ST.gigThreads = threads; return; }
+  ST.gigThreads = threads; ST.gigMsgLoading = false; render();
+};
+XActions.gigMsgBack = function(){ ST.screen = ST._msgBack || 'gig'; render(); };
+const _nRenderGigMsgs = renderGigMessages;
+renderGigMessages = function(){
+  const thread = ST.gigThreads.find(t=>t.guestId===ST.gigMsgThread);
+  let html;
+  if(!thread){
+    // (the list below is drawn without the crowd chat, which goes on top)
+    const all = ST.gigThreads;
+    ST.gigThreads = all.filter(t=>!t.crowd && t.messages.length);
+    try{ html = _nRenderGigMsgs(); } finally { ST.gigThreads = all; }
+    html = html.replace('data-act="nav" data-to="gig"', 'data-xact="gigMsgBack"');
+    if(ST.gigMsgLoading) return html;
+    const cr = all.find(t=>t.crowd), dms = all.filter(t=>!t.crowd && t.messages.length).length;
+    const last = cr && cr.messages[cr.messages.length-1];
+    const sub = last ? (last.is_owner ? 'You: ' : (last.author_name||'Someone')+': ')+last.text : 'Nothing yet — guests chat here during the gig';
+    const row = `<div class="list-row nrow" data-act="openGigThread" data-id="${N_CROWD}"><span class="msi" style="font-size:24px">groups</span><div style="min-width:0;flex:1"><div class="t">Crowd chat · everyone</div><div class="s">${esc(sub)}</div></div>${icon('chevron_right',22)}</div>`
+      + (dms ? `<div class="nmsg-k">DIRECT MESSAGES</div>` : '');
+    html = dms ? html.replace('<div class="list-row"', row+'<div class="list-row"') : html.replace(/<div style="color:#8a8a8a">No direct messages yet[^<]*<\/div>/, row);
+    return html;
+  }
+  html = _nRenderGigMsgs();
+  if(thread.crowd){
+    // everyone's messages, with their names; yours on the right
+    const msgs = thread.messages.map(m=>{
+      const mine = m.is_owner;
+      return `<div class="nmsg${mine?' mine':''}"><span class="who">${esc(mine ? 'You' : (m.author_name||'Someone'))}</span><div class="bub">${esc(m.text)}</div></div>`;
+    }).join('') || `<div style="color:#8a8a8a">No messages yet.</div>`;
+    html = html.replace(/(<div style="flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:10px" id="gigMsgScroll">)[\s\S]*?(<\/div>\s*<div class="row" style="gap:8px">)/, (m0, a, b)=>a+msgs+b)
+      .replace('placeholder="Reply…"', 'placeholder="Say something to everyone…"');
+  }
+  return html;
+};
+const _nSendReply = Actions.sendGigReply;
+Actions.sendGigReply = async function(){
+  if(ST.gigMsgThread!==N_CROWD) return _nSendReply.apply(this, arguments);
+  if(!canSync()) return;
+  const text = (ST.gigMsgDraft||'').trim(); if(!text) return;
+  ST.gigMsgDraft = '';
+  const g = gigObj();
+  const row = { id:'m'+Date.now()+Math.random().toString(16).slice(2,6), gig_id:g.id, guest_id:'', author_name: ST.nickname||nicknameFromEmail(ST.email), is_owner:true, is_dm:false, text };
+  nAddMsg(row); render();
+  try{ const r = await sb.from('gig_chat_messages').insert(row); if(r.error) console.error('Singa: chat send failed', r.error); }catch(e){ console.error('Singa: chat send failed', e); }
+};
+// the gig player: a chat button with the number of new messages
+const _nGigPlayerCrowd = renderGigPlayer;
+renderGigPlayer = function(){
+  const html = _nGigPlayerCrowd();
+  const n = ST.gigUnread||0, gs = gigSettings(gigObj());
+  if(!gs.chat && !gs.dm) return html;
+  const btn = `<span class="icon-btn nchat-btn" data-act="gigMessagesOpen" title="Chat${n?' — '+n+' new':''}" aria-label="Chat${n?', '+n+' new':''}">${icon('forum',22)}${n?`<b class="nbadge">${n>99?'99+':n}</b>`:''}</span>`;
+  return html.replace(/(<span style="font-size:12px;color:#6f6f6f;display:flex;align-items:center;gap:3px"><span class="msi"[^>]*>group<\/span>[^<]*<\/span>)/, '$1'+btn);
+};
+/* live state: sent at once when it changes, and a last "paused" when the player is left */
+let _nCastKey = '', _nInGig = false, _nGigT = 0;
+const _nCastTick = broadcastLiveTick;
+broadcastLiveTick = function(){
+  const inGig = !!(ST._liveGig && ST.ctx==='gig');
+  if(!inGig){
+    if(_nInGig && ST._liveGig) broadcastGigState({ songId: gigSongId(), t: _nGigT, playing:false, listening:false, vcd:0, ended:false, up: queueFor(gigObj()).up, played: ST.played });
+    _nInGig = false; return;
+  }
+  _nInGig = true; _nGigT = ST.t;
+  const key = [gigSongId(), ST.playing, ST.gListening, ST.vcd>0].join('|');
+  if(key!==_nCastKey){ _nCastKey = key; _lastBroadcastAt = 0; }
+  const now = Date.now();
+  if(now - _lastBroadcastAt < 400) return;
+  _lastBroadcastAt = now;
+  const g = gigObj();
+  broadcastGigState({ songId: gigSongId(), t: ST.t, playing: ST.playing, listening: ST.gListening, vcd: ST.vcd, ended:false, up: queueFor(g).up, played: ST.played });
+};
+['startGig','gigHeard','pickGigSong','togglePlay','exitGig'].forEach(k=>{
+  const f = Actions[k]; if(!f) return;
+  Actions[k] = function(){ const r = f.apply(this, arguments); try{ broadcastLiveTick(); }catch(e){} return r; };
+});
+
+/* ---- search: the magnifier (and the keyboard's Search key) ---- */
+Actions.searchGo = function(d){
+  const el = document.activeElement;
+  // the results are already there as you type: this puts the keyboard away so you can see them
+  if(el && /^(INPUT|TEXTAREA)$/.test(el.tagName)) el.blur();
+  else { const f = document.querySelector('#screen input[data-bind="'+((d&&d.id)||'searchQuery')+'"]'); if(f && !f.value.trim()) f.focus(); }
+};
+
+/* ---- song menu: Change key (every song with chords) ---- */
+const _nSongMenuKey = renderSongMenu;
+renderSongMenu = function(){
+  const html = _nSongMenuKey();
+  const s = song(ST.songId), k = songKey(s);
+  if(!k) return html;
+  let picker = '';
+  if(ST.keyMenu){
+    const chips = Array.from({length:12}, (_,i)=>{
+      const n = keyName(i, k.minor, FLAT_KEYS.has(keyName(i, k.minor, true)));
+      return `<a class="nkey${i===k.root?' on':''}" data-act="x" data-xact="pickKey" data-id="${i}" aria-pressed="${i===k.root}">${esc(n)}</a>`;
+    }).join('');
+    picker = `<div class="nkeys" role="group" aria-label="Keys">${chips}</div>`;
+  }
+  const item = `<a class="link" style="font-size:17px;font-weight:700;display:flex;align-items:center;gap:8px" data-act="x" data-xact="toggleKeyMenu">Change key <span class="nkey-now">${esc(k.name)}</span></a>${picker}`;
+  return html.replace(/(<a class="link"[^>]*data-act="toggleInstMenu"[^>]*>Change instrument<\/a>)/, item+'$1');
+};
+XActions.toggleKeyMenu = function(d, e){ ST.keyMenu = !ST.keyMenu; ST.instMenu = false; render(); };
+XActions.pickKey = function(d){
+  const s = song(ST.songId); if(!s || s===EMPTY_SONG) return;
+  const k = songKey(s); if(!k) return;
+  const to = +d.id, semis = ((to-k.root)%12+12)%12; if(!semis){ ST.keyMenu = false; render(); return; }
+  const flats = FLAT_KEYS.has(keyName(to, k.minor, true));
+  transposeSong(s, semis>6 ? semis-12 : semis, flats);
+  const mine = s.mine!==false && !ST.viewBy;
+  if(mine && D.songs[s.id]) queueSaveSong(s.id);
+  ST.keyMenu = false; render();
+  toast('Key changed to '+keyName(to, k.minor, flats) + (mine ? '' : ' — for you, this time'));
+};
+const _nToggleMenuKey = Actions.toggleMenu;
+Actions.toggleMenu = function(){ ST.keyMenu = false; return _nToggleMenuKey.apply(this, arguments); };
+
+/* ---- chords step: while a chord is being dragged, nothing scrolls under
+   the finger (a scroll used to cancel the drag and the chord vanished).
+   The lyrics still move when the chord is held near their top or bottom. ---- */
+// In a chord list long enough to scroll, a quick swipe scrolls it; touch a
+// chord and hold it a moment, and it lifts — then it drags any way you like.
+let _nHold = null;
+function nHoldEnd(){ if(_nHold){ clearTimeout(_nHold.t); if(_nHold.el) _nHold.el.classList.remove('nheld'); } _nHold = null; document.body.classList.remove('chord-hold'); }
+document.addEventListener('touchstart', function(e){
+  nHoldEnd();
+  const el = e.target.closest && e.target.closest('.ctile,.utile');
+  if(!el || !nInChords() || e.touches.length!==1) return;
+  const p = e.touches[0];
+  _nHold = { el, x:p.clientX, y:p.clientY, t: setTimeout(()=>{ if(!_nHold) return; document.body.classList.add('chord-hold'); el.classList.add('nheld'); try{ navigator.vibrate && navigator.vibrate(12); }catch(err){} }, 250) };
+}, { passive:true });
+document.addEventListener('touchmove', function(e){
+  const b = document.body.classList;
+  if(_nHold && !b.contains('chord-hold')){
+    const p = e.touches[0];
+    if(p && Math.hypot(p.clientX-_nHold.x, p.clientY-_nHold.y) > 8){ clearTimeout(_nHold.t); }   // a swipe, not a hold
+  }
+  if((b.contains('chord-dragging') || b.contains('chord-hold')) && e.cancelable) e.preventDefault();
+}, { passive:false });
+['touchend','touchcancel'].forEach(k=>document.addEventListener(k, nHoldEnd, { passive:true }));
+document.addEventListener('contextmenu', function(e){ if(nInChords() && e.target.closest && e.target.closest('.ctile,.utile,[data-drag-chord]')) e.preventDefault(); });
+
+/* ---- the crowd's photos, in the performer app ---- */
+function nPhotoUrl(p){
+  let url = p.url;
+  try{ if(!url && p.storage_path) url = sb.storage.from('gig-photos').getPublicUrl(p.storage_path).data.publicUrl; }catch(e){}
+  return { ...p, url };
+}
+// keep the crowd's photos, messages and votes coming in for the gig on screen (or the live one)
+const N_GIG_SCREENS = ['gig','gigphotos','gigmessages','gigplayer','gigedit'];
+function nCrowdSync(){
+  const want = ST._liveGig || (N_GIG_SCREENS.includes(ST.screen) && ST.userId ? (gigObj()||{}).id : null);
+  if(want && want!==_nCrowdGig) nCrowdJoin(want);
+  else if(!want && _nCrowdGig) nCrowdLeave();
+}
+const _nRenderCrowd = render;
+render = function(){ _nRenderCrowd(); try{ nCrowdSync(); }catch(e){} };
+leaveGigChannel = function(){ _nLeaveGigCh(); };   // the crowd stays while the gig is on screen
+renderGigPhotos = function(){
+  const g = gigObj(), ph = ST.gigPhotos || [];
+  const grid = ph.length
+    ? `<div class="nphotos">${ph.map(p=>`<figure class="nphoto"><img src="${esc(p.url||'')}" loading="lazy" alt="Photo by ${esc(p.author_name||'a guest')}"><figcaption>${esc(p.author_name||'A guest')}</figcaption><a class="nphoto-dl" href="${esc(p.url||'')}" download target="_blank" rel="noopener" title="Download" aria-label="Download">${icon('download',18)}</a></figure>`).join('')}</div>`
+    : `<div class="nempty">${icon('photo_library',40)}<div class="t">No photos yet</div><div class="s">Photos your guests share from the guest page appear here as they're taken.</div></div>`;
+  return `<div class="scr" style="gap:24px">
+    <div class="row" style="align-items:flex-end;gap:14px">
+      <span class="icon-btn" style="margin-bottom:6px" data-act="nav" data-to="gig">${icon('chevron_left',26)}</span>
+      <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700">Photos${ph.length?' · '+ph.length:''}</div><div style="font-size:26px;font-weight:700;line-height:1.25">${esc(g.title)}</div></div>
+      <button class="btn btn-outline btn-sm" style="display:flex;align-items:center;gap:6px" data-act="x" data-xact="gigPhotoAdd">${icon('add_a_photo',20)}Add a photo</button>
+    </div>
+    ${grid}
+  </div>`;
+};
+XActions.gigPhotoAdd = function(){
+  const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*';
+  inp.onchange = async ()=>{
+    const f = inp.files && inp.files[0]; if(!f) return;
+    const g = gigObj(), id = 'p'+Date.now()+Math.random().toString(16).slice(2,6);
+    const path = g.id+'/'+id+'.'+((f.name.split('.').pop()||'jpg').toLowerCase().replace(/[^a-z0-9]/g,'')||'jpg');
+    toast('Adding your photo…');
+    try{
+      const up = await sb.storage.from('gig-photos').upload(path, f, { contentType: f.type||'image/jpeg' });
+      if(up.error) throw up.error;
+      const row = { id, gig_id:g.id, guest_id:'', author_name: ST.nickname||nicknameFromEmail(ST.email), storage_path:path };
+      const r = await sb.from('gig_photos').insert(row); if(r.error) throw r.error;
+      ST.gigPhotos = [nPhotoUrl({ ...row, created_at:new Date().toISOString() }), ...(ST.gigPhotos||[])];
+      toast('Photo added'); render();
+    }catch(e){ console.error('Singa: photo upload failed', e); toast("The photo couldn't be added — try again"); }
+  };
+  inp.click();
+};
+// the gig page: what the crowd is sharing, right under the buttons
+function nCrowdStrip(g){
+  if(_nCrowdGig!==g.id) return '';
+  const ph = ST.gigPhotos || [], cr = (ST.gigThreads||[]).find(t=>t.crowd), dms = (ST.gigThreads||[]).filter(t=>!t.crowd && t.messages.length);
+  const msgs = (cr ? cr.messages : []).slice(-3);
+  const nMsg = (cr ? cr.messages.length : 0) + dms.reduce((a,t)=>a+t.messages.length,0);
+  if(!ph.length && !nMsg && ST._liveGig!==g.id) return '';
+  const thumbs = ph.slice(0,4).map(p=>`<img src="${esc(p.url||'')}" alt="" loading="lazy">`).join('');
+  return `<div class="ncrowd">
+    <div class="ncrowd-card" data-act="gigPhotosOpen">
+      <div class="ncrowd-h">${icon('photo_library',20)}<span>Photos</span><b>${ph.length}</b>${icon('chevron_right',20)}</div>
+      ${ph.length ? `<div class="ncrowd-thumbs">${thumbs}</div>` : `<div class="ncrowd-none">Your guests' photos show up here.</div>`}
+    </div>
+    <div class="ncrowd-card" data-act="gigMessagesOpen">
+      <div class="ncrowd-h">${icon('forum',20)}<span>Chat</span><b>${nMsg}</b>${(ST.gigUnread||0) ? `<i class="nbadge" style="position:static">${ST.gigUnread} new</i>` : ''}${icon('chevron_right',20)}</div>
+      ${msgs.length ? `<div class="ncrowd-msgs">${msgs.map(m=>`<div><b>${esc(m.is_owner?'You':(m.author_name||'Someone'))}</b> ${esc(m.text)}</div>`).join('')}</div>` : `<div class="ncrowd-none">${dms.length ? dms.length+' private conversation'+(dms.length===1?'':'s') : 'The crowd chat shows up here.'}</div>`}
+    </div>
+  </div>`;
+}
+const _nRenderGigCrowd = renderGig;
+renderGig = function(){
+  const html = _nRenderGigCrowd(), g = gigObj();
+  const strip = nCrowdStrip(g); if(!strip) return html;
+  return html.replace('<div style="margin-top:10px;padding-left:40px">', strip+'<div style="margin-top:10px;padding-left:40px">');
+};
+// A chord in a list that fits on screen (or one that's been held a moment)
+// drags in any direction: its finger moves are passed on as a pen's, which
+// the drag code never mistakes for scrolling the list.
+let _nFree = null;
+window.addEventListener('pointerdown', function(e){
+  _nFree = null;
+  if(e.pointerType!=='touch' || !nInChords()) return;
+  const t = e.target.closest && e.target.closest('.ctile,.utile'); if(!t) return;
+  const list = t.closest('.ce-variants,.ce-used-row');
+  _nFree = { pid: e.pointerId, fits: !!(list && list.classList.contains('nfits')) };
+}, true);
+window.addEventListener('pointermove', function(e){
+  if(!_nFree || e._nPen || e.pointerType!=='touch' || e.pointerId!==_nFree.pid) return;
+  if(!_nFree.fits && !document.body.classList.contains('chord-hold') && !document.body.classList.contains('chord-dragging')) return;
+  e.stopImmediatePropagation();
+  const p = new PointerEvent('pointermove', { bubbles:true, cancelable:true, clientX:e.clientX, clientY:e.clientY, screenX:e.screenX, screenY:e.screenY, pointerId:e.pointerId, pointerType:'pen', isPrimary:true, buttons:1 });
+  p._nPen = true;
+  (e.target || document).dispatchEvent(p);
+}, true);
+['pointerup','pointercancel'].forEach(k=>window.addEventListener(k, function(e){ if(_nFree && e.pointerId===_nFree.pid) _nFree = null; }, true));
