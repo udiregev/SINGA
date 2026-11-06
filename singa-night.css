@@ -326,3 +326,160 @@ body.chord-armed .ce-lyrics .lword[data-drop]{cursor:copy}
   .n-hand .n-mic{animation:none}
   .lline{transition:opacity .3s ease !important}
 }
+
+/* ---- chords step: the keyboard ---- */
+.ce-main{position:relative}
+.ce-kbbtn{position:absolute;top:12px;right:14px;z-index:2;height:36px;padding:0 14px 0 10px;border-radius:18px;border:1px solid var(--n-line2);background:rgba(255,255,255,.06);color:#fff;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:700}
+.ce-kbbtn.on{background:#fff;color:#2A1250;border-color:#fff}
+.kb{flex:none;width:100%;max-width:960px;margin-top:14px;border-radius:24px;background:rgba(255,255,255,.07);border:1px solid var(--n-line);padding:12px 14px 14px;display:flex;flex-direction:column;gap:12px;-webkit-user-select:none;user-select:none}
+.kb-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.kb-read{display:flex;align-items:center;gap:12px;min-width:0;flex:1 1 220px}
+.kb-chord{flex:none;min-width:64px;height:44px;padding:0 14px;border-radius:14px;background:var(--n-pink);color:#2A1250;font-size:22px;font-weight:700;display:flex;align-items:center;justify-content:center;letter-spacing:-.01em}
+.kb-chord.dim{background:rgba(243,184,255,.18);color:var(--n-pink)}
+.kb-hint{font-size:13px;line-height:1.3;color:var(--n-mute);min-width:0}
+.kb-add{height:40px;padding:0 16px;border-radius:20px;border:0;background:#fff;color:#2A1250;font-size:14px;font-weight:700;white-space:nowrap}
+.kb-ctrls{display:flex;align-items:center;gap:8px;margin-left:auto}
+.kb-speed{height:40px;border-radius:20px;border:1px solid var(--n-line2);display:flex;align-items:center;gap:2px;padding:0 4px 0 10px;color:var(--n-mute)}
+.kb-speed select{height:38px;border:0;background:transparent;color:#fff;font:inherit;font-size:14px;font-weight:700;padding:0 4px;outline:none;cursor:pointer}
+.kb-speed select option{color:#1b1b1b}
+.kb-rec{height:40px;padding:0 16px 0 12px;border-radius:20px;border:1px solid var(--n-line2);background:transparent;color:#fff;display:flex;align-items:center;gap:8px;font-size:14px;font-weight:700;white-space:nowrap}
+.kb-dot{width:12px;height:12px;border-radius:50%;background:#FF6B8B;flex:none}
+.kb-rec.on{background:#FF6B8B;border-color:#FF6B8B;color:#fff}
+.kb-rec.on .kb-dot{background:#fff;border-radius:3px;animation:kbPulse 1s ease-in-out infinite}
+@keyframes kbPulse{50%{opacity:.4}}
+.kb-ico{width:40px;height:40px;border-radius:50%;border:1px solid var(--n-line2);background:transparent;color:#fff;display:flex;align-items:center;justify-content:center;padding:0;flex:none}
+.kb-midi.on{background:var(--n-pink);border-color:var(--n-pink);color:#2A1250}
+.kb-keys{position:relative;display:flex;height:132px;touch-action:none}
+.kb-key{cursor:pointer;-webkit-tap-highlight-color:transparent}
+.kb-w{flex:1;min-width:0;margin:0 1.5px;border-radius:0 0 10px 10px;background:#F6F1FF;box-shadow:inset 0 -5px 0 rgba(42,18,80,.12);display:flex;flex-direction:column;justify-content:flex-end;align-items:center;padding-bottom:8px;gap:3px;transition:background .08s ease}
+.kb-w:first-child{border-top-left-radius:6px}
+.kb-b{position:absolute;top:0;width:calc(100%/14*0.6);height:60%;border-radius:0 0 8px 8px;background:#1A0E38;box-shadow:inset 0 -4px 0 rgba(255,255,255,.08),0 2px 6px rgba(0,0,0,.35);z-index:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;padding-bottom:6px;transition:background .08s ease}
+.kb-w.on{background:var(--n-pink);box-shadow:inset 0 -2px 0 rgba(42,18,80,.2)}
+.kb-b.on{background:#C46AD8}
+.kb-lbl{font-size:11px;font-weight:700;color:rgba(42,18,80,.45);display:none}
+.kb-b .kb-lbl{color:rgba(255,255,255,.55)}
+.kb-c{font-style:normal;font-size:10px;font-weight:700;color:rgba(42,18,80,.5)}
+@media (hover:hover) and (pointer:fine){ .kb-lbl{display:block} }
+/* the word a chord will go on, and the moving marker while recording */
+.ce-lyrics .lword.kb-target .ltext{color:#fff !important;box-shadow:inset 0 -3px 0 var(--n-pink);border-radius:2px}
+.ce-lyrics .lword.kb-cur .ltext{color:#fff !important}
+.ce-lyrics .lword.kb-flash .lchord.chip{animation:chordPop 450ms cubic-bezier(.2,.8,.2,1) both}
+.ce-lyrics .lyrics-wrap{position:relative}
+.kb-caret{position:absolute;left:0;top:0;width:3px;border-radius:2px;background:var(--n-pink);box-shadow:0 0 12px 2px rgba(243,184,255,.7);pointer-events:none;z-index:3;will-change:transform}
+.kb-caret.wait{animation:kbPulse .9s ease-in-out infinite}
+/* small screens: the keyboard takes the picker's place, and the title steps aside */
+@media (max-width:700px){
+  .ce-wrap.kb-on{grid-template-columns:minmax(0,1fr)}
+  .ce-wrap.kb-on .ce-picker{display:none}
+  .kb{padding:10px 10px 12px;gap:10px;border-radius:20px;margin-top:10px}
+  .kb-keys{height:112px}
+  .kb-w{margin:0 1px}
+  .kb-ctrls{margin-left:0;width:100%;justify-content:space-between}
+  .kb-rec{flex:1;justify-content:center}
+}
+@media (max-height:900px){ body.kb-open .cs-title{display:none} }
+button.kb-chord{border:0;cursor:default}
+button.kb-chord.can-add{cursor:pointer}
+.ce-used{padding-right:118px}
+@media (max-width:700px){ .ce-used{padding-right:44px} }
+/* phone on its side: lyrics on the left, the keyboard on the right */
+@media (max-height:520px){
+  div:has(> .ce-wrap.kb-on){display:grid !important;grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);grid-template-rows:auto minmax(0,1fr) auto;column-gap:12px;align-items:stretch !important;align-content:stretch}
+  div:has(> .ce-wrap.kb-on) > :first-child{grid-column:1/-1}
+  div:has(> .ce-wrap.kb-on) > .ce-wrap{grid-column:1;grid-row:2;grid-template-columns:minmax(0,1fr);margin-top:6px;min-height:0;height:100%;overflow:hidden}
+  div:has(> .ce-wrap.kb-on) .ce-main,div:has(> .ce-wrap.kb-on) .ce-lyrics{min-height:0}
+  div:has(> .ce-wrap.kb-on) > .ce-wrap .ce-picker,div:has(> .ce-wrap.kb-on) > .ce-wrap .ce-spacer{display:none}
+  div:has(> .ce-wrap.kb-on) > .kb{grid-column:2;grid-row:2;margin-top:6px;min-height:0;padding:8px 10px;gap:8px}
+  div:has(> .ce-wrap.kb-on) > .ce-foot{grid-column:1/-1;grid-row:3}
+  .kb .kb-bar{flex-wrap:nowrap;gap:6px} .kb-read{flex:0 0 auto} .kb-hint,.kb-add{display:none !important}
+  .kb-chord{height:36px;min-width:52px;font-size:18px;border-radius:12px}
+  .kb-ctrls{margin-left:auto;width:auto;gap:6px} .kb-speed{height:36px;padding-left:8px} .kb-speed select{height:34px}
+  .kb-rec{height:36px;padding:0 12px 0 10px;flex:none} .kb-ico{width:34px;height:34px}
+  .kb .kb-keys{height:auto;flex:1;min-height:64px}
+  .ce-used{padding-right:118px}
+  div:has(> .ce-wrap.kb-on) .ce-used{display:none}
+  div:has(> .ce-wrap.kb-on) .ce-lyrics{padding-top:40px}
+}
+@media (max-width:700px){ .ce-kbbtn{padding:0;width:36px;justify-content:center} .ce-kbbtn .lbl{display:none} }
+
+/* ---- the crowd: chat in the performer app ---- */
+.nchat-btn{position:relative;margin-left:auto;width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.08);border:1px solid var(--n-line)}
+.nbadge{position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--n-pink);color:#2A1250;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;font-style:normal}
+.nmsg{display:flex;flex-direction:column;gap:3px;max-width:78%;align-self:flex-start}
+.nmsg.mine{align-self:flex-end;align-items:flex-end}
+.nmsg .who{font-size:11px;font-weight:700;color:var(--n-mute2);padding:0 6px}
+.nmsg .bub{padding:10px 14px;border-radius:18px 18px 18px 6px;background:rgba(255,255,255,.1);color:#fff;font-size:15px;line-height:1.35}
+.nmsg.mine .bub{border-radius:18px 18px 6px 18px;background:var(--n-pink);color:#2A1250}
+.nmsg-k{font-size:11px;font-weight:800;letter-spacing:.1em;color:var(--n-mute2);padding:22px 0 6px}
+
+/* ---- chords step: the lyrics panel reaches as far right as the chord list starts on the left ---- */
+@media (min-width:701px){
+  .ce-wrap{grid-template-columns:124px minmax(0,1fr)}
+  .ce-spacer{display:none}
+}
+body.chord-dragging{overscroll-behavior:none}
+body.chord-dragging .ce-variants,body.chord-dragging .ce-used-row,body.chord-dragging #screen{overscroll-behavior:none}
+
+/* ---- search boxes ---- */
+.search-field input[type=search]{-webkit-appearance:none;appearance:none}
+.search-field input[type=search]::-webkit-search-cancel-button,.search-field input[type=search]::-webkit-search-decoration{-webkit-appearance:none;display:none}
+.search-field .nh-sbtn{margin-right:-6px}
+
+/* ---- song menu: keys ---- */
+.nkey-now{font-size:13px;font-weight:700;padding:2px 9px;border-radius:999px;background:rgba(243,184,255,.18);color:var(--n-pink)}
+.nkeys{display:grid;grid-template-columns:repeat(6,auto);gap:6px;margin:-2px 0 6px}
+.nkey{min-width:44px;height:38px;padding:0 8px;border-radius:12px;border:1px solid var(--n-line2);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:#fff;cursor:pointer;text-decoration:none}
+.nkey.on{background:var(--n-pink);border-color:var(--n-pink);color:#2A1250}
+
+/* ---- tab bar labels on one line ---- */
+.nnav-b{white-space:nowrap;flex:none}
+@media(min-width:700px){ #nNav{padding:0 10px;gap:6px} .nnav-b{padding:0 20px} }
+
+/* ---- tablets held upright: Home uses the room ---- */
+@media (min-width:700px) and (max-width:1100px) and (orientation:portrait){
+  .nh-search{max-width:none;margin:20px 0 30px}
+  .nh-search input{font-size:17px}
+  .nhome .home-grid{gap:36px}
+  .nh-col{gap:38px}
+  .nh-h h2{font-size:21px}
+  .nhero{min-height:200px;border-radius:30px}
+  .nhero .nh-body{padding:22px 22px 20px;gap:10px}
+  .nh-t{font-size:26px}
+  .nstub.big{width:112px}
+  .nstub.big .mon{font-size:14px}
+  .nstub.big .day{font-size:46px}
+  .ntile{width:156px}
+  .ntile .nart{width:156px !important;height:156px !important;border-radius:34px !important}
+  .ntile .t{font-size:15px}
+  .ntickets .nticket{min-height:80px}
+  .ntickets .nticket .t{font-size:17px}
+  .nhome .list-row.hrow{padding-top:15px;padding-bottom:15px}
+  .nhome .list-row.hrow .t{font-size:17px}
+  .nhome .list-row.hrow .s{font-size:13px}
+}
+
+/* ---- the crowd on the gig page, and the photo wall ---- */
+.ncrowd{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:18px 0 8px 40px}
+@media(max-width:640px){ .ncrowd{grid-template-columns:1fr;margin-left:0} }
+.ncrowd-card{border-radius:20px;background:var(--n-glass);border:1px solid var(--n-line);padding:12px 14px;display:flex;flex-direction:column;gap:10px;cursor:pointer;min-width:0;transition:transform 160ms var(--ease-out)}
+.ncrowd-card:active{transform:scale(.985)}
+.ncrowd-h{display:flex;align-items:center;gap:8px;font-size:15px;font-weight:600}
+.ncrowd-h b{font-weight:700;color:var(--n-mute2);font-size:13px}
+.ncrowd-h > .msi:last-child{margin-left:auto;color:var(--n-mute2)}
+.ncrowd-thumbs{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.ncrowd-thumbs img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:10px;display:block;background:rgba(255,255,255,.06)}
+.ncrowd-msgs{display:flex;flex-direction:column;gap:4px;font-size:13px;line-height:1.35;color:var(--n-mute)}
+.ncrowd-msgs div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ncrowd-msgs b{color:#fff;font-weight:600}
+.ncrowd-none{font-size:13px;color:var(--n-mute2)}
+.nphotos{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px}
+.nphoto{position:relative;margin:0;border-radius:18px;overflow:hidden;background:rgba(255,255,255,.06);aspect-ratio:1}
+.nphoto img{width:100%;height:100%;object-fit:cover;display:block}
+.nphoto figcaption{position:absolute;left:8px;bottom:8px;font-size:12px;font-weight:600;background:rgba(26,14,56,.72);color:#fff;padding:3px 10px;border-radius:999px;max-width:calc(100% - 60px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nphoto-dl{position:absolute;right:8px;top:8px;width:34px;height:34px;border-radius:50%;background:rgba(26,14,56,.72);color:#fff;display:flex;align-items:center;justify-content:center}
+.nempty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;padding:60px 20px;color:var(--n-mute2)}
+.nempty .t{font-size:18px;font-weight:600;color:#fff}
+.nempty .s{font-size:14px;max-width:320px}
+.ce-variants.nfits .ctile,.ce-used-row.nfits .utile{touch-action:none}
+.ctile,.utile{-webkit-touch-callout:none}
+.ctile.nheld,.utile.nheld{transform:scale(1.08);box-shadow:0 0 0 3px var(--n-pink);transition:transform .12s ease}
