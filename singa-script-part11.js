@@ -180,17 +180,35 @@ const N_STAGE_SVG = `<svg class="n-stage n-hand" viewBox="0 0 320 290" aria-hidd
     <mask id="hFade"><rect x="-20" y="-20" width="360" height="330" fill="url(#hFadeG)"/></mask>
   </defs>
   <g mask="url(#hFade)">
-    <circle cx="160" cy="150" r="128" fill="url(#hBgL)" clip-path="url(#hHalfL)"/>
-    <circle cx="160" cy="150" r="128" fill="url(#hBgR)" clip-path="url(#hHalfR)"/>
-    <circle cx="246" cy="64" r="46" fill="url(#hStripeH)"/>
-    <circle cx="74" cy="226" r="52" fill="url(#hStripeV)" opacity="0.8"/>
-    <path d="M30 150C22 112 60 92 98 104C128 114 134 150 112 170C88 192 38 190 30 150Z" fill="#5A0D9E" opacity="0.55"/>
-    <path d="M196 214C206 186 250 178 272 196C292 214 282 246 252 252C222 258 188 240 196 214Z" fill="#1B0E5C" opacity="0.7"/>
-    <path d="M98 36C120 18 168 22 178 46C186 66 160 80 132 76C104 72 82 52 98 36Z" fill="#2A1478" opacity="0.6"/>
-    <circle cx="48" cy="92" r="9" fill="#4A0F96" opacity="0.8"/>
-    <circle cx="290" cy="138" r="7" fill="#1B0E5C"/>
-    <circle cx="206" cy="270" r="5" fill="#E61CFF" opacity="0.8"/>
-    <g fill="none" stroke="#FFB3F3" stroke-width="3" stroke-linecap="round">
+    <g class="nb-disc">
+      <circle cx="160" cy="150" r="128" fill="url(#hBgL)" clip-path="url(#hHalfL)"/>
+      <circle cx="160" cy="150" r="128" fill="url(#hBgR)" clip-path="url(#hHalfR)"/>
+    </g>
+    <g class="nb-orbit">
+      <circle cx="246" cy="64" r="46" fill="url(#hStripeH)"/>
+      <circle cx="74" cy="226" r="52" fill="url(#hStripeV)" opacity="0.8"/>
+      <path d="M30 150C22 112 60 92 98 104C128 114 134 150 112 170C88 192 38 190 30 150Z" fill="#5A0D9E" opacity="0.55"/>
+      <path d="M196 214C206 186 250 178 272 196C292 214 282 246 252 252C222 258 188 240 196 214Z" fill="#1B0E5C" opacity="0.7"/>
+      <path d="M98 36C120 18 168 22 178 46C186 66 160 80 132 76C104 72 82 52 98 36Z" fill="#2A1478" opacity="0.6"/>
+      <circle cx="48" cy="92" r="9" fill="#4A0F96" opacity="0.8"/>
+      <circle cx="290" cy="138" r="7" fill="#1B0E5C"/>
+      <circle cx="206" cy="270" r="5" fill="#E61CFF" opacity="0.8"/>
+    </g>
+    <g class="nb-glints" fill="#FFFFFF">
+      <rect class="nb-g g1" x="58" y="58" width="10" height="10" rx="2.5"/>
+      <rect class="nb-g g2" x="232" y="112" width="8" height="8" rx="2"/>
+      <rect class="nb-g g3" x="96" y="214" width="9" height="9" rx="2.2"/>
+      <rect class="nb-g g4" x="252" y="214" width="7" height="7" rx="1.8"/>
+      <rect class="nb-g g5" x="150" y="40" width="7" height="7" rx="1.8"/>
+      <rect class="nb-g g6" x="36" y="168" width="7" height="7" rx="1.8"/>
+    </g>
+    <g class="nb-stars" fill="#FFD8F8">
+      <path class="nb-s s1" d="M286 92l3 8 8 3-8 3-3 8-3-8-8-3 8-3z"/>
+      <path class="nb-s s2" d="M30 60l2.5 6.5 6.5 2.5-6.5 2.5-2.5 6.5-2.5-6.5-6.5-2.5 6.5-2.5z"/>
+      <path class="nb-s s3" d="M200 20l2.5 6.5 6.5 2.5-6.5 2.5-2.5 6.5-2.5-6.5-6.5-2.5 6.5-2.5z"/>
+      <path class="nb-s s4" d="M124 262l2.5 6.5 6.5 2.5-6.5 2.5-2.5 6.5-2.5-6.5-6.5-2.5 6.5-2.5z"/>
+    </g>
+    <g class="nb-waves" fill="none" stroke="#FFB3F3" stroke-width="3" stroke-linecap="round">
       <path d="M262 24c14 6 22 18 24 32"/>
       <path d="M270 6c22 9 34 27 36 48" opacity="0.6"/>
     </g>
@@ -641,7 +659,7 @@ function kbDetect(notes){
   return best ? best.name : '';
 }
 function kbShown(){ return new Set([...KB.held, ...KB.latched, ...(KB.group ? KB.group.notes : [])]); }
-function kbFold(n){ return KB_LO + ((((n-KB_LO)%24)+24)%24); }
+function kbFold(n){ let f = KB_LO + ((((n-KB_LO)%24)+24)%24); const hi = (document.querySelector('.kbv-keys') && KB.hi) || KB_HI; while(f>hi) f -= 12; return f; }
 function kbTone(n){
   if(ST.kbMute) return;
   try{
@@ -807,12 +825,60 @@ function kbPanelHTML(){
     <div class="kb-keys" id="kbKeys">${kbKeysHTML()}</div>
   </div>`;
 }
+// The keyboard lives in the chord panel on the left, as the other way to
+// pick chords: Chords (drag them on) | Keyboard (play them). Upright, the
+// keys run top to bottom down the panel. A phone on its side has no room
+// for that, so there the keyboard sits beside the lyrics instead.
+function kbSide(){ return !!(window.matchMedia && matchMedia('(max-height:520px)').matches); }
+function kbSwitchHTML(){
+  return `<div class="kb-switch" role="tablist" aria-label="How to add chords"><button class="${ST.kbOpen?'':'on'}" role="tab" aria-selected="${!ST.kbOpen}" data-xact="kbUse" data-id="0" title="Drag chords onto the words"><span class="msi" style="font-size:18px">drag_pan</span><span class="lbl">Chords</span></button><button class="${ST.kbOpen?'on':''}" role="tab" aria-selected="${!!ST.kbOpen}" data-xact="kbUse" data-id="1" title="Play chords on a keyboard"><span class="msi" style="font-size:18px">piano</span><span class="lbl">Keys</span></button></div>`;
+}
+XActions.kbUse = function(d){ const on = d.id==='1'; if(!!ST.kbOpen===on) return; XActions.kbToggle(); };
+// how many keys fit down the panel with each one big enough to tap:
+// two octaves on a tall screen, C to the E above the next C otherwise
+function kbHiV(){ return window.innerHeight >= 1000 ? KB_HI : 64; }
+function kbKeysVHTML(){
+  // lowest at the bottom; black keys hang off the left edge
+  const whites = [], blacks = [], isB = n=>[1,3,6,8,10].includes(n%12);
+  const hi = kbHiV(); let nW = 0; for(let n=KB_LO; n<=hi; n++) if(!isB(n)) nW++;
+  KB.hi = hi;
+  let wi = 0;
+  for(let n=KB_LO; n<=hi; n++){
+    const ci = n - KB_LO - KB.oct*12, lbl = ci>=0 && ci<KB_CODES.length ? KB_CODE_LBL[ci] : '';
+    if(isB(n)) blacks.push(`<span class="kb-key kb-b" data-note="${n}" style="bottom:calc(${wi}*100%/${nW} - 100%/${nW}*0.3);height:calc(100%/${nW}*0.6)" role="button" aria-label="${NOTE_SHARP[n%12]}"><b class="kb-lbl">${esc(lbl)}</b></span>`);
+    else { whites.push(`<span class="kb-key kb-w" data-note="${n}" role="button" aria-label="${NOTE_SHARP[n%12]}${Math.floor(n/12)-1}"><b class="kb-lbl">${esc(lbl)}</b>${n%12===0?`<i class="kb-c">C${Math.floor(n/12)-1}</i>`:''}</span>`); wi++; }
+  }
+  return whites.reverse().join('') + blacks.join('');
+}
+function kbPanelVHTML(){
+  const sp = ST.kbSpeed || 1;
+  return `<div class="ce-picker kbv kb" id="kbPanel">
+    ${kbSwitchHTML()}
+    <button class="kb-chord" id="kbChord" data-xact="kbAdd" aria-label="The chord you're playing"></button>
+    <button class="kb-add" id="kbAdd" data-xact="kbAdd"></button>
+    <span class="kb-hint" id="kbHint"></span>
+    <div class="kb-keys kbv-keys" id="kbKeys">${kbKeysVHTML()}</div>
+    <button class="kb-rec" id="kbRec" data-xact="kbRec"><i class="kb-dot"></i><span id="kbRecTxt">Record</span></button>
+    <div class="kbv-ctrls">
+      <label class="kb-speed" title="Recording speed"><select data-xchange="kbSpeed" aria-label="Recording speed">${KB_SPEEDS.map(v=>`<option value="${v}"${v===sp?' selected':''}>x${v}</option>`).join('')}</select></label>
+      ${navigator.requestMIDIAccess ? `<button class="kb-ico kb-midi" id="kbMidi" data-xact="kbMidi" title="Use a MIDI keyboard" aria-label="Use a MIDI keyboard"><span class="msi" style="font-size:18px">cable</span></button>` : ''}
+      <button class="kb-ico" data-xact="kbMute" title="${ST.kbMute?'Sound on':'Sound off'}" aria-label="${ST.kbMute?'Sound on':'Sound off'}"><span class="msi" style="font-size:18px">${ST.kbMute?'volume_off':'volume_up'}</span></button>
+    </div>
+  </div>`;
+}
+const _nPickerKb = renderChordPicker;
+renderChordPicker = function(){
+  if(ST.kbOpen && !kbSide()) return kbPanelVHTML();
+  return _nPickerKb().replace('<div class="ce-picker">', '<div class="ce-picker">'+kbSwitchHTML());
+};
 const _nSongBodyKb = renderSongBody;
 renderSongBody = function(d){
   let html = _nSongBodyKb(d);
   if(ST.step!=='chords') return html;
-  html = html.replace('<div class="ce-main">', `<div class="ce-main"><button class="ce-kbbtn${ST.kbOpen?' on':''}" data-xact="kbToggle" aria-pressed="${!!ST.kbOpen}" title="Play chords on a keyboard"><span class="msi" style="font-size:20px">piano</span><span class="lbl">Keyboard</span></button>`);
-  if(ST.kbOpen) html = html.replace('<div class="ce-wrap">', '<div class="ce-wrap kb-on">').replace(/(\n\s*<div class="ce-foot")/, '\n'+kbPanelHTML()+'$1');
+  if(ST.kbOpen){
+    html = html.replace('<div class="ce-wrap">', '<div class="ce-wrap kb-on'+(kbSide()?' kb-side':' kb-v')+'">');
+    if(kbSide()) html = html.replace(/(\n\s*<div class="ce-foot")/, '\n'+kbPanelHTML()+'$1');
+  }
   return html;
 };
 function kbWordText(id){ const el = document.querySelector('.lword[data-drop="'+id+'"] .ltext'); return el ? el.textContent.trim() : ''; }
@@ -906,7 +972,7 @@ document.addEventListener('keydown', function(e){
   if(!nInChords() || !ST.kbOpen || kbTyping(e) || e.metaKey || e.ctrlKey || e.altKey) return;
   const i = KB_CODES.indexOf(e.code);
   if(i>=0){ e.preventDefault(); if(e.repeat || KB.keyNotes[e.code]!=null) return; const n = KB_LO + KB.oct*12 + i; KB.keyNotes[e.code] = n; kbNoteOn(n); return; }
-  if(e.code==='KeyZ' || e.code==='KeyX'){ e.preventDefault(); KB.oct = Math.max(-2, Math.min(2, KB.oct + (e.code==='KeyX'?1:-1))); const kk = document.getElementById('kbKeys'); if(kk){ kk.innerHTML = kbKeysHTML(); kbPaint(); } toast('Keys from C'+(3+KB.oct)); return; }
+  if(e.code==='KeyZ' || e.code==='KeyX'){ e.preventDefault(); KB.oct = Math.max(-2, Math.min(2, KB.oct + (e.code==='KeyX'?1:-1))); const kk = document.getElementById('kbKeys'); if(kk){ kk.innerHTML = kk.classList.contains('kbv-keys') ? kbKeysVHTML() : kbKeysHTML(); kbPaint(); } toast('Keys from C'+(3+KB.oct)); return; }
   if(e.key==='Enter' && KB.latched.size){ e.preventDefault(); XActions.kbAdd(); return; }
   if(e.code==='Space'){ e.preventDefault(); XActions.kbRec(); return; }
   if(e.key==='Escape'){ if(KB.rec) kbRecStop(); else if(KB.latched.size){ KB.latched.clear(); kbPaint(); } else if(ST.kbTarget){ ST.kbTarget = null; kbPaint(); } }
@@ -1270,3 +1336,366 @@ window.addEventListener('pointermove', function(e){
   (e.target || document).dispatchEvent(p);
 }, true);
 ['pointerup','pointercancel'].forEach(k=>window.addEventListener(k, function(e){ if(_nFree && e.pointerId===_nFree.pid) _nFree = null; }, true));
+
+/* ---- song lists: the logo and the search stay at the top while you scroll ---- */
+const _nRenderList = renderList;
+renderList = function(){
+  const html = _nRenderList();
+  const i = html.indexOf('<div class="search-field"'), j = html.indexOf('<div style="overflow:auto;padding-left:40px">');
+  if(i<0 || j<0 || j<i) return html;
+  return html.slice(0, i) + '<div class="nlist-head">' + html.slice(i, j) + '</div>\n    ' + html.slice(j);
+};
+const _nRenderListBody = render;
+render = function(){ _nRenderListBody(); document.body.classList.toggle('n-list', ST.screen==='list' || ST.screen==='search'); };
+
+/* ============================================================
+   SONG VIEWER (and gig player): scroll the lyrics yourself while the song
+   plays. The lyrics stay where you leave them; when the line being sung
+   comes back to its place in the window, the lyrics move on by themselves
+   again (or after a while if you've scrolled back up).
+   ============================================================ */
+let _nMan = null;
+function nWinMax(el){ const w = el.querySelector('.lyrics-wrap'); return Math.max(0, (w ? w.scrollHeight : el.scrollHeight) - el.clientHeight*0.4); }
+const _nApplyWin = applyWinScroll;
+applyWinScroll = function(el, moving){
+  if(!moving || !_nMan || !_win.kf){ if(!moving) _nMan = null; return _nApplyWin(el, moving); }
+  const yAuto = kfY(_win.kf, _win.clock), side = Math.sign(_nMan.y - yAuto);
+  // the song has caught up with where you scrolled to (or you left it scrolled back for a while)
+  if(side===0 || side!==_nMan.side || (_nMan.side<0 && performance.now()-_nMan.at > 15000)){ _nMan = null; return _nApplyWin(el, true); }
+  const wrap = el.querySelector('.lyrics-wrap');
+  if(el.scrollTop) el.scrollTop = 0;
+  if(wrap) wrap.style.transform = 'translate3d(0,'+(-_nMan.y).toFixed(2)+'px,0)';
+  _win.pos = _nMan.y;
+};
+function nManScroll(el, dy){
+  if(!_win.kf) return;
+  const yAuto = kfY(_win.kf, _win.clock);
+  const from = _nMan ? _nMan.y : yAuto;
+  const y = Math.max(0, Math.min(nWinMax(el), from + dy));
+  const side = Math.sign(y - yAuto);
+  // scrolled back past the line being sung: it carries on by itself straight away
+  if(_nMan && side!==_nMan.side && side!==0){ _nMan = null; _nApplyWin(el, true); return; }
+  if(side===0){ _nMan = null; _nApplyWin(el, true); return; }
+  _nMan = { y, side, at: performance.now() };
+  applyWinScroll(el, true);
+}
+function nWinPlaying(){ const st = lyricWinState(); return st.rate>0; }
+document.addEventListener('wheel', function(e){
+  const el = e.target.closest && e.target.closest('[data-win]');
+  if(!el || !nWinPlaying()) return;
+  e.preventDefault();
+  nManScroll(el, e.deltaY * (e.deltaMode===1 ? 32 : 1));
+}, { passive:false, capture:true });
+let _nTouch = null;
+document.addEventListener('pointerdown', function(e){
+  const el = e.target.closest && e.target.closest('[data-win]');
+  _nTouch = (el && nWinPlaying() && e.pointerType!=='mouse') ? { el, y:e.clientY, id:e.pointerId, moved:false } : null;
+}, true);
+document.addEventListener('pointermove', function(e){
+  if(!_nTouch || e.pointerId!==_nTouch.id) return;
+  const dy = _nTouch.y - e.clientY;
+  if(!_nTouch.moved && Math.abs(dy) < 6) return;
+  _nTouch.moved = true; _nTouch.y = e.clientY;
+  nManScroll(_nTouch.el, dy);
+}, true);
+['pointerup','pointercancel'].forEach(k=>document.addEventListener(k, function(e){ if(_nTouch && e.pointerId===_nTouch.id) _nTouch = null; }, true));
+// mouse: drag the lyrics too
+document.addEventListener('mousedown', function(e){
+  const el = e.target.closest && e.target.closest('[data-win]');
+  if(!el || !nWinPlaying() || e.button!==0) return;
+  let y = e.clientY, moved = false;
+  const mv = ev=>{ const dy = y - ev.clientY; if(!moved && Math.abs(dy)<6) return; moved = true; y = ev.clientY; nManScroll(el, dy); };
+  const up = ()=>{ window.removeEventListener('mousemove', mv); window.removeEventListener('mouseup', up); };
+  window.addEventListener('mousemove', mv); window.addEventListener('mouseup', up);
+}, true);
+const _nRenderPlay = render;
+render = function(){ _nRenderPlay(); document.body.classList.toggle('n-winplay', !!document.querySelector('[data-win]') && nWinPlaying()); };
+
+/* ============================================================
+   NEW SONG: one flow. Lyrics · Chords · Markings · Tempo always stay at
+   the top; Manual / From audio track / From text doc only change what's
+   below them, on whichever step you're on:
+     · From audio track → Record
+     · From text doc   → Upload (any file: a lyrics or chord sheet, or a
+                          recording) — a document can't give the Tempo.
+   Whatever is recorded or uploaded goes into THIS song, and Singa takes
+   everything it can from it (lyrics, chords, tempo…). Where you've
+   already typed something, it keeps whichever is more complete: your
+   typing when the recording is unclear, the recording's words when your
+   typing is missing words or has ones that weren't sung.
+   ============================================================ */
+const N_STEPS = [['lyrics','Lyrics'],['chords','Chords'],['markings','Markings'],['sync','Tempo']];
+function nCapTabs(){
+  return `<div class="steptabs">${N_STEPS.map(([k,l])=>`<button class="${k===ST.step?'on':''}" data-act="goCreateStep" data-id="${k}">${l}</button>`).join('')}</div>`;
+}
+const N_CAP_REC = {
+  lyrics: 'Sing the song. Singa writes down the lyrics, and finds the chords and your tempo too.',
+  chords: 'Play and sing. Singa finds the chords, and writes down the lyrics and your tempo too.',
+  markings: 'Singa takes the lyrics, chords and tempo from your take. Markings are yours to add afterwards.',
+  sync: 'Sing it at your own pace. Your take sets the tempo, and Singa writes down the lyrics and chords too.'
+};
+function nCaptureBody(d){
+  const typed = hasLyrics(d);
+  const keep = typed ? `<div class="ncap-n">${icon('merge',16)}You've already typed lyrics. Singa keeps whichever is more complete.</div>` : '';
+  const title = !(d.title||'').trim() ? `<input class="ipt ncap-title" placeholder="Song title (optional)" value="${esc(d.title)}" data-bind="draftTitle">` : `<div class="ncap-song">${esc(d.title)}</div>`;
+  if(ST.createMode==='recording'){
+    return `<div class="ncap">
+      ${title}
+      <button class="ncap-rec" data-act="startRecord" aria-label="Record">${icon('mic',40)}</button>
+      <div class="ncap-t">Record</div>
+      <div class="ncap-s">${N_CAP_REC[ST.step] || N_CAP_REC.lyrics}</div>
+      ${keep}
+      <div class="ncap-legal">You hereby confirm that you have permission to reproduce these lyrics</div>
+    </div>`;
+  }
+  const tempo = ST.step==='sync';
+  return `<div class="ncap">
+    ${title}
+    <button class="ncap-up" data-act="startUpload">${icon('upload_file',40)}<span>Upload a file</span></button>
+    <div class="ncap-s">${tempo
+      ? 'The tempo comes from a recording: upload an audio or video file of the song. Singa also takes the lyrics and chords from it.'
+      : 'A lyrics or chord sheet (.txt, PDF, Word, Pages, .rtf) or a recording (audio or video). Singa takes the lyrics, the chords and, from a recording, the tempo.'}</div>
+    ${keep}
+    <div class="ncap-legal">You hereby confirm that you have permission to reproduce these lyrics</div>
+  </div>`;
+}
+const _nRenderCreate = renderCreate;
+renderCreate = function(){
+  if(ST.editing || ST.createMode==='manual') return _nRenderCreate();
+  const d = D.songs[ST.editId] || { id:'x', title:'', sub:'', lyrics:'', chords:{}, notes:{} };
+  if(ST.phase!=='idle'){
+    // recording / counting in: the same screen as before, with the steps on top
+    return _nRenderCreate().replace('<div style="flex:1;display:flex;justify-content:center"></div>', '<div style="flex:1;display:flex;justify-content:center">'+nCapTabs()+'</div>');
+  }
+  const modes = [['manual','Manual'],['recording','From audio track'],['file','From text doc']];
+  return `<div class="scr center" style="padding-top:16px">
+    <div id="modeSegWrap" style="flex:none;display:flex;justify-content:center;overflow:hidden;max-height:60px;opacity:1"><div class="seg">${modes.map(([v,l])=>`<button class="${v===ST.createMode?'on':''}" data-act="setCreateMode" data-id="${v}">${l}</button>`).join('')}</div></div>
+    <div style="width:100%;display:flex;align-items:center;margin-top:20px;min-height:44px;max-width:760px">
+      <span class="icon-btn" data-act="createBack">${icon('chevron_left',26)}</span>
+      <div style="flex:1;display:flex;justify-content:center">${nCapTabs()}</div>
+      <span style="width:26px"></span>
+    </div>
+    ${nCaptureBody(d)}
+  </div>${ST.similar?renderSimilarModal():''}`;
+};
+Actions.setCreateMode = function(d){
+  if(ST.phase!=='idle') return;
+  if(ST.ctx==='syncpreview'){ ST.playing=false; ST.testSpeed=false; }
+  ST.createMode = d.id; ST.editorLine = 0; ST.abortArm = 0;
+  if(d.id==='manual'){
+    const s = D.songs[ST.editId];
+    if(ST.step!=='lyrics' && s && (!lyricsReady(s) || ((ST.step==='chords' || ST.step==='markings') && !hasLyrics(s)))) ST.step = 'lyrics';
+  }
+  render();
+};
+const _nGoStep = Actions.goCreateStep;
+Actions.goCreateStep = function(d){
+  if(ST.createMode==='manual' || ST.editing) return _nGoStep.apply(this, arguments);
+  if(ST.phase!=='idle') return;
+  ST.step = d.id; ST.selWord = null; ST.editorLine = 0; render();
+};
+const _nStartUpload = Actions.startUpload;
+Actions.startUpload = function(){
+  if(ST.screen!=='create' || ST.editing) return _nStartUpload.apply(this, arguments);
+  if(!canSync()) return;
+  const fi = document.getElementById('fileInput');
+  fi.accept = isIOSDevice() ? '' : '.txt,.md,.text,.pdf,.rtf,.docx,.odt,.pages,text/plain,text/markdown,application/pdf,application/rtf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,audio/*,video/*,.mp3,.m4a,.m4b,.aac,.wav,.aif,.aiff,.caf,.flac,.ogg,.oga,.opus,.webm,.wma,.amr,.3gp,.mp4,.m4v,.mov,.mkv';
+  fi.multiple = true;
+  fi.click();
+};
+// a file picked on the New song screen goes into this song
+document.addEventListener('change', function(e){
+  if(!e.target || e.target.id!=='fileInput' || ST.screen!=='create' || ST.editing) return;
+  const files = Array.from(e.target.files||[]);
+  e.stopImmediatePropagation();
+  e.target.value = '';
+  if(files.length) nUploadToDraft(files);
+}, true);
+function nUploadToDraft(files){
+  const docs = [], audio = [];
+  let oldDoc = false;
+  files.forEach(f=>{
+    if(/\.doc$/i.test(f.name||'')){ oldDoc = true; return; }
+    if(isAudioFile(f)) audio.push(f); else docs.push(f);
+  });
+  if(!docs.length && !audio.length){ toast(oldDoc ? "Old Word (.doc) files can't be read — save it as .docx, PDF or .txt and upload that" : "Singa can't read that file"); return; }
+  if(ST.step==='sync' && !audio.length){ toast("The tempo can't come from a text document. Upload a recording (audio or video), or record yourself on From audio track."); return; }
+  nQueueToDraft(docs, audio[0] || null);
+}
+// a take recorded (or a file uploaded on the Tempo step) on the New song screen
+const _nProcessBlob = processRecordingBlob;
+processRecordingBlob = async function(songObj, blob){
+  if(ST.screen!=='create' || ST.editing) return _nProcessBlob(songObj, blob);
+  nQueueToDraft([], blob);
+};
+function nQueueToDraft(docs, audio){
+  askNotify();
+  const s = D.songs[ST.editId]; if(!s) return;
+  const first = audio || docs[0];
+  const label = (s.title||'').trim() || fileBaseName(first && first.name) || (audio ? 'Your recording' : 'Your document');
+  const j = newJob(s.id, label, true); j.target = ST.addTarget; ST.addTarget = null; j.note = 'Waiting…';
+  j.src = audio ? { kind:'audio', file:audio } : { kind:'sheet', files:docs, file:docs[0], split:false };
+  if(!D.order.includes(s.id)) D.order = [s.id, ...D.order];
+  const autoPl = (D.playlists||[]).find(p=>p.auto); if(autoPl) autoPl.ids = D.order;
+  leaveCreateForQueue();
+  ST.phase = 'idle'; ST.selWord = null; ST.queued = [label]; ST.screen = 'queued';
+  render();
+  _importAudioQueue = _importAudioQueue.then(()=>nRunDraftJob(s, docs, audio, j)).catch(e=>{ console.error('Singa: capture failed', e); jobFailed(j, "Couldn't capture “"+label+"”: "+(e && e.message || e)); });
+}
+async function nRunDraftJob(s, docs, audio, j){
+  const said = [];
+  if(docs.length){
+    const name = docs.length>1 ? docs.length+' files' : (docs[0].name || 'your document');
+    jobProgress(j, 8, 'Reading '+name+'…');
+    let results = null, err = null;
+    try{ results = await readSheetFiles(docs, false, msg=>jobProgress(j, Math.min(audio ? 30 : 85, j.pct+6), msg)); }
+    catch(e){ err = e; console.error('Singa: document read failed', e); }
+    results = (results||[]).filter(r=>r && (r.blocks||[]).some(b=>b.type==='couplet'));
+    if(results.length){
+      const tmp = { id:'tmp', title:'', sub:'', lyrics:'', chords:{}, notes:{} };
+      applySheetToSong(tmp, results[0], true);
+      const m = nMergeDoc(s, tmp); if(m) said.push(m);
+    } else if(!audio){
+      jobFailed(j, err ? "Couldn't read “"+name+"”: "+(err && err.message || err) : "Couldn't find any lyrics in “"+name+"”");
+      return;
+    }
+  }
+  if(audio){
+    jobProgress(j, docs.length ? 32 : 3, 'Listening back to your take…');
+    let res;
+    try{
+      if(!audioImportMod) audioImportMod = await importFresh('./audio-import.js?v=2');
+      res = await audioImportMod.analyzeAudio(audio, { fileName: audio.name || 'recording.webm', onProgress: ({pct,note})=>jobProgress(j, Math.min(95, pct), note) });
+    }catch(err){
+      console.error('Singa: audio capture failed', err);
+      if(hasLyrics(s)){ jobFinished(j, s); toast("Couldn't analyse the recording, so the song was kept as it was: "+(err && err.message || err)); return; }
+      jobFailed(j, "Couldn't analyse that audio: "+(err && err.message || err)); return;
+    }
+    const m = nMergeTake(s, res, audio); if(m) said.push(m);
+    if(!hasLyrics(s)){
+      jobFailed(j, res.lyricsError ? "Couldn't hear the lyrics: "+res.lyricsError : "No sung words came through — try a take with clearer vocals"); return;
+    }
+    jobProgress(j, 97, 'Saving a short sample…');
+    try{ await uploadSampleClip(s, res.pcm16k, (s.wordTimestamps||[])[0] || 0); }catch(e){ console.error('Singa: sample clip upload failed', e); }
+    if(res.chordSource==='fallback') said.push("The chord server didn't answer, so the chords are a rough guess — check them");
+  }
+  if(!(s.lyrics||'').trim()){ jobFailed(j, "Couldn't find any lyrics"); return; }
+  jobFinished(j, s);
+  if(said.length) setTimeout(()=>toast(said.join(' · ')), 2400);
+}
+/* ---- comparing two versions of the lyrics ---- */
+function nWords(lyrics){
+  const out = [];
+  parseLyrics(lyrics).forEach((ws,li)=>{ if(!isHeaderLine(ws)) ws.forEach((w,wi)=>out.push({ id: li+'-'+wi, li, wi, n: normWord(w) })); });
+  return out;
+}
+// how alike two words are (1 = the same), for spotting a typo against the sung word
+function nSim(x, y){
+  if(x===y) return 1; if(!x || !y) return 0;
+  const m = x.length, n = y.length; let prev = Array.from({length:n+1}, (_,j)=>j);
+  for(let i=1;i<=m;i++){ const cur = [i]; for(let j=1;j<=n;j++) cur[j] = Math.min(prev[j]+1, cur[j-1]+1, prev[j-1]+(x[i-1]===y[j-1]?0:1)); prev = cur; }
+  return 1 - prev[n]/Math.max(m, n);
+}
+function nAlign(a, b){
+  if(!a.length || !b.length || a.length*b.length > 6e6) return { map: new Array(a.length).fill(null), matched: 0, near: 0 };
+  const map = alignSequences(a.map(x=>x.n), b.map(x=>x.n));
+  let matched = 0, near = 0;
+  map.forEach((k,i)=>{ if(k==null || !a[i].n) return; if(a[i].n===b[k].n){ matched++; near++; } else if(nSim(a[i].n, b[k].n) >= 0.55) near++; });
+  return { map, matched, near };
+}
+// chords / markings keyed to one version's words, moved onto the other's
+function nTransfer(fromLyrics, obj, toLyrics){
+  const out = {}; if(!obj) return out;
+  const A = nWords(fromLyrics), B = nWords(toLyrics), { map } = nAlign(A, B);
+  const byId = {}; A.forEach((w,i)=>{ byId[w.id] = i; });
+  const lastOfLine = {}; A.forEach((w,i)=>{ lastOfLine[w.li] = i; });
+  Object.keys(obj).forEach(k=>{
+    const m = /^(\d+)-(\d+)$/.exec(k), t = /^(\d+)-t(\d+)$/.exec(k);
+    if(m){ const i = byId[k]; if(i!=null && map[i]!=null){ const to = B[map[i]].id; if(!(to in out)) out[to] = obj[k]; } return; }
+    if(t){ const i = lastOfLine[+t[1]]; if(i!=null && map[i]!=null){ const to = B[map[i]].li+'-t'+t[2]; if(!(to in out)) out[to] = obj[k]; } return; }
+    if(!/^\d+-/.test(k)) out[k] = obj[k];      // settings (_tempo, _intro…) stay as they are
+  });
+  return out;
+}
+// A document into the song
+function nMergeDoc(s, tmp){
+  if(!(s.title||'').trim() && tmp.title) s.title = tmp.title;
+  if(!(s.sub||'').trim() && tmp.sub) s.sub = tmp.sub;
+  const A = nWords(s.lyrics), B = nWords(tmp.lyrics);
+  if(A.length < 3){
+    s.lyrics = tmp.lyrics; s.chords = tmp.chords || {};
+    s.synced = false; delete s.wordTimestamps; setSongTempo(s, { mode:'speed' });
+    return '';
+  }
+  const { matched } = nAlign(A, B), sim = matched / Math.max(1, Math.min(A.length, B.length));
+  const nChords = o=>Object.keys(o||{}).filter(k=>/^\d+-/.test(k)).length;
+  if(sim < 0.3){
+    if(!nChords(s.chords) && nChords(tmp.chords)) return 'The document doesn’t match the lyrics you typed, so your lyrics were kept';
+    return 'The document doesn’t match the lyrics you typed, so your lyrics were kept';
+  }
+  const useDoc = B.length > A.length;
+  if(useDoc){
+    const chords = nChords(tmp.chords) ? tmp.chords : nTransfer(s.lyrics, s.chords, tmp.lyrics);
+    s.notes = nTransfer(s.lyrics, s.notes, tmp.lyrics);
+    s.lyrics = tmp.lyrics; s.chords = chords;
+    if(s.synced){ s.synced = false; delete s.wordTimestamps; setSongTempo(s, { mode:'speed' }); }
+    return 'The document had more of the lyrics than you’d typed, so Singa used it';
+  }
+  if(!nChords(s.chords) && nChords(tmp.chords)){ s.chords = nTransfer(tmp.lyrics, tmp.chords, s.lyrics); return 'Your lyrics were kept; the chords came from the document'; }
+  return 'Your lyrics were kept — they were as complete as the document';
+}
+// A recording into the song
+function nMergeTake(s, res, blob){
+  const tmp = { id:'tmp', title:'', sub:'', lyrics:'', chords:{}, notes:{} };
+  audioSheetToSong(tmp, res.sheet);
+  const dur = res.durationSec;
+  if(!(s.title||'').trim()){ const fromFile = ((blob && blob.name)||'').replace(/\.[^.]+$/,'').replace(/[_]+/g,' ').trim(); s.title = res.id3Title || (/^(recording|blob)/i.test(fromFile) ? '' : fromFile) || ''; }
+  const A = nWords(s.lyrics), H = nWords(tmp.lyrics);
+  let said = '';
+  const nChords = o=>Object.keys(o||{}).filter(k=>/^\d+-/.test(k)).length;
+  if(A.length < 3){
+    // nothing typed: everything from the recording
+    s.lyrics = tmp.lyrics; s.chords = tmp.chords; s.wordTimestamps = tmp.wordTimestamps;
+  } else {
+    const { matched, near } = nAlign(A, H);
+    // the take is clear when most typed words line up with sung words (typos included)
+    const inconclusive = H.length < 3 || near / A.length < 0.5;
+    const typoed = (A.length - matched) / A.length > 0.1;                 // typed words that weren't sung
+    const missing = (H.length - matched) > Math.max(2, A.length*0.1);     // sung words that weren't typed
+    if(!inconclusive && (typoed || missing)){
+      const chords = nChords(s.chords) ? nTransfer(s.lyrics, s.chords, tmp.lyrics) : tmp.chords;
+      s.notes = nTransfer(s.lyrics, s.notes, tmp.lyrics);
+      s.lyrics = tmp.lyrics; s.chords = chords; s.wordTimestamps = tmp.wordTimestamps;
+      said = missing ? 'Your typed lyrics were missing words, so Singa used what was sung' : 'Some typed words weren’t what was sung, so Singa used the recording’s words';
+    } else {
+      // your typed lyrics stay; the take gives every word its time
+      const heard = [];
+      (res.sheet.sections||[]).forEach(sec=>(sec.lines||[]).forEach(ln=>(ln.words||[]).forEach(w=>{ const n = normWord(w.text); if(n) heard.push({ norm:n, start: typeof w.start==='number' ? w.start : null }); })));
+      for(let i=0;i<heard.length;i++) if(heard[i].start==null) heard[i].start = i>0 ? heard[i-1].start : 0;
+      const ref = A.map(w=>w.n);
+      s.wordTimestamps = fillTimestamps(heard.length ? alignSequences(ref, heard.map(h=>h.norm)) : new Array(ref.length).fill(null), heard, dur);
+      if(!nChords(s.chords)){
+        const chords = {}; let prev = null; const ts = s.wordTimestamps;
+        (res.sheet.chordTimeline||[]).forEach(seg=>{
+          const name = seg.concert || seg.shown; if(!name || name===prev) return;
+          const i = ts.findIndex(t=>t >= seg.start - 0.3);
+          if(i<0 || ts[i] > seg.end + 0.3) return;
+          chords[A[i].id] = name; prev = name;
+        });
+        s.chords = chords;
+      }
+      said = inconclusive ? 'The recording wasn’t clear enough to read the words, so your typed lyrics were kept (with its tempo)' : '';
+    }
+  }
+  // chords heard before the first sung word: the instrumental intro
+  const ts = s.wordTimestamps || [], firstT = ts.length ? ts[0] : 0, intro = [];
+  (res.sheet.chordTimeline||[]).forEach(seg=>{
+    const name = seg.concert || seg.shown;
+    if(name && seg.start < firstT - 0.3 && (!intro.length || intro[intro.length-1].ch!==name)) intro.push({ t: Math.round(seg.start*100)/100, ch: name });
+  });
+  const notes = { ...(s.notes||{}) };
+  if(intro.length && firstT >= 2.5) notes._intro = intro; else delete notes._intro;
+  s.notes = notes;
+  s.audioDurationSec = dur; s.synced = true; setSongTempo(s, { mode:'synced' });
+  return said;
+}
