@@ -328,4 +328,249 @@ kbPaintRec = function(){
 const _n12Render = render;
 render = function(){ _n12Render(); document.body.classList.toggle('n-chords', nInChords()); };
 
+/* ============================================================
+   ROUND 12
+   · New / Edit song: the choices are Manual · Record · Upload. On the
+     Markings step only Manual and Upload (a document) make sense, so
+     Record is greyed out there, and going to Markings while on Record
+     switches to Manual.
+   · Playlists: a stack of records (not just one), and your own picture
+     can replace it.
+   · A take recorded onto typed lyrics puts chords on every line, not just
+     the intro.
+   ============================================================ */
+(function(){
+  const css = `
+.seg button.nseg-off{opacity:.35;cursor:not-allowed}
+.npl-art{position:relative;flex:none;border:0;padding:0;background:none;border-radius:16px;cursor:pointer;line-height:0}
+.npl-art .nart{border-radius:16px}
+.npl-art b{position:absolute;right:-6px;bottom:-6px;width:24px;height:24px;border-radius:50%;background:#fff;color:#2A1250;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(14,6,32,.4)}
+.nart img{width:100%;height:100%;object-fit:cover;display:block}
+.nplart-big{align-self:center;line-height:0;margin:4px 0 6px}
+.nplart-acts{display:flex;flex-direction:column;gap:10px}
+`;
+  const st = document.createElement('style'); st.id = 'nightCss12b'; st.textContent = css;
+  document.head.appendChild(st);
+})();
+
+/* ---- Manual · Record · Upload ---- */
+function nNoRecordHere(){ return ST.step==='markings'; }
+const _n12bRenderCreate = renderCreate;
+renderCreate = function(){
+  let html = _n12bRenderCreate();
+  html = html.replace(/(data-act="setCreateMode" data-id="recording">)From audio track</g, '$1Record<')
+             .replace(/(data-act="setCreateMode" data-id="file">)From text doc</g, '$1Upload<');
+  if(nNoRecordHere()) html = html.replace(/<button class="([^"]*)" data-act="setCreateMode" data-id="recording">/, '<button class="$1 nseg-off" aria-disabled="true" title="Markings are added by hand or from a document" data-act="setCreateMode" data-id="recording">');
+  return html;
+};
+const _n12bSetMode = Actions.setCreateMode;
+Actions.setCreateMode = function(d){
+  if(d && d.id==='recording' && nNoRecordHere()){ toast('Markings are added by hand, or from a document you upload'); return; }
+  return _n12bSetMode.apply(this, arguments);
+};
+const _n12bGoStep = Actions.goCreateStep;
+Actions.goCreateStep = function(d){
+  // Markings can't come from a recording: going there from Record switches to Manual
+  if(d && d.id==='markings' && ST.createMode==='recording' && ST.phase==='idle') ST.createMode = 'manual';
+  return _n12bGoStep.apply(this, arguments);
+};
+const N_DOC_ACCEPT = '.txt,.md,.text,.pdf,.rtf,.docx,.odt,.pages,text/plain,text/markdown,application/pdf,application/rtf,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+const _n12bStartUpload = Actions.startUpload;
+Actions.startUpload = function(){
+  if(ST.screen==='create' && ST.createMode==='file' && nNoRecordHere()){
+    if(!canSync()) return;
+    const fi = document.getElementById('fileInput');
+    fi.accept = isIOSDevice() ? '' : N_DOC_ACCEPT; fi.multiple = true; fi.click(); return;
+  }
+  return _n12bStartUpload.apply(this, arguments);
+};
+nUploadToDraft = function(files){
+  const docs = [], audio = [];
+  let oldDoc = false;
+  files.forEach(f=>{
+    if(/\.doc$/i.test(f.name||'')){ oldDoc = true; return; }
+    if(isAudioFile(f)) audio.push(f); else docs.push(f);
+  });
+  if(!docs.length && !audio.length){ toast(oldDoc ? "Old Word (.doc) files can't be read — save it as .docx, PDF or .txt and upload that" : "Singa can't read that file"); return; }
+  if(ST.step==='sync' && !audio.length){ toast("The tempo can't come from a text document. Upload a recording (audio or video), or use Record."); return; }
+  if(ST.step==='markings' && !docs.length){ toast("Markings can't come from a recording. Upload a lyrics or chord sheet, or add them by hand on Manual."); return; }
+  nQueueToDraft(docs, ST.step==='markings' ? null : (audio[0] || null));
+};
+const _n12bCapture = nCaptureBody;
+nCaptureBody = function(d){
+  const html = _n12bCapture(d);
+  if(ST.createMode==='file' && nNoRecordHere())
+    return html.replace(/<div class="ncap-s">[\s\S]*?<\/div>/, '<div class="ncap-s">A lyrics or chord sheet (.txt, PDF, Word, Pages, .rtf). Singa takes the lyrics and chords from it; markings are yours to add on Manual.</div>');
+  return html;
+};
+
+/* ---- playlist artwork: a stack of records, or your own picture ---- */
+function nDisc(p, x, y, sz, px, front){
+  const ring = Math.max(1.5, px*sz/100*0.035).toFixed(1);
+  const bg = (front ? '' : 'linear-gradient(rgba(26,14,56,.24),rgba(26,14,56,.24)),')
+    + `radial-gradient(circle closest-side, ${p[0]} 0 7%, ${p[2]} 8% 33%, rgba(0,0,0,.18) 34% 36%, transparent 37%),`
+    + (front ? 'conic-gradient(from 20deg, transparent 0 8%, rgba(255,255,255,.22) 11%, transparent 15% 58%, rgba(255,255,255,.14) 61%, transparent 65%),' : '')
+    + 'repeating-radial-gradient(circle closest-side, rgba(255,255,255,.13) 0 1.4%, transparent 1.6% 7%),'
+    + p[1];
+  return `<i class="nrec" style="left:${x}%;top:${y}%;width:${sz}%;height:${sz}%;background:${bg};box-shadow:0 0 0 ${ring}px ${p[0]}"></i>`;
+}
+function nPlBySeed(seed){ return (D.playlists||[]).find(p=>'pl:'+(p.title||p.id)===seed); }
+nArt = function(seed, size, radius, cls){
+  if(String(seed).indexOf('pl:')!==0) return _n12Art(seed, size, radius, cls);
+  const h = nHash(seed), p = N_ART[h % N_ART.length], v = (h>>>4) % 3;
+  const r = radius!=null ? radius : Math.round(size*0.28);
+  const pl = nPlBySeed(seed);
+  if(pl && pl.art) return `<span class="nart${cls?' '+cls:''}" aria-hidden="true" style="width:${size}px;height:${size}px;border-radius:${r}px;background:#2A1250"><img src="${esc(pl.art)}" alt="" loading="lazy"></span>`;
+  let inner;
+  if(v===0) inner = nDisc(p, 36, -8, 62, size) + nDisc(p, 15, 13, 62, size) + nDisc(p, -6, 34, 62, size, true);
+  else if(v===1) inner = nDisc(p, 34, -14, 68, size) + nDisc(p, 22, 0, 68, size)
+    + `<i class="ncas" style="left:-8%;top:34%;width:74%;height:74%;background:${p[2]};border-radius:6%;box-shadow:0 0 0 ${Math.max(1.5,size*0.025).toFixed(1)}px ${p[0]}"></i>`
+    + `<i class="nrec" style="left:12%;top:54%;width:30%;height:30%;background:radial-gradient(circle closest-side, ${p[2]} 0 30%, ${p[1]} 33%)"></i>`;
+  else inner = nDisc(p, -10, 22, 54, size) + nDisc(p, 18, 22, 54, size) + nDisc(p, 46, 22, 54, size, true);
+  return `<span class="nart${cls?' '+cls:''}" aria-hidden="true" style="width:${size}px;height:${size}px;border-radius:${r}px;background:${p[0]}">${inner}</span>`;
+};
+// your own picture: kept with the playlist (and on this device, in case
+// the database doesn't have the art_url column yet)
+function nArtKey(id){ return 'singa-plart:'+id; }
+function nArtLocal(id){ try{ return localStorage.getItem(nArtKey(id)) || null; }catch(e){ return null; } }
+const _n12bPlRow = playlistRowToLocal;
+playlistRowToLocal = function(row){
+  const p = _n12bPlRow(row);
+  p.art = row.art_url || nArtLocal(p.id) || null;
+  return p;
+};
+(D.playlists||[]).forEach(p=>{ if(!p.art){ const a = nArtLocal(p.id); if(a) p.art = a; } });
+async function nSavePlArt(p){
+  try{ localStorage.setItem(nArtKey(p.id), p.art || ''); if(!p.art) localStorage.removeItem(nArtKey(p.id)); }catch(e){}
+  if(!ST.userId || p.auto) return;
+  try{
+    const r = await sb.from('playlists').update({ art_url: p.art || null }).eq('id', p.id);
+    if(r && r.error){ console.error('Singa: playlist artwork save failed', r.error); if(/art_url/.test(r.error.message||'')) toast('Saved on this device. To show it on your other devices too, add the art_url column to playlists'); }
+  }catch(e){ console.error('Singa: playlist artwork save failed', e); }
+}
+function nImgSquare(file, max){
+  return new Promise((resolve, reject)=>{
+    const url = URL.createObjectURL(file), img = new Image();
+    img.onload = ()=>{
+      const side = Math.min(img.naturalWidth, img.naturalHeight), out = Math.min(max, side);
+      const c = document.createElement('canvas'); c.width = c.height = out;
+      c.getContext('2d').drawImage(img, (img.naturalWidth-side)/2, (img.naturalHeight-side)/2, side, side, 0, 0, out, out);
+      URL.revokeObjectURL(url);
+      c.toBlob(b=>b ? resolve(b) : reject(new Error('Could not read the picture')), 'image/jpeg', 0.86);
+    };
+    img.onerror = ()=>{ URL.revokeObjectURL(url); reject(new Error('Could not read the picture')); };
+    img.src = url;
+  });
+}
+XActions.plArtOpen = function(d){ const p = D.playlists.find(x=>x.id===(d.id||ST.listPl)); if(!p) return; ST.newItem = { kind:'plart', id:p.id, name:p.title }; render(); };
+XActions.plArtReset = function(){
+  const ni = ST.newItem, p = ni && D.playlists.find(x=>x.id===ni.id); ST.newItem = null;
+  if(p){ p.art = null; nSavePlArt(p); toast('Back to the Singa artwork'); }
+  render();
+};
+XActions.plArtUpload = function(){
+  const ni = ST.newItem, p = ni && D.playlists.find(x=>x.id===ni.id); if(!p) return;
+  if(!canSync()) return;
+  const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*';
+  inp.onchange = async ()=>{
+    const f = inp.files && inp.files[0]; if(!f) return;
+    ST.newItem = null; render(); toast('Adding your picture…');
+    try{
+      const blob = await nImgSquare(f, 640);
+      const path = ST.userId+'/playlist-'+p.id+'-'+Date.now()+'.jpg';
+      const up = await sb.storage.from('avatars').upload(path, blob, { contentType:'image/jpeg', upsert:true });
+      if(up.error) throw up.error;
+      p.art = sb.storage.from('avatars').getPublicUrl(path).data.publicUrl;
+      nSavePlArt(p); toast('Artwork updated'); render();
+    }catch(e){ console.error('Singa: playlist artwork upload failed', e); toast("The picture couldn't be added — try again"); }
+  };
+  inp.click();
+};
+const _n12bNewModal = renderNewModal;
+renderNewModal = function(){
+  const ni = ST.newItem;
+  if(!ni || ni.kind!=='plart') return _n12bNewModal();
+  const p = D.playlists.find(x=>x.id===ni.id) || {};
+  return `<div class="modal-backdrop" data-act="closeNew"><div class="modal" style="max-width:380px" onclick="modalClick(event)">
+    <div class="mhead"><span style="font-size:21px;font-weight:600">Playlist artwork</span><span class="icon-btn" data-act="closeNew">${icon('close',22)}</span></div>
+    <div class="nplart-big">${nArt('pl:'+(p.title||p.id), 168, 32)}</div>
+    <div class="nplart-acts">
+      <button class="btn btn-dark" data-act="x" data-xact="plArtUpload">Upload a picture</button>
+      ${p.art ? `<button class="btn btn-outline" data-act="x" data-xact="plArtReset">Use the Singa artwork</button>` : ''}
+    </div>
+  </div></div>`;
+};
+// the playlist page: its artwork next to the name; tap it to change it
+const _n12bRenderList = renderList;
+renderList = function(){
+  const html = _n12bRenderList();
+  const p = ST.listPl ? D.playlists.find(x=>x.id===ST.listPl) : null;
+  if(!p) return html;
+  const can = p.mine!==false && !p.auto;
+  const art = can
+    ? `<button class="npl-art" data-xact="plArtOpen" data-id="${esc(p.id)}" aria-label="Change the artwork">${nArt('pl:'+(p.title||p.id), 56, 16)}<b>${icon('edit',14)}</b></button>`
+    : `<span class="npl-art">${nArt('pl:'+(p.title||p.id), 56, 16)}</span>`;
+  return html.replace('<span style="font-size:28px;font-weight:700;display:flex;align-items:center;gap:8px">', art+'<span style="font-size:28px;font-weight:700;display:flex;align-items:center;gap:8px">');
+};
+
+/* ---- a take on typed lyrics: chords on every line ----
+   The chords used to be matched to the words by time alone, so when the
+   timing of your typed words came out late, every chord landed before the
+   first word and showed only as the intro. Now the chords the take put on
+   its own words are carried over to yours, word by word; timing is the
+   fallback. Whichever puts chords on more lines wins. */
+function nLinesWithChords(lyrics, chords){
+  const W = nWords(lyrics), seen = new Set();
+  W.forEach(w=>{ if(chords && chords[w.id]) seen.add(w.li); });
+  return seen.size;
+}
+function nTimelineChords(lyrics, ts, timeline){
+  const W = nWords(lyrics), out = {};
+  if(!W.length || !ts || ts.length!==W.length) return out;
+  const segs = (timeline||[]).map(x=>({ start:+x.start, end:+x.end, name: x.concert || x.shown })).filter(x=>x.name && x.name!=='N' && isFinite(x.start));
+  // where each word ends: the next word's start (or a second later)
+  const te = ts.map((t,i)=> i+1<ts.length ? Math.max(t, ts[i+1]) : t+1);
+  let prev = null;
+  segs.forEach(seg=>{
+    if(seg.name===prev) return;
+    let best = -1, bd = Infinity;
+    ts.forEach((t,i)=>{ const d = t - seg.start; if(d > -0.25 && d < 1.05 && Math.abs(d) < bd){ bd = Math.abs(d); best = i; } });
+    if(best<0) best = ts.findIndex((t,i)=>t <= seg.start && te[i] > seg.start && te[i]-t < 3);
+    if(best<0) return;                                  // between lines: the band plays on
+    let id = W[best].id;
+    if(out[id] && best+1<W.length && W[best+1].li===W[best].li && !out[W[best+1].id]) id = W[best+1].id;
+    out[id] = seg.name; prev = seg.name;
+  });
+  // a line that starts mid-chord shows that chord on its first word
+  const firstOf = {}; W.forEach((w,i)=>{ if(firstOf[w.li]==null) firstOf[w.li] = i; });
+  Object.keys(firstOf).forEach(li=>{
+    const i = firstOf[li], w = W[i];
+    if(out[w.id] || (W[i+1] && W[i+1].li===w.li && out[W[i+1].id])) return;
+    const a = segs.find(x=>x.start <= ts[i] && x.end > ts[i]);
+    if(a) out[w.id] = a.name;
+  });
+  return out;
+}
+const _n12bMergeTake = nMergeTake;
+nMergeTake = function(s, res, blob){
+  const nC = o=>Object.keys(o||{}).filter(k=>/^\d+-/.test(k)).length;
+  const had = nC(s.chords) > 0;
+  const said = _n12bMergeTake(s, res, blob);
+  if(had) return said;
+  try{
+    const tmp = { id:'tmp', title:'', sub:'', lyrics:'', chords:{}, notes:{} };
+    audioSheetToSong(tmp, res.sheet);
+    const capoHere = /^\s*\[capo\s*\d+\]/im.test(s.lyrics||''), capo = +(res.sheet.capo||0);
+    let carried = s.lyrics===tmp.lyrics ? { ...tmp.chords } : nTransfer(tmp.lyrics, tmp.chords, s.lyrics);
+    // the take's chords are capo shapes; typed lyrics have no capo line, so use the real chords
+    if(capo>0 && !capoHere){ const flats = /b/.test(((res.sheet.chordTimeline||[]).find(x=>x.concert)||{}).concert||''); Object.keys(carried).forEach(k=>{ carried[k] = transposeChord(carried[k], capo, flats); }); }
+    const timed = nTimelineChords(s.lyrics, s.wordTimestamps, res.sheet.chordTimeline);
+    const cands = [s.chords||{}, carried, timed];
+    let best = cands[0], bn = nLinesWithChords(s.lyrics, best);
+    cands.slice(1).forEach(c=>{ const n = nLinesWithChords(s.lyrics, c); if(n > bn){ best = c; bn = n; } });
+    s.chords = best;
+  }catch(e){ console.error('Singa: placing the take’s chords failed', e); }
+  return said;
+};
+
 render();
