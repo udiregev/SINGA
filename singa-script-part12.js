@@ -573,4 +573,120 @@ nMergeTake = function(s, res, blob){
   return said;
 };
 
+/* ============================================================
+   ROUND 13
+   · Playlist pictures always save: if the picture can't go to storage,
+     a small copy is kept with the playlist itself.
+   · Editing a song: the "Got it!" screen says it's being adjusted, and
+     the note when it's done says it was updated.
+   · A file picked to upload is read straight away, so it can't come
+     through empty later (an iPad lets go of picked files).
+   · Playlists are back to the single record.
+   ============================================================ */
+
+/* ---- playlist artwork: the single record ---- */
+nArt = function(seed, size, radius, cls){
+  if(String(seed).indexOf('pl:')!==0) return _n12Art(seed, size, radius, cls);
+  const h = nHash(seed), p = N_ART[h % N_ART.length], v = (h>>>4) % 2;
+  const r = radius!=null ? radius : Math.round(size*0.28);
+  const pl = nPlBySeed(seed);
+  if(pl && pl.art) return `<span class="nart${cls?' '+cls:''}" aria-hidden="true" style="width:${size}px;height:${size}px;border-radius:${r}px;background:#2A1250"><img src="${esc(pl.art)}" alt="" loading="lazy"></span>`;
+  const pos = v===0 ? 'left:24%;top:24%' : 'left:-26%;top:-26%';
+  const bg = `radial-gradient(circle closest-side, ${p[0]} 0 7%, ${p[2]} 8% 33%, rgba(0,0,0,.18) 34% 36%, transparent 37%),`
+    + `conic-gradient(from 20deg, transparent 0 8%, rgba(255,255,255,.22) 11%, transparent 15% 58%, rgba(255,255,255,.14) 61%, transparent 65%),`
+    + `repeating-radial-gradient(circle closest-side, rgba(255,255,255,.13) 0 1.4%, transparent 1.6% 7%),`
+    + p[1];
+  return `<span class="nart${cls?' '+cls:''}" aria-hidden="true" style="width:${size}px;height:${size}px;border-radius:${r}px;background:${p[0]}"><i class="nrec" style="${pos};width:102%;height:102%;background:${bg}"></i></span>`;
+};
+
+/* ---- playlist pictures that always save ---- */
+function nBlobToDataUrl(blob){
+  return new Promise((resolve, reject)=>{ const fr = new FileReader(); fr.onload = ()=>resolve(fr.result); fr.onerror = ()=>reject(fr.error || new Error('Could not read the picture')); fr.readAsDataURL(blob); });
+}
+XActions.plArtUpload = function(){
+  const ni = ST.newItem, p = ni && D.playlists.find(x=>x.id===ni.id); if(!p) return;
+  if(!canSync()) return;
+  const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*';
+  inp.onchange = async ()=>{
+    const f = inp.files && inp.files[0]; if(!f) return;
+    ST.newItem = null; render(); toast('Adding your picture…');
+    let blob;
+    try{ blob = await nImgSquare(f, 640); }
+    catch(e){ console.error('Singa: playlist picture could not be read', e); toast("That picture couldn't be read — try a JPEG or PNG"); return; }
+    let url = null;
+    // storage first (the avatars bucket, in your own folder)
+    if(ST.userId){
+      try{
+        const path = ST.userId+'/playlist-'+p.id+'-'+Date.now()+'.jpg';
+        const up = await sb.storage.from('avatars').upload(path, blob, { contentType:'image/jpeg', upsert:true });
+        if(up.error) throw up.error;
+        url = sb.storage.from('avatars').getPublicUrl(path).data.publicUrl;
+      }catch(e){ console.warn('Singa: playlist picture not stored, keeping a small copy instead', e); }
+    }
+    // otherwise a small copy goes with the playlist itself
+    if(!url){
+      try{ url = await nBlobToDataUrl(await nImgSquare(f, 320)); }
+      catch(e){ console.error('Singa: playlist picture failed', e); toast("The picture couldn't be added — try again"); return; }
+    }
+    p.art = url; nSavePlArt(p); toast('Artwork updated'); render();
+  };
+  inp.click();
+};
+
+/* ---- editing a song: "being adjusted", then "updated" ---- */
+const _n13Edits = new Set();
+const _n13Queue = nQueueToDraft;
+nQueueToDraft = function(docs, audio){
+  const edit = !!ST.editing, id = ST.editId;
+  if(edit && id) _n13Edits.add(id);
+  ST._queuedEdit = edit;
+  return _n13Queue(docs, audio);
+};
+const _n13Queued = renderQueued;
+renderQueued = function(){
+  let h = _n13Queued();
+  if(ST._queuedEdit) h = h.replace('<br>is being added', '<br>is being adjusted').replace('in your songs marked', 'in your songs, marked').replace('Add Another Song', 'Add a New Song');
+  return h;
+};
+const _n13Finished = jobFinished;
+jobFinished = function(j, songObj){
+  const r = _n13Finished.apply(this, arguments);
+  if(songObj && _n13Edits.has(songObj.id)){ _n13Edits.delete(songObj.id); toast('“'+(songObj.title||'Your song')+'” has been updated'); }
+  return r;
+};
+const _n13Render = render;
+render = function(){ if(ST.screen!=='queued') ST._queuedEdit = false; _n13Render(); };
+
+/* ---- uploads: read the picked files straight away ---- */
+window.addEventListener('change', function(e){
+  const t = e.target;
+  if(!t || t.id!=='fileInput' || e._nCopied) return;
+  const files = Array.from(t.files||[]);
+  if(!files.length) return;
+  e.stopImmediatePropagation();
+  Promise.all(files.map(f=>f.arrayBuffer().then(b=>{
+    if(!b.byteLength) throw new Error('empty');
+    try{ return new File([b], f.name, { type: f.type, lastModified: f.lastModified }); }
+    catch(_e){ const x = new Blob([b], { type: f.type }); x.name = f.name; return x; }
+  }))).then(copies=>{
+    let ok = false;
+    try{ const dt = new DataTransfer(); copies.forEach(c=>dt.items.add(c)); t.files = dt.files; ok = t.files.length===copies.length; }catch(_e){}
+    if(!ok){ t.value = ''; nDeliverFiles(copies); return; }
+    const ev = new Event('change', { bubbles:true }); ev._nCopied = true; t.dispatchEvent(ev);
+  }).catch(err=>{
+    console.error('Singa: picked file could not be read', err);
+    t.value = '';
+    toast(err && err.message==='empty' ? "That file came through empty. If it's in iCloud, download it to this device first, then try again." : "That file couldn't be read — try again");
+  });
+}, true);
+// (only if this browser can't hand the copies back to the file box)
+function nDeliverFiles(files){
+  if(ST.screen==='create' && (ST.createMode!=='manual' || ST.editing) && nCapturing()){ nUploadToDraft(files); return; }
+  if(files.length > 1 || (ST.screen==='create' && ST.createMode!=='manual' && !ST.editing)){ queueImports(files); return; }
+  const f = files[0];
+  if(isSheetFile(f) && !isAudioFile(f)){ queueImports([f]); return; }
+  if(!isAudioFile(f)){ toast("That isn't an audio file Singa can read — try an mp3, m4a, wav or a video"); return; }
+  processRecordingBlob(D.songs[ST.editId], f);
+}
+
 render();
