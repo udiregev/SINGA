@@ -287,4 +287,254 @@ renderCreate = function(){
   return html;
 };
 
+/* ============================================================
+   ROUND 16 · Spotify playlists
+   Link one of your Spotify playlists to a Singa playlist. Every track in
+   it (now, and any added later) becomes a Singa song with the track's
+   title and artist, ready for lyrics, chords, markings and tempo. Singa
+   checks for new tracks when it opens, and on "Sync now".
+   · Sign-in is Spotify's PKCE flow: only the app's Client ID is needed
+     here (never the secret). Each device connects once.
+   · Tracks removed on Spotify stay in Singa.
+   ============================================================ */
+const SP_CLIENT_ID = 'f96a69603fc84b31b65d85cd0462cafb';
+const SP_SCOPES = 'playlist-read-private playlist-read-collaborative';
+const SP_KEY = 'singa-sp', SP_PEND = 'singa-sp-pending', SP_LINKS = 'singa-sp-links';
+(function(){
+  const css = `
+.nsp-row .t{color:#fff}
+.nsp-ico{width:22px;height:22px;flex:none}
+.nsp-sync{display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 14px 0 10px;border-radius:17px;border:1px solid rgba(30,215,96,.55);color:#fff;font-size:13px;font-weight:700;cursor:pointer;margin-left:14px;white-space:nowrap}
+.nsp-sync.busy{opacity:.6;pointer-events:none}
+.nsp-list{display:flex;flex-direction:column;max-height:min(60vh,520px);overflow:auto;margin:0 -6px}
+.nsp-pl{display:flex;align-items:center;gap:12px;padding:10px 6px;border-radius:14px;cursor:pointer;text-align:left;border:0;background:none;color:#fff;width:100%}
+.nsp-pl:active{background:rgba(255,255,255,.08)}
+.nsp-pl img,.nsp-pl .nsp-ph{width:46px;height:46px;border-radius:8px;object-fit:cover;flex:none;background:rgba(255,255,255,.08)}
+.nsp-pl b{display:block;font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nsp-pl small{display:block;font-size:12px;color:var(--n-mute)}
+.nsp-pl.on{opacity:.45;pointer-events:none}
+.nsp-note{font-size:13px;color:var(--n-mute);line-height:1.45}
+`;
+  const st = document.createElement('style'); st.id = 'nightCss16'; st.textContent = css;
+  document.head.appendChild(st);
+})();
+const SP_LOGO = `<svg class="nsp-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="12" fill="#1ed760"></circle><path d="M6.5 9.2c3.8-1.1 7.6-.8 11 1M7.2 12.4c3-.8 6.1-.6 8.8.9M7.9 15.4c2.3-.6 4.6-.4 6.6.7" stroke="#000" stroke-width="1.6" fill="none" stroke-linecap="round"></path></svg>`;
+function spGet(k){ try{ return JSON.parse(localStorage.getItem(k) || 'null'); }catch(e){ return null; } }
+function spSet(k, v){ try{ if(v==null) localStorage.removeItem(k); else localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+function spRedirect(){ return location.origin + location.pathname; }
+function spConnected(){ const t = spGet(SP_KEY); return !!(t && t.refresh); }
+function spB64url(buf){ return btoa(String.fromCharCode.apply(null, new Uint8Array(buf))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); }
+function spRand(n){ const a = new Uint8Array(n); crypto.getRandomValues(a); const c = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~'; return Array.from(a, x=>c[x % c.length]).join(''); }
+// Off to Spotify to sign in; it comes back to this page with a code
+async function spConnect(after){
+  const verifier = spRand(64), state = 'singa-sp-' + spRand(12);
+  const challenge = spB64url(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)));
+  spSet(SP_PEND, { verifier, state, after: after || 'pick', at: Date.now() });
+  const q = new URLSearchParams({ client_id: SP_CLIENT_ID, response_type:'code', redirect_uri: spRedirect(), code_challenge_method:'S256', code_challenge: challenge, scope: SP_SCOPES, state });
+  location.href = 'https://accounts.spotify.com/authorize?' + q.toString();
+}
+async function spToken(body){
+  const r = await fetch('https://accounts.spotify.com/api/token', { method:'POST', headers:{ 'Content-Type':'application/x-www-form-urlencoded' }, body: new URLSearchParams(body).toString() });
+  const j = await r.json().catch(()=>({}));
+  if(!r.ok || !j.access_token) throw new Error(j.error_description || j.error || ('Spotify answered '+r.status));
+  const old = spGet(SP_KEY) || {};
+  const t = { access: j.access_token, refresh: j.refresh_token || old.refresh, exp: Date.now() + (j.expires_in||3600)*1000 };
+  spSet(SP_KEY, t); return t;
+}
+async function spAccess(force){
+  const t = spGet(SP_KEY); if(!t || !t.refresh) throw new Error('not connected');
+  if(!force && t.access && t.exp > Date.now() + 60000) return t.access;
+  try{ return (await spToken({ grant_type:'refresh_token', refresh_token: t.refresh, client_id: SP_CLIENT_ID })).access; }
+  catch(e){ if(/invalid_grant|revoked/i.test(e.message)) spSet(SP_KEY, null); throw e; }
+}
+async function spApi(url){
+  if(!/^https:/.test(url)) url = 'https://api.spotify.com/v1' + url;
+  let tok = await spAccess(), r = await fetch(url, { headers:{ Authorization:'Bearer '+tok } });
+  if(r.status===401){ tok = await spAccess(true); r = await fetch(url, { headers:{ Authorization:'Bearer '+tok } }); }
+  if(r.status===429){ const w = (+r.headers.get('Retry-After')||2)*1000; await new Promise(x=>setTimeout(x, Math.min(w, 10000))); r = await fetch(url, { headers:{ Authorization:'Bearer '+tok } }); }
+  if(!r.ok){ const j = await r.json().catch(()=>({})); const e = new Error((j.error && j.error.message) || ('Spotify answered '+r.status)); e.status = r.status; throw e; }
+  return r.json();
+}
+// Back from Spotify with a code (or a "no"): swap it for a sign-in that lasts
+async function spHandleReturn(){
+  const q = new URLSearchParams(location.search), pend = spGet(SP_PEND);
+  const state = q.get('state'); if(!state || !/^singa-sp-/.test(state)) return null;
+  const code = q.get('code'), err = q.get('error');
+  try{ history.replaceState(null, '', spRedirect() + location.hash); }catch(e){}
+  if(!pend || pend.state!==state){ return { error:'That Spotify sign-in had expired — try again' }; }
+  spSet(SP_PEND, null);
+  if(err || !code) return { error: err==='access_denied' ? 'Spotify wasn’t connected' : 'Spotify sign-in didn’t finish — try again' };
+  try{ await spToken({ grant_type:'authorization_code', code, redirect_uri: spRedirect(), client_id: SP_CLIENT_ID, code_verifier: pend.verifier }); return { ok:true, after: pend.after }; }
+  catch(e){ console.error('Singa: Spotify sign-in failed', e); return { error:'Spotify sign-in failed: '+e.message }; }
+}
+
+/* ---- which Singa playlist follows which Spotify playlist ---- */
+function spLinks(){ return spGet(SP_LINKS) || {}; }
+function spApplyLinks(){
+  const L = spLinks();
+  (D.playlists||[]).forEach(p=>{ if(!p.spotifyId && L[p.id]) p.spotifyId = L[p.id]; if(p.spotifyId) p.src = 'spotify'; });
+}
+const _n16PlRow = playlistRowToLocal;
+playlistRowToLocal = function(row){
+  const p = _n16PlRow(row);
+  if(row.spotify_id) p.spotifyId = row.spotify_id;
+  if(!p.spotifyId){ const L = spLinks(); if(L[p.id]) p.spotifyId = L[p.id]; }
+  if(p.spotifyId) p.src = 'spotify';
+  return p;
+};
+async function spSaveLink(p){
+  const L = spLinks(); if(p.spotifyId) L[p.id] = p.spotifyId; else delete L[p.id]; spSet(SP_LINKS, L);
+  if(!ST.userId) return;
+  try{
+    await savePlaylistRow(p);
+    const r = await sb.from('playlists').update({ spotify_id: p.spotifyId || null }).eq('id', p.id);
+    if(r && r.error) console.warn('Singa: the playlist link is kept on this device only (add a spotify_id column to playlists to share it)', r.error);
+  }catch(e){ console.warn('Singa: playlist link not saved to the database', e); }
+}
+
+/* ---- the sync ---- */
+function spCleanTitle(t){
+  return String(t||'').replace(/\s+-\s+((\d{4}\s+)?(digital(ly)?\s+)?remaster(ed)?(\s+\d{4})?|(\d{4}\s+)?mono( version)?|(\d{4}\s+)?stereo( mix)?|single version|radio edit)\s*$/i, '')
+    .replace(/\s*\((\d{4}\s+)?(digital(ly)?\s+)?remaster(ed)?(\s+\d{4})?\)\s*$/i, '').trim();
+}
+function spNorm(t){ return String(t||'').toLowerCase().replace(/\(.*?\)|\[.*?\]/g,'').replace(/[^a-z0-9]+/g,' ').trim(); }
+function spFindSong(tid, title, artist){
+  const ids = D.order || [];
+  for(const id of ids){ const x = D.songs[id]; const sp = x && x.notes && x.notes._spotify; if(sp && (sp.id===tid || (sp.url||'').indexOf('/track/'+tid)>=0)) return x; }
+  const nt = spNorm(title), na = spNorm(artist).split(' ').filter(w=>w!=='the').sort((x,y)=>y.length-x.length)[0] || '';
+  for(const id of ids){ const x = D.songs[id]; if(!x || x.mine===false) continue; if(spNorm(x.title)===nt && (!x.sub || !na || spNorm(x.sub).indexOf(na)>=0)) return x; }
+  return null;
+}
+async function spTracks(listId){
+  const out = []; let url = '/playlists/'+encodeURIComponent(listId)+'/items?limit=100', usedOld = false;
+  while(url){
+    let j;
+    try{ j = await spApi(url); }
+    catch(e){ if(e.status===404 && !usedOld){ usedOld = true; url = '/playlists/'+encodeURIComponent(listId)+'/tracks?limit=100'; continue; } throw e; }
+    (j.items||[]).forEach(it=>{
+      const t = it && (it.item || it.track); if(!t || (t.type && t.type!=='track')) return;
+      out.push({ id: t.id || ('local:'+t.uri), name: t.name, artist: (t.artists||[]).map(a=>a.name).filter(Boolean).join(', '), url: (t.external_urls && t.external_urls.spotify) || (t.id ? 'https://open.spotify.com/track/'+t.id : '') });
+    });
+    url = j.next || null;
+  }
+  return out;
+}
+const _spBusy = new Set();
+async function spSync(p, quiet){
+  if(!p || !p.spotifyId || _spBusy.has(p.id)) return 0;
+  _spBusy.add(p.id); render();
+  let added = 0, linked = 0;
+  try{
+    const tracks = await spTracks(p.spotifyId);
+    const ids = (p.ids||[]).slice();
+    tracks.forEach(t=>{
+      if(!t.name) return;
+      const title = spCleanTitle(t.name);
+      let s = spFindSong(t.id, title, t.artist);
+      if(!s){
+        const id = 'sp'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+        s = { id, title, sub: t.artist||'', lyrics:'', chords:{}, notes:{ _spotify:{ url: t.url, id: t.id } }, synced:false, isPublic:false, plays:0, added:Date.now(), mine:true };
+        D.songs[id] = s; D.order = [id, ...D.order]; saveSongRow(s); added++;
+      } else if(!(s.notes && s.notes._spotify) && s.mine!==false){
+        s.notes = { ...(s.notes||{}), _spotify:{ url: t.url, id: t.id } }; queueSaveSong(s.id);
+      }
+      if(!ids.includes(s.id)){ ids.push(s.id); linked++; }
+    });
+    const autoPl = (D.playlists||[]).find(x=>x.auto); if(autoPl) autoPl.ids = D.order;
+    if(linked){ p.ids = ids; savePlaylistRow(p); }
+    p.spSyncedAt = Date.now();
+    if(!quiet || added) toast(added ? added+' new song'+(added===1?'':'s')+' from Spotify' : '“'+p.title+'” is up to date with Spotify');
+  }catch(e){
+    console.error('Singa: Spotify sync failed', e);
+    if(e.message==='not connected'){ if(!quiet) toast('Connect Spotify first'); }
+    else if(!quiet) toast(e.status===403 ? 'Spotify only shares playlists you own or collaborate on' : 'Spotify sync failed: '+e.message);
+  }finally{ _spBusy.delete(p.id); render(); }
+  return added;
+}
+async function spSyncAll(quiet){ for(const p of (D.playlists||[]).filter(x=>x.spotifyId && x.mine!==false)) await spSync(p, quiet); }
+
+/* ---- choosing a Spotify playlist ---- */
+async function spOpenPicker(){
+  ST.newItem = { kind:'splink', loading:true, list:[] }; render();
+  try{
+    const me = await spApi('/me');
+    const list = []; let url = '/me/playlists?limit=50';
+    while(url && list.length < 400){ const j = await spApi(url); (j.items||[]).forEach(x=>{ if(x && (x.owner && x.owner.id===me.id || x.collaborative)) list.push(x); }); url = j.next || null; }
+    if(!ST.newItem || ST.newItem.kind!=='splink') return;
+    ST.newItem = { kind:'splink', loading:false, list: list.map(x=>({ id:x.id, name:x.name, n: (x.items && x.items.total) || (x.tracks && x.tracks.total) || 0, img: x.images && x.images.length ? x.images[x.images.length-1].url : '' })) };
+  }catch(e){
+    console.error('Singa: Spotify playlists failed', e);
+    ST.newItem = null; toast(e.message==='not connected' ? 'Connect Spotify first' : 'Couldn’t get your Spotify playlists: '+e.message);
+  }
+  render();
+}
+XActions.spLinkStart = function(){ if(!canSync()) return; if(spConnected()) spOpenPicker(); else spConnect('pick'); };
+XActions.spPick = async function(d){
+  const ni = ST.newItem; const x = ni && (ni.list||[]).find(y=>y.id===d.id); if(!x) return;
+  ST.newItem = null;
+  let p = (D.playlists||[]).find(y=>y.spotifyId===x.id && y.mine!==false);
+  if(!p){
+    p = { id:'p'+Date.now(), title: x.name || 'Spotify playlist', ids:[], mine:true, isPublic:false, added:Date.now(), plays:0, src:'spotify', spotifyId: x.id };
+    D.playlists.splice(1, 0, p);
+  }
+  ST.screen = 'list'; ST.listKind = 'songs'; ST.listPl = p.id; render();
+  await spSaveLink(p);
+  spSync(p);
+};
+XActions.spSyncNow = function(d){ const p = (D.playlists||[]).find(y=>y.id===d.id); if(!p) return; if(!spConnected()){ spConnect('sync:'+p.id); return; } spSync(p); };
+XActions.spUnlink = function(d){
+  const p = (D.playlists||[]).find(y=>y.id===d.id); if(!p) return;
+  p.spotifyId = null; p.src = null; spSaveLink(p); toast('No longer synced with Spotify'); render();
+};
+const _n16NewModal = renderNewModal;
+renderNewModal = function(){
+  const ni = ST.newItem;
+  if(!ni || ni.kind!=='splink') return _n16NewModal();
+  const linked = new Set((D.playlists||[]).map(p=>p.spotifyId).filter(Boolean));
+  const body = ni.loading ? `<div class="nsp-note">Getting your playlists from Spotify…</div>`
+    : !ni.list.length ? `<div class="nsp-note">No playlists found. Singa can follow playlists you made or collaborate on.</div>`
+    : `<div class="nsp-list">${ni.list.map(x=>`<button class="nsp-pl${linked.has(x.id)?' on':''}" data-act="x" data-xact="spPick" data-id="${esc(x.id)}">${x.img ? `<img src="${esc(x.img)}" alt="">` : `<span class="nsp-ph"></span>`}<span style="min-width:0;flex:1"><b>${esc(x.name)}</b><small>${x.n} track${x.n===1?'':'s'}${linked.has(x.id)?' · already linked':''}</small></span></button>`).join('')}</div>`;
+  return `<div class="modal-backdrop" data-act="closeNew"><div class="modal" style="max-width:440px" onclick="modalClick(event)">
+    <div class="mhead"><span style="font-size:21px;font-weight:600;display:flex;align-items:center;gap:10px">${SP_LOGO}Link a Spotify playlist</span><span class="icon-btn" data-act="closeNew">${icon('close',22)}</span></div>
+    <div class="nsp-note">Every track becomes a song in Singa with its title and artist, and new tracks follow when Singa opens.</div>
+    ${body}
+  </div></div>`;
+};
+// the Playlists list: a row to link one; a linked playlist: Sync now
+const _n16RenderList = renderList;
+renderList = function(){
+  let html = _n16RenderList();
+  const curPl = ST.listPl ? (D.playlists||[]).find(p=>p.id===ST.listPl) : null;
+  if(ST.listKind==='playlists' && !curPl){
+    const row = `<div class="list-row addrow nsp-row" data-xact="spLinkStart"><div class="t">${SP_LOGO}Link a Spotify playlist</div></div>`;
+    html = html.replace('<div style="overflow:auto;padding-left:40px">', '<div style="overflow:auto;padding-left:40px">'+row);
+  }
+  if(ST.listKind==='songs' && curPl && curPl.spotifyId && curPl.mine!==false){
+    const busy = _spBusy.has(curPl.id);
+    const btn = `<span class="nsp-sync${busy?' busy':''}" data-xact="spSyncNow" data-id="${esc(curPl.id)}" title="Add any new tracks from Spotify">${SP_LOGO}${busy?'Syncing…':'Sync now'}</span>`;
+    html = html.replace('<div style="flex:1"></div>', btn+'<div style="flex:1"></div>');
+  }
+  return html;
+};
+
+/* ---- start-up: finish a Spotify sign-in, then check linked playlists ---- */
+let _n16Loaded = false;
+const _n16Load = loadUserData;
+loadUserData = async function(){ await _n16Load.apply(this, arguments); spApplyLinks(); _n16Loaded = true; };
+(async function(){
+  const ret = await spHandleReturn();
+  const t0 = Date.now();
+  while(!(ST.userId && (_n16Loaded || Date.now()-t0 > 8000)) && Date.now()-t0 < 60000) await new Promise(r=>setTimeout(r, 400));
+  if(!ST.userId) return;
+  spApplyLinks(); render();
+  if(ret && ret.error){ toast(ret.error); }
+  else if(ret && ret.ok){
+    toast('Spotify connected');
+    if(ret.after && ret.after.indexOf('sync:')===0){ const p = (D.playlists||[]).find(y=>y.id===ret.after.slice(5)); if(p){ ST.screen='list'; ST.listKind='songs'; ST.listPl=p.id; render(); spSync(p); return; } }
+    ST.screen = 'list'; ST.listKind = 'playlists'; ST.listPl = null; render();
+    spOpenPicker(); return;
+  }
+  if(spConnected()) spSyncAll(true);
+})();
+
 render();
