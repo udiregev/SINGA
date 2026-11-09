@@ -61,6 +61,17 @@ Endpoint:
     developer.spotify.com); without them it answers { "url": null } and the
     app links to a Spotify search instead.
 
+  GET /spotify-playlist?url=https://open.spotify.com/playlist/...
+    The tracks of a public Spotify playlist, for the app's "Add a Spotify
+    playlist" (paste a link; refresh adds new tracks). Response 200 JSON:
+      { "id": "...", "name": "Playlist name", "source": "api" | "page",
+        "partial": false,
+        "tracks": [ { "id": "...", "title": "...", "artist": "...", "url": "..." }, ... ] }
+    Tries Spotify's Web API first (works for playlists the app's owner can
+    read), then reads the playlist's public web page. The public page is not
+    an official API: it can change without notice, and long playlists may
+    only show their first 100 or so tracks ("partial": true).
+
   POST /convert-audio
     multipart/form-data, field "file" — any audio/video ffmpeg can read.
     Response 200: 16kHz mono WAV. The app falls back to this when the
@@ -431,6 +442,170 @@ def spotify_search(title: str = "", artist: str = ""):
             "name": best.get("name"),
             "artist": ", ".join(a.get("name") or "" for a in best.get("artists") or []),
             "year": ((best.get("album") or {}).get("release_date") or "")[:4]}
+
+
+# ---- Spotify: the tracks of a public playlist ----
+_PL_UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+          "(KHTML, like Gecko) Chrome/124.0 Safari/537.36")
+
+
+def _playlist_id(s: str):
+    import re
+    s = (s or "").strip()
+    m = re.search(r"playlist[/:]([A-Za-z0-9]{22})", s) or re.fullmatch(r"([A-Za-z0-9]{22})", s)
+    return m.group(1) if m else None
+
+
+def _artist_text(el) -> str:
+    """Artist names from the shapes Spotify uses (a subtitle string, a list
+    of {name}, a list of {profile: {name}}, or {items: [...]})."""
+    if isinstance(el.get("subtitle"), str):
+        return el["subtitle"].replace(" ", " ").strip()
+    arts = el.get("artists")
+    if isinstance(arts, dict):
+        arts = arts.get("items") or []
+    names = []
+    for a in arts or []:
+        if isinstance(a, dict):
+            n = a.get("name") or (a.get("profile") or {}).get("name")
+            if n:
+                names.append(n)
+        elif isinstance(a, str):
+            names.append(a)
+    return ", ".join(names)
+
+
+def _as_track(el):
+    if not isinstance(el, dict):
+        return None
+    for k in ("item", "track", "itemV2"):
+        if isinstance(el.get(k), dict):
+            inner = el[k].get("data") if isinstance(el[k].get("data"), dict) else el[k]
+            t = _as_track(inner)
+            if t:
+                return t
+    uri = el.get("uri") or ""
+    title = el.get("title") or el.get("name")
+    if not isinstance(title, str) or not title.strip():
+        return None
+    if uri and not str(uri).startswith("spotify:track:"):
+        return None
+    tid = str(uri).split(":")[-1] if uri else (el.get("id") or "")
+    if not uri and not el.get("artists") and not isinstance(el.get("subtitle"), str):
+        return None
+    return {"id": tid, "title": title.strip(), "artist": _artist_text(el),
+            "url": ("https://open.spotify.com/track/" + tid) if tid else ""}
+
+
+def _find_tracks(node, best):
+    """The longest list in the page's data that looks like a track list."""
+    if isinstance(node, list):
+        if len(node) >= 1:
+            ts = [t for t in (_as_track(x) for x in node) if t]
+            if ts and len(ts) >= max(1, int(len(node) * 0.6)) and len(ts) > len(best["tracks"]):
+                best["tracks"] = ts
+        for x in node:
+            _find_tracks(x, best)
+    elif isinstance(node, dict):
+        if not best["name"] and node.get("type") == "playlist":
+            nm = node.get("name") or node.get("title")
+            if isinstance(nm, str):
+                best["name"] = nm
+        for v in node.values():
+            _find_tracks(v, best)
+
+
+def _page_data(html: str):
+    """Every JSON blob in the page's <script> tags (plain or base64)."""
+    import base64
+    import json
+    import re
+    out = []
+    for m in re.finditer(r"<script[^>]*>(.*?)</script>", html, re.S | re.I):
+        body = (m.group(1) or "").strip()
+        if len(body) < 40:
+            continue
+        try:
+            out.append(json.loads(body))
+            continue
+        except Exception:  # noqa: BLE001
+            pass
+        if re.fullmatch(r"[A-Za-z0-9+/=\s]+", body):
+            try:
+                out.append(json.loads(base64.b64decode(body).decode("utf-8")))
+            except Exception:  # noqa: BLE001
+                pass
+    return out
+
+
+def _og_title(html: str):
+    import html as _h
+    import re
+    m = re.search(r'<meta[^>]+property="og:title"[^>]+content="([^"]*)"', html)
+    return _h.unescape(m.group(1)) if m else ""
+
+
+@app.get("/spotify-playlist")
+def spotify_playlist(url: str = ""):
+    import requests
+    pid = _playlist_id(url)
+    if not pid:
+        return JSONResponse(status_code=400, content={"error": "That isn't a Spotify playlist link"})
+    # 1) the Web API, when it will share this playlist
+    try:
+        token = _spotify_auth()
+    except Exception:  # noqa: BLE001
+        token = None
+    if token:
+        try:
+            h = {"Authorization": "Bearer " + token}
+            meta = requests.get("https://api.spotify.com/v1/playlists/" + pid, params={"fields": "name"}, headers=h, timeout=10)
+            name = meta.json().get("name") if meta.ok else ""
+            tracks, nxt = [], "https://api.spotify.com/v1/playlists/%s/items?limit=100" % pid
+            while nxt and len(tracks) < 2000:
+                r = requests.get(nxt, headers=h, timeout=15)
+                if not r.ok:
+                    break
+                j = r.json()
+                for it in j.get("items") or []:
+                    t = _as_track(it)
+                    if t:
+                        tracks.append(t)
+                nxt = j.get("next")
+            if tracks:
+                return {"id": pid, "name": name or "", "source": "api", "partial": False, "tracks": tracks}
+        except Exception:  # noqa: BLE001
+            pass
+    # 2) the playlist's public pages
+    best = {"tracks": [], "name": ""}
+    last_status = None
+    for page in ("https://open.spotify.com/embed/playlist/" + pid, "https://open.spotify.com/playlist/" + pid):
+        try:
+            r = requests.get(page, headers={"User-Agent": _PL_UA, "Accept-Language": "en"}, timeout=15)
+        except Exception as e:  # noqa: BLE001
+            last_status = str(e)
+            continue
+        last_status = r.status_code
+        if not r.ok:
+            continue
+        for blob in _page_data(r.text):
+            _find_tracks(blob, best)
+        if not best["name"]:
+            best["name"] = _og_title(r.text)
+        if best["tracks"]:
+            break
+    if not best["tracks"]:
+        if last_status == 404:
+            return JSONResponse(status_code=404, content={"error": "Spotify couldn't find that playlist — is it public?"})
+        return JSONResponse(status_code=502, content={"error": "Couldn't read that playlist from Spotify"})
+    seen, tracks = set(), []
+    for t in best["tracks"]:
+        k = t["id"] or (t["title"] + "|" + t["artist"])
+        if k in seen:
+            continue
+        seen.add(k)
+        tracks.append(t)
+    return {"id": pid, "name": best["name"], "source": "page", "partial": len(tracks) >= 100, "tracks": tracks}
 
 
 @app.get("/")
