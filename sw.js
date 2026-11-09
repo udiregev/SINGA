@@ -5,7 +5,7 @@
    and data always go straight to the network.
    Bump CACHE_NAME whenever the shell file list changes, so old caches get
    cleaned up automatically on the next visit. */
-const CACHE_NAME = 'singa-shell-v21';
+const CACHE_NAME = 'singa-shell-v23';
 const SHELL_FILES = [
   'singa-app.html',
   'singa-site.html',
@@ -23,6 +23,7 @@ const SHELL_FILES = [
   'singa-script-part10.js',
   'singa-script-part11.js',
   'singa-script-part12.js',
+  'singa-script-part13.js',
   'singa-night.css'
 ];
 
