@@ -537,4 +537,149 @@ loadUserData = async function(){ await _n16Load.apply(this, arguments); spApplyL
   if(spConnected()) spSyncAll(true);
 })();
 
+/* ============================================================
+   Round 17 — a public Spotify playlist by its link
+   · "Link a Spotify playlist" now asks for the playlist's link
+     (Spotify: ••• › Share › Copy link to playlist). Singa's server
+     reads the playlist's public page and every track becomes a song
+     with its title and artist.
+   · A linked playlist shows a refresh button: it reads the playlist
+     again and adds any new tracks.
+   · Signing in to Spotify stays available for the few invited
+     accounts; when signed in, refresh uses that first.
+   ============================================================ */
+(function(){
+  const css = `
+.nsp-in{display:flex;gap:8px;margin:14px 0 10px}
+.nsp-in input{flex:1;min-width:0;height:46px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:#fff;padding:0 14px;font-size:15px;outline:none}
+.nsp-in input:focus{border-color:rgba(30,215,96,.75)}
+.nsp-go{height:46px;padding:0 18px;border-radius:12px;border:0;background:#1ed760;color:#000;font-weight:700;font-size:15px;cursor:pointer;flex:none}
+.nsp-go[disabled]{opacity:.5;pointer-events:none}
+.nsp-err{color:#ff8a8a;font-size:13px;margin:-2px 0 8px}
+.nsp-alt{font-size:13px;color:var(--n-mute);margin-top:14px;cursor:pointer;text-decoration:underline;text-underline-offset:3px;display:inline-block}
+.nsp-ref{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:34px;min-width:34px;padding:0 12px 0 8px;border-radius:17px;border:1px solid rgba(30,215,96,.55);color:#fff;font-size:13px;font-weight:700;cursor:pointer;margin-left:14px;white-space:nowrap}
+.nsp-ref svg.r{width:18px;height:18px}
+.nsp-ref{flex:none}
+@media (max-width:600px){.nsp-ref{padding:0;width:38px;height:38px;border-radius:19px;margin-left:10px}.nsp-ref .l{display:none}.nsp-ref svg.r{width:20px;height:20px}}
+.nsp-ref.busy{opacity:.65;pointer-events:none}
+.nsp-ref.busy svg.r{animation:nspSpin 1s linear infinite}
+@keyframes nspSpin{to{transform:rotate(360deg)}}
+`;
+  const st = document.createElement('style'); st.id = 'nightCss17'; st.textContent = css;
+  document.head.appendChild(st);
+})();
+const SP_PAGE_SERVER = (typeof LINK_SERVER!=='undefined' && LINK_SERVER) || 'https://singa-production-e6f3.up.railway.app';
+const SP_REFRESH_ICO = `<svg class="r" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"></path><path d="M20 4v7h-7"></path></svg>`;
+function spIdFromLink(s){ const m = String(s||'').match(/playlist[\/:]([A-Za-z0-9]{22})/) || String(s||'').trim().match(/^([A-Za-z0-9]{22})$/); return m ? m[1] : null; }
+function spCleanPlName(n){ return String(n||'').replace(/\s*[|\-–]\s*(playlist by .*|spotify)\s*$/i,'').replace(/\s*\|\s*Spotify\s*$/i,'').trim(); }
+// the playlist's tracks, read from its public page by Singa's server
+async function spPageTracks(listId){
+  let r;
+  try{ r = await fetch(SP_PAGE_SERVER + '/spotify-playlist?url=' + encodeURIComponent('https://open.spotify.com/playlist/' + listId)); }
+  catch(e){ const er = new Error('Singa’s server didn’t answer — try again in a minute'); er.page = true; throw er; }
+  const j = await r.json().catch(()=>({}));
+  if(!r.ok || !j.tracks){
+    const er = new Error(r.status===404 && !j.error ? 'Singa’s server isn’t ready for Spotify links yet — try again in a few minutes' : (j.error || ('Singa’s server answered '+r.status)));
+    er.page = true; er.status = r.status; throw er;
+  }
+  return { name: spCleanPlName(j.name), partial: !!j.partial, tracks: j.tracks.map(t=>({ id: t.id, name: t.title || t.name, artist: t.artist || '', url: t.url || (t.id ? 'https://open.spotify.com/track/'+t.id : '') })) };
+}
+// signed in → Spotify itself; otherwise (or if that's refused) → the public page
+async function spAnyTracks(listId){
+  if(spConnected()){
+    try{ return { tracks: await spTracks(listId) }; }
+    catch(e){ console.warn('Singa: Spotify API refused, reading the public page instead', e); }
+  }
+  return spPageTracks(listId);
+}
+spSync = async function(p, quiet, pre){
+  if(!p || !p.spotifyId || _spBusy.has(p.id)) return 0;
+  _spBusy.add(p.id); render();
+  let added = 0, linked = 0;
+  try{
+    const res = pre || await spAnyTracks(p.spotifyId);
+    const ids = (p.ids||[]).slice();
+    res.tracks.forEach(t=>{
+      if(!t.name) return;
+      const title = spCleanTitle(t.name);
+      let s = spFindSong(t.id, title, t.artist);
+      if(!s){
+        const id = 'sp'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+        s = { id, title, sub: t.artist||'', lyrics:'', chords:{}, notes:{ _spotify:{ url: t.url, id: t.id } }, synced:false, isPublic:false, plays:0, added:Date.now(), mine:true };
+        D.songs[id] = s; D.order = [id, ...D.order]; saveSongRow(s); added++;
+      } else if(!(s.notes && s.notes._spotify) && s.mine!==false){
+        s.notes = { ...(s.notes||{}), _spotify:{ url: t.url, id: t.id } }; queueSaveSong(s.id);
+      }
+      if(!ids.includes(s.id)){ ids.push(s.id); linked++; }
+    });
+    const autoPl = (D.playlists||[]).find(x=>x.auto); if(autoPl) autoPl.ids = D.order;
+    if(linked){ p.ids = ids; savePlaylistRow(p); }
+    p.spSyncedAt = Date.now();
+    if(!quiet || added){
+      const more = res.partial ? ' (Spotify showed the first '+res.tracks.length+' tracks)' : '';
+      toast(added ? added+' new song'+(added===1?'':'s')+' from Spotify'+more : linked ? '“'+p.title+'” is up to date with Spotify' : '“'+p.title+'” is up to date with Spotify'+more);
+    }
+  }catch(e){
+    console.error('Singa: Spotify refresh failed', e);
+    if(!quiet) toast(e.page ? e.message : 'Couldn’t refresh from Spotify: '+e.message);
+  }finally{ _spBusy.delete(p.id); render(); }
+  return added;
+};
+// on opening Singa, only signed-in accounts refresh by themselves
+spSyncAll = async function(quiet){ if(!spConnected()) return; for(const p of (D.playlists||[]).filter(x=>x.spotifyId && x.mine!==false)) await spSync(p, quiet); };
+
+XActions.spLinkStart = function(){ if(!canSync()) return; ST.newItem = { kind:'spurl', url:'', busy:false, err:'' }; render(); setTimeout(()=>{ const i = document.getElementById('nspUrl'); if(i) i.focus(); }, 60); };
+XActions.spSignIn = function(){ ST.newItem = null; if(spConnected()) spOpenPicker(); else spConnect('pick'); };
+XActions.spUrlGo = async function(){
+  const ni = ST.newItem; if(!ni || ni.kind!=='spurl' || ni.busy) return;
+  const inp = document.getElementById('nspUrl'); if(inp) ni.url = inp.value;
+  const listId = spIdFromLink(ni.url);
+  if(!listId){ ni.err = 'That doesn’t look like a Spotify playlist link'; render(); return; }
+  let p = (D.playlists||[]).find(y=>y.spotifyId===listId && y.mine!==false);
+  if(p){ ST.newItem = null; ST.screen='list'; ST.listKind='songs'; ST.listPl=p.id; render(); spSync(p); return; }
+  ni.busy = true; ni.err = ''; render();
+  let res;
+  try{ res = await spPageTracks(listId); }
+  catch(e){
+    if(spConnected()){ try{ res = { tracks: await spTracks(listId) }; }catch(e2){} }
+    if(!res){ if(ST.newItem===ni){ ni.busy = false; ni.err = e.message; render(); } return; }
+  }
+  if(ST.newItem!==ni) return;
+  ST.newItem = null;
+  p = { id:'p'+Date.now(), title: res.name || 'Spotify playlist', ids:[], mine:true, isPublic:false, added:Date.now(), plays:0, src:'spotify', spotifyId: listId };
+  D.playlists.splice(1, 0, p);
+  ST.screen = 'list'; ST.listKind = 'songs'; ST.listPl = p.id; render();
+  await spSaveLink(p);
+  spSync(p, false, res);
+};
+XActions.spSyncNow = function(d){ const p = (D.playlists||[]).find(y=>y.id===d.id); if(p) spSync(p); };
+Binds.spUrl = function(v){ const ni = ST.newItem; if(ni && ni.kind==='spurl'){ ni.url = v; if(ni.err){ ni.err=''; const e = document.querySelector('.nsp-err'); if(e) e.remove(); } } };
+
+const _n17NewModal = renderNewModal;
+renderNewModal = function(){
+  const ni = ST.newItem;
+  if(!ni || ni.kind!=='spurl') return _n17NewModal();
+  return `<div class="modal-backdrop" data-act="closeNew"><div class="modal" style="max-width:460px" onclick="modalClick(event)">
+    <div class="mhead"><span style="font-size:21px;font-weight:600;display:flex;align-items:center;gap:10px">${SP_LOGO}Add a Spotify playlist</span><span class="icon-btn" data-act="closeNew">${icon('close',22)}</span></div>
+    <div class="nsp-note">Paste the link to a public playlist (in Spotify: ••• › Share › Copy link to playlist). Every track becomes a song in Singa with its title and artist. Tap refresh on the playlist later to add new tracks.</div>
+    <form class="nsp-in" onsubmit="event.preventDefault();XActions.spUrlGo()">
+      <input id="nspUrl" type="text" inputmode="url" autocomplete="off" placeholder="https://open.spotify.com/playlist/…" value="${esc(ni.url||'')}" data-bind="spUrl" ${ni.busy?'disabled':''}>
+      <button class="nsp-go" type="submit" ${ni.busy?'disabled':''}>${ni.busy?'Reading…':'Add'}</button>
+    </form>
+    ${ni.err ? `<div class="nsp-err">${esc(ni.err)}</div>` : ''}
+    <div class="nsp-note" style="font-size:12px">Singa reads the playlist’s public Spotify page. Very long playlists may only bring their first 100 or so tracks.</div>
+    <span class="nsp-alt" data-xact="spSignIn">${spConnected() ? 'Choose from my Spotify playlists instead' : 'Sign in to Spotify instead (invited accounts only)'}</span>
+  </div></div>`;
+};
+// the linked playlist's button becomes a refresh icon
+const _n17RenderList = renderList;
+renderList = function(){
+  let html = _n17RenderList();
+  html = html.replace('Link a Spotify playlist</div>', 'Add a Spotify playlist</div>');
+  html = html.replace(/<span class="nsp-sync( busy)?"([^>]*)>[\s\S]*?<\/span><div style="flex:1"><\/div>/, function(m, busy, attrs){
+    return `<span class="nsp-ref${busy||''}"${attrs.replace(/title="[^"]*"/, 'title="Refresh from Spotify — adds new tracks" aria-label="Refresh from Spotify"')}>${SP_REFRESH_ICO}<span class="l">${busy ? 'Refreshing…' : 'Refresh'}</span></span><div style="flex:1"></div>`;
+  });
+  return html;
+};
+
 render();
