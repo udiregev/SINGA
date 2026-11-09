@@ -690,3 +690,7 @@ function nDeliverFiles(files){
 }
 
 render();
+
+// Later rounds live in singa-script-part13.js (loaded here, so the pages
+// don't need to change when it grows)
+(function(){ const sc = document.createElement('script'); sc.src = 'singa-script-part13.js'; document.head.appendChild(sc); })();
