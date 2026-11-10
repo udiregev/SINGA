@@ -737,7 +737,7 @@ def _line_score(l: str) -> float:
     import re
     global _CHORD_TOK
     if _CHORD_TOK is None:
-        _CHORD_TOK = re.compile(r"^[A-G][#b]?(?:m|maj|min|dim|aug|sus|add)?\d*(?:/[A-G][#b]?)?$")
+        _CHORD_TOK = re.compile(r"^[A-G][#b]?(?:maj|min|m|M|dim|aug|sus|add|\+)?\d*(?:(?:sus|add|maj|m|b|#)\d+)*(?:/[A-G][#b]?)?$")
     s = l.strip()
     if not s or len(s) > 90:
         return 0
@@ -764,61 +764,304 @@ def _marked_blocks(html: str):
             depth += -1 if t.group(1) else 1
             if depth == 0:
                 j = i + t.start(); break
-        txt = _html_text(html[i:j])
+        txt = _structured_text(html[i:j]) or _html_text(html[i:j])
         if sum(_line_score(l) for l in txt.split("\n")) >= 4:
             out.append(txt)
     return out
 
 
+def _quality(lines) -> float:
+    filled = [l for l in lines if l.strip()]
+    return sum(_line_score(l) for l in filled) / max(1, len(filled))
+
+
+def _gather(text: str):
+    """The song-like parts of a page's text, in order, each once."""
+    import re
+    pieces, cur, junk = [], [], 0
+    for l in text.split("\n"):
+        if len(l.strip()) > 110:                 # prose: a break
+            if cur: pieces.append(cur)
+            cur, junk = [], 0
+            continue
+        sc = _line_score(l)
+        if l.strip() and not sc:
+            junk += 1
+            if junk >= 2:                        # two odd lines in a row: a break
+                if cur: pieces.append(cur)
+                cur = []
+                continue
+        elif sc:
+            junk = 0
+        cur.append(l)
+    if cur:
+        pieces.append(cur)
+    keep, seen = [], set()
+    for pc in pieces:
+        while pc and not _line_score(pc[0]):
+            pc = pc[1:]
+        while pc and not _line_score(pc[-1]):
+            pc = pc[:-1]
+        if sum(_line_score(l) for l in pc) < 2 or _quality(pc) < 0.6:
+            continue
+        key = re.sub(r"[^a-z0-9]+", " ", " ".join(pc).lower()).strip()
+        if key in seen:
+            continue
+        seen.add(key)
+        keep.append("\n".join(pc).strip("\n"))
+    text = "\n\n".join(keep)
+    return text if sum(_line_score(l) for l in text.split("\n")) >= 4 else ""
+
+
 def _song_block(html: str):
-    """Any other page: a block marked as the lyrics, else the longest run of song-like lines."""
+    """Any other page: a block marked as the lyrics, else the song-like parts of the page."""
     import re
     body = re.search(r"(?is)<body\b[^>]*>(.*)</body>", html)
     page = _strip_chrome(body.group(1) if body else html)
-    marked = _marked_blocks(page)
-    if marked:
-        best = max(marked, key=lambda t: sum(_line_score(l) for l in t.split("\n")))
-        return {"text": best.strip("\n"), "kind": "text"}
+    # blocks marked as lyrics / chords / verses: all the clean ones, in order, each once
+    keep, keys = [], []
+    for t in _marked_blocks(page):
+        if _quality(t.split("\n")) < 0.7:
+            continue
+        k = re.sub(r"[^a-z0-9]+", " ", t.lower()).strip()
+        if any(k in o for o in keys):
+            continue
+        keys.append(k); keep.append(t.strip("\n"))
+    if keep:
+        return {"text": "\n\n".join(keep), "kind": "text"}
     # menus and link lists are never the song
     page = re.sub(r"(?is)<(ul|ol|table)\b.*?</\1>", "\n", page)
     page = re.sub(r"(?is)<a\b[^>]*>.*?</a>", " ", page)
-    t = _html_text(page)
-    blocks, cur = [], []
-    for l in t.split("\n"):
-        if len(l.strip()) > 110:                 # prose: a break
-            if cur: blocks.append(cur); cur = []
-            continue
-        cur.append(l)
-    if cur:
-        blocks.append(cur)
-    # split blocks further at runs of 3+ lines that aren't song-like (menus, labels)
-    pieces = []
-    for b in blocks:
-        cur, junk = [], 0
-        for l in b:
-            sc = _line_score(l)
-            if l.strip() and not sc:
-                junk += 1
-                if junk >= 3:
-                    if cur: pieces.append(cur); cur = []
-                    continue
-            elif sc:
-                junk = 0
-            cur.append(l)
-        if cur:
-            pieces.append(cur)
+    text = _gather(_structured_text(page) or _html_text(page))
+    return {"text": text, "kind": "text"} if text else None
 
-    def score(b):
-        return sum(_line_score(l) for l in b)
-    best = max(pieces, key=score) if pieces else []
-    if score(best) < 4:
-        return None
-    # trim leading / trailing lines that aren't part of the song
-    while best and not _line_score(best[0]):
-        best = best[1:]
-    while best and not _line_score(best[-1]):
-        best = best[:-1]
-    return {"text": "\n".join(best).strip("\n"), "kind": "text"}
+
+# ---- reading a song's structure from HTML: chords placed over the words ----
+_BLOCK_TAGS = {"div", "p", "li", "h1", "h2", "h3", "h4", "h5", "h6", "tr", "section", "article", "pre",
+               "blockquote", "header", "footer", "ul", "ol", "table", "dd", "dt", "main", "figure"}
+_SKIP_TAGS = {"script", "style", "svg", "noscript", "button", "select", "form", "nav", "iframe", "template",
+              "head", "title", "textarea", "input", "img", "picture", "video", "audio", "canvas"}
+_VOID_TAGS = {"br", "img", "hr", "meta", "link", "input", "source", "wbr", "col", "area", "base", "embed", "param", "track"}
+_SECTION_RE = None
+_SPELLED_RE = None
+_NOTE_WORD = {"sharp": "#", "flat": "b"}
+_QUAL_WORDS = [  # longest first
+    ("minor major seventh", "m(maj7)"), ("dominant seventh", "7"), ("major seventh", "maj7"), ("minor seventh", "m7"),
+    ("major sixth", "6"), ("minor sixth", "m6"), ("major ninth", "maj9"), ("minor ninth", "m9"), ("dominant ninth", "9"),
+    ("half diminished", "m7b5"), ("diminished seventh", "dim7"), ("augmented", "aug"), ("diminished", "dim"),
+    ("suspended second", "sus2"), ("suspended fourth", "sus4"), ("suspended", "sus4"), ("power chord", "5"),
+    ("seventh", "7"), ("sixth", "6"), ("ninth", "9"), ("eleventh", "11"), ("thirteenth", "13"),
+    ("added ninth", "add9"), ("add nine", "add9"), ("major", ""), ("minor", "m")]
+
+
+_CHORD_FULL = None
+
+
+def _is_chord_text(t: str) -> bool:
+    """'Cm', 'Bb Ab', 'A7sus4', 'D/F#': one to three chord names and nothing else."""
+    import re
+    global _CHORD_FULL
+    if _CHORD_FULL is None:
+        _CHORD_FULL = re.compile(r"^[A-G][#b]?(?:maj|min|m|M|dim|aug|sus|add|\+)?\d*(?:(?:sus|add|maj|m|b|#)\d+)*(?:/[A-G][#b]?)?$")
+    toks = t.replace(chr(0x266D), "b").replace(chr(0x266F), "#").split()
+    return 0 < len(toks) <= 3 and all(_CHORD_FULL.match(x) for x in toks)
+
+
+def _spelled_chords(t: str):
+    """'(C minor)', 'B flat major', 'F sharp minor seventh' -> ['Cm', 'Bb', 'F#m7']."""
+    import re
+    global _SPELLED_RE
+    if _SPELLED_RE is None:
+        q = "|".join(re.escape(w) for w, _ in _QUAL_WORDS)
+        _SPELLED_RE = re.compile(r"\b([A-G])(?:\s+(sharp|flat))?\s+(" + q + r")(?:\s+(?:over|slash|with bass)\s+([A-G])(?:\s+(sharp|flat))?)?\b", re.I)
+    out = []
+    for m in _SPELLED_RE.finditer(t):
+        root = m.group(1).upper() + _NOTE_WORD.get((m.group(2) or "").lower(), "")
+        qual = dict(_QUAL_WORDS).get(m.group(3).lower(), "")
+        bass = ("/" + m.group(4).upper() + _NOTE_WORD.get((m.group(5) or "").lower(), "")) if m.group(4) else ""
+        out.append(root + qual + bass)
+    return out
+
+
+def _html_tree(fragment: str):
+    from html.parser import HTMLParser
+
+    class T(HTMLParser):
+        def __init__(self):
+            super().__init__(convert_charrefs=True)
+            self.root = {"tag": "#root", "attrs": {}, "kids": []}
+            self.stack = [self.root]
+
+        def handle_starttag(self, tag, attrs):
+            n = {"tag": tag, "attrs": dict(attrs), "kids": []}
+            self.stack[-1]["kids"].append(n)
+            if tag not in _VOID_TAGS:
+                self.stack.append(n)
+
+        def handle_startendtag(self, tag, attrs):
+            self.stack[-1]["kids"].append({"tag": tag, "attrs": dict(attrs), "kids": []})
+
+        def handle_endtag(self, tag):
+            for i in range(len(self.stack) - 1, 0, -1):
+                if self.stack[i]["tag"] == tag:
+                    del self.stack[i:]
+                    break
+
+        def handle_data(self, d):
+            self.stack[-1]["kids"].append(d)
+    t = T()
+    t.feed(fragment)
+    t.close()
+    return t.root
+
+
+def _node_text(n) -> str:
+    if isinstance(n, str):
+        return n
+    if n["tag"] in _SKIP_TAGS:
+        return ""
+    return "".join(_node_text(k) for k in n["kids"])
+
+
+def _song_lines(fragment: str):
+    """The fragment as lines of {text, chords:[(pos, name, kind)]}: chords given as their own
+    elements, or spelled out for screen readers ('(C minor)'), are placed at the words they
+    come before."""
+    import re
+    lines, cur = [], {"text": "", "chords": []}
+
+    def flush():
+        if cur["text"].strip() or cur["chords"]:
+            t = cur["text"]
+            lead = len(t) - len(t.lstrip())
+            lines.append({"text": t.strip(), "chords": [(max(0, p - lead), c, k) for p, c, k in cur["chords"]]})
+        cur["text"], cur["chords"] = "", []
+
+    def blank():
+        if lines and not lines[-1].get("blank"):
+            lines.append({"blank": True, "text": "", "chords": []})
+
+    def add_text(t):
+        t = re.sub(r"\s*\n\s*", " ", t.replace("\r", "").replace("\t", " ").replace(chr(160), " "))
+        if not t:
+            return
+        if cur["text"].endswith(" ") and t.startswith(" "):
+            t = t.lstrip(" ")
+        if not cur["text"].strip():
+            t = t.lstrip(" ") if not cur["chords"] else t
+        cur["text"] += t
+
+    def walk(n):
+        if isinstance(n, str):
+            add_text(n)
+            return
+        tag, a = n["tag"], n["attrs"]
+        if tag in _SKIP_TAGS:
+            return
+        cls = (a.get("class") or "").lower()
+        if re.search(r"material|icon|\bfa-|glyph", cls):
+            return
+        if tag == "br":
+            if not cur["text"].strip() and not cur["chords"]:
+                blank()
+            flush(); return
+        if re.search(r"sr-only|visually-hidden|screen-?reader|a11y", cls):
+            for c in _spelled_chords(_node_text(n)):
+                cur["chords"].append((len(cur["text"]), c, "spelled"))
+            return
+        txt = _node_text(n).strip()
+        if txt and len(txt) <= 14 and _is_chord_text(txt) and not any(isinstance(k, dict) and k["tag"] in _BLOCK_TAGS and _node_text(k).strip() and not _is_chord_text(_node_text(k).strip()) for k in n["kids"]):
+            for c in txt.split():
+                cur["chords"].append((len(cur["text"]), c, "sym"))
+            if tag in _BLOCK_TAGS and not cur["text"].strip():
+                flush()
+            return
+        block = tag in _BLOCK_TAGS
+        if block:
+            flush()
+        for k in n["kids"]:
+            walk(k)
+        if block:
+            flush()
+            if tag == "p":
+                blank()
+    walk(_html_tree(fragment))
+    flush()
+    return lines
+
+
+def _render_sheet(lines) -> str:
+    """Lines of words + placed chords as a chord sheet: chords above the words, sections in brackets."""
+    import re
+    global _SECTION_RE
+    if _SECTION_RE is None:
+        _SECTION_RE = re.compile(r"^[\[(]?\s*(verse|chorus|pre-?chorus|bridge|intro|outro|solo|interlude|instrumental|hook|refrain|coda|tag|breakdown|ending|riff)\s*(\d+|[ivx]+)?\s*:?\s*[\])]?$", re.I)
+    # a line that spells its chords out: the bare chord rows just above it are the same chords
+    keep = []
+    for ln in lines:
+        if any(k == "spelled" for _, _, k in ln["chords"]):
+            while keep and not keep[-1]["text"] and keep[-1]["chords"] and all(k == "sym" for _, _, k in keep[-1]["chords"]):
+                keep.pop()
+            ln = {"text": ln["text"], "chords": [c for c in ln["chords"] if c[2] == "spelled"]}
+        keep.append(ln)
+    # chord rows with no words, one chord per element: one row
+    merged = []
+    for ln in keep:
+        if not ln["text"] and merged and not merged[-1]["text"] and merged[-1]["chords"] and ln["chords"] and len(merged[-1]["chords"]) < 8:
+            merged[-1] = {"text": "", "chords": merged[-1]["chords"] + ln["chords"]}
+        else:
+            merged.append(ln)
+    # page furniture: icon names, a label repeated on every line
+    counts = {}
+    for ln in merged:
+        if ln["text"] and not ln["chords"]:
+            counts[ln["text"]] = counts.get(ln["text"], 0) + 1
+    out = []
+    for ln in merged:
+        if ln.get("blank"):
+            if out and out[-1] != "":
+                out.append("")
+            continue
+        t = ln["text"]
+        if t and not ln["chords"]:
+            if re.fullmatch(r"[a-z]+(?:_[a-z]+)+", t):
+                continue
+            if counts.get(t, 0) >= 4 and re.fullmatch(r"[A-Z][A-Z ]{3,}", t):
+                continue
+            m = _SECTION_RE.match(t)
+            if m:
+                name = m.group(1).capitalize().replace("Pre-chorus", "Pre-Chorus").replace("Prechorus", "Pre-Chorus")
+                if out and out[-1] != "":
+                    out.append("")
+                out.append("[" + name + (" " + m.group(2) if m.group(2) else "") + "]")
+                continue
+        if ln["chords"]:
+            chords = ln["chords"]
+            if t:
+                # a chord after the last word belongs on the last word
+                last = len(t) - len(t.split()[-1]) if t.split() else 0
+                chords = [(min(p, last) if p >= len(t.rstrip()) else p, c, k) for p, c, k in chords]
+            row, end = "", -1
+            for pos, c, _k in sorted(chords, key=lambda x: x[0]):
+                col = max(pos, end + 1) if row else pos
+                if col < len(row):
+                    col = len(row) + 1
+                row = row.ljust(col) + c
+                end = len(row)
+            if not t:
+                row = "  ".join(c for _, c, _ in sorted(ln["chords"], key=lambda x: x[0])) if all(p == ln["chords"][0][0] for p, _, _ in ln["chords"]) else row
+            out.append(row.rstrip())
+        if t:
+            out.append(t)
+    text = "\n".join(out)
+    return re.sub(r"\n{3,}", "\n\n", text).strip("\n")
+
+
+def _structured_text(fragment: str) -> str:
+    try:
+        return _render_sheet(_song_lines(fragment))
+    except Exception:  # noqa: BLE001
+        return ""
 
 
 def _page_title(html: str, host: str = ""):
@@ -842,7 +1085,15 @@ def _page_title(html: str, host: str = ""):
         else:
             title = re.sub(r"(?i)\s+(?:lyrics|chords|tabs?)$", "", t)
     title = re.sub(r"(?i)\s*\((?:official )?(?:lyrics|chords)\)\s*$", "", title).strip(" \"'“”")
-    return title.strip(), artist.strip()
+    return _unshout(title.strip()), _unshout(artist.strip())
+
+
+def _unshout(t: str) -> str:
+    """'ADELE' -> 'Adele', 'CHASING PAVEMENTS' -> 'Chasing Pavements' (short ones like ABBA, AC/DC stay)."""
+    import re
+    if t.isupper() and len(re.sub(r"[^A-Za-z]", "", t)) > 4:
+        return " ".join(w[:1] + w[1:].lower() if w.isalpha() else w for w in t.split(" "))
+    return t
 
 
 def _read_page(url: str):
