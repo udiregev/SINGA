@@ -10,7 +10,8 @@
      Spotify, and Delete playlist.
    · New song › Upload › a document with several songs in it: Singa
      finds them and asks whether to add each one as its own song.
-   · New artwork for the hands (sign-in and "Got it!").
+   · New artwork for the hand on "Got it!" (the sign-in picture is the
+     first version, restored in round 21).
    ============================================================ */
 (function(){
   const css = `
@@ -260,23 +261,6 @@ const N18_DEFS = `<linearGradient id="xSkin" gradientUnits="userSpaceOnUse" x1="
 <radialGradient id="xHead" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="#FF9BF5"/><stop offset=".55" stop-color="#D21CFF"/><stop offset="1" stop-color="#5B14B8"/></radialGradient>
 <pattern id="xGrille" width="7" height="7" patternUnits="userSpaceOnUse"><rect width="7" height="3" fill="rgba(42,8,90,0.45)"/></pattern>
 <linearGradient id="xFist" gradientUnits="userSpaceOnUse" x1="-50" y1="-60" x2="40" y2="70"><stop offset="0" stop-color="#FFC0DA"/><stop offset=".55" stop-color="#FF7AB0"/><stop offset="1" stop-color="#E2508F"/></linearGradient>`;
-const N18_MIC = `<path d="M-46 40 L30 44 L18 220 L-84 220 Z" fill="url(#xSkin)"/>
-<path d="M-62 120 L24 124 L16 222 L-92 222 Z" fill="url(#xSleeve)"/>
-<path d="M-66 142H22M-70 166H20M-74 190H18" stroke="#3A1E9C" stroke-width="5"/>
-<path d="M-64 112 L26 116 L25 130 L-66 126 Z" fill="#B21CFF"/>
-<path d="M-15 -66 L15 -66 L11 120 L-11 120 Z" fill="url(#xHandle)"/>
-<rect x="-22" y="-82" width="44" height="18" rx="6" fill="#2A1260"/>
-<rect x="-22" y="-82" width="44" height="5" rx="2.5" fill="#7A5CFF" opacity=".6"/>
-<circle cx="0" cy="-116" r="38" fill="url(#xHead)"/>
-<circle cx="0" cy="-116" r="38" fill="url(#xGrille)"/>
-<path d="M-22 -140a30 30 0 0 1 22 -10" stroke="#fff" stroke-width="4" stroke-linecap="round" fill="none" opacity=".7"/>
-<path d="M-52 -26 C-54 -44 -40 -52 -24 -50 L26 -48 C42 -48 50 -38 48 -26 C54 -18 54 -6 48 2 C54 10 54 22 47 30 C51 40 46 54 32 56 L-22 58 C-42 58 -54 44 -54 26 Z" fill="url(#xFist)"/>
-<path d="M-6 -24 C10 -26 30 -26 46 -24 M-4 2 C12 0 32 0 47 2 M-4 28 C12 26 30 26 45 28" stroke="#C2457F" stroke-width="2.2" fill="none" stroke-linecap="round" opacity=".55"/>
-<path d="M34 -40 c4 1 8 4 10 7 M36 -14 c4 1 7 3 9 6 M36 12 c4 1 7 3 9 6 M33 38 c3 1 6 3 8 5" stroke="#FFE0EE" stroke-width="2.5" fill="none" stroke-linecap="round" opacity=".45"/>
-<path d="M-40 22 C-36 8 -28 -6 -16 -12 L22 -30" stroke="#B83C78" stroke-width="8" fill="none" stroke-linecap="round" opacity=".2"/>
-<path d="M-56 14 C-62 -8 -50 -30 -30 -40 L8 -60 C20 -66 34 -60 34 -48 C34 -40 28 -35 20 -32 L-18 -14 C-30 -6 -36 8 -40 20 C-44 30 -54 28 -56 14 Z" fill="url(#xSkin3)"/>
-<path d="M12 -61 C22 -65 33 -59 33 -50 C30 -45 22 -45 17 -49 Z" fill="#FFE0EE" opacity=".85"/>
-<path d="M-44 6 C-40 -6 -32 -16 -22 -22" stroke="#C2457F" stroke-width="2" fill="none" stroke-linecap="round" opacity=".4"/>`;
 const N18_HORNS = `<path d="M-38 62 L38 62 L46 172 L-46 172 Z" fill="url(#xSleeve)"/>
 <path d="M-40 94H40M-42 118H42M-44 142H44" stroke="#3A1E9C" stroke-width="5"/>
 <path d="M-41 58 Q0 52 41 58 L42 72 Q0 66 -42 72 Z" fill="#B21CFF"/>
@@ -295,12 +279,6 @@ const N18_HORNS = `<path d="M-38 62 L38 62 L46 172 L-46 172 Z" fill="url(#xSleev
 <path d="M-56 28 C-60 8 -44 -6 -26 -8 L28 -20 C44 -23 54 -10 48 2 C44 9 36 11 26 12 L-28 34 C-42 38 -54 36 -56 28 Z" fill="url(#xSkin3)"/>
 <path d="M33 -18 C42 -19 49 -12 48 -5 C45 0 38 0 34 -4 Z" fill="#FFE0EE" opacity=".85"/>
 <path d="M-28 44 C-10 52 14 50 32 38" stroke="#C2457F" stroke-width="2" fill="none" stroke-linecap="round" opacity=".4"/>`;
-const N18_STAGE_SVG = (function(){
-  let s = N_STAGE_SVG.replace('</defs>', N18_DEFS.replace(/id="x/g, 'id="hx')+'</defs>');
-  const i = s.indexOf('<g transform="translate(176 160) rotate(28)">'), k = s.lastIndexOf('\n  </g>\n</svg>');
-  if(i<0 || k<0) return N_STAGE_SVG;
-  return s.slice(0, i) + '<g transform="translate(180 170) rotate(24)">' + N18_MIC.replace(/url\(#x/g, 'url(#hx') + '</g>' + s.slice(k);
-})();
 const N18_HORNS_SVG = (function(){
   let s = N_HORNS_SVG.replace('</defs>', N18_DEFS.replace(/id="x/g, 'id="gx')+'</defs>');
   const i = s.indexOf('<g transform="translate(160 176) rotate(-6)">'), k = s.indexOf('<g fill="none" stroke="#FFB3F3"', i);
@@ -311,7 +289,8 @@ const _n18Night = nightify;
 nightify = function(html){
   let h = _n18Night(html);
   if(h.indexOf('n-stage')<0) return h;
-  return h.replace(/<svg class="n-stage n-hand"[\s\S]*?<\/svg>/, ()=>N18_STAGE_SVG).replace(/<svg class="n-stage n-horns"[\s\S]*?<\/svg>/, ()=>N18_HORNS_SVG);
+  // (the sign-in picture stays the first version: the hand holding up a microphone)
+  return h.replace(/<svg class="n-stage n-horns"[\s\S]*?<\/svg>/, ()=>N18_HORNS_SVG);
 };
 
 /* ============================================================
@@ -476,5 +455,105 @@ const _n20Incomplete = renderIncomplete;
 renderIncomplete = function(){
   return _n20Incomplete().replace(/<span class="msi" style="font-size:48px;margin-top:60px;color:#6f6f6f">folder<\/span>/, ()=>N20_EMPTY_SVG);
 };
+
+/* ============================================================
+   ROUND 21 · "Got it!" screen
+   · The song's name is the big title ("No Mercy" / "is being added"),
+     shrinking to fit two lines, or "Your song" when it can't fit or
+     isn't known yet.
+   · When the song is ready while you're still here, the screen says so
+     ("has been added", Open the song) instead of a pop-up.
+   ============================================================ */
+(function(){
+  const css = `
+.nq-title{font-size:64px;font-weight:800;letter-spacing:-0.03em;line-height:1.08;text-align:center;margin-top:12px;max-width:min(92vw,760px);overflow-wrap:anywhere;color:#fff}
+.nq-what{font-size:22px;text-align:center;line-height:1.4;margin-top:8px}
+.nq-what.done{color:#9FE3D2;font-weight:700}
+.nq-what.fail{color:#FFB3C1;font-weight:700}
+.nq-info{font-size:15px;color:var(--n-mute);text-align:center;max-width:360px;line-height:1.5;margin-top:14px}
+`;
+  const st = document.createElement('style'); st.id = 'nightCss21'; st.textContent = css;
+  document.head.appendChild(st);
+})();
+const _n21Recent = [];                      // jobs started in the last few seconds
+const _n21NewJob = newJob;
+newJob = function(){ const j = _n21NewJob.apply(this, arguments); _n21Recent.push({ id:j.id, at:Date.now() }); while(_n21Recent.length > 30) _n21Recent.shift(); return j; };
+let _n21Q = null;                           // { jobs:Set, songs:Set, done:Set, failed:Set }
+function nQOn(){ return ST.screen==='queued' && _n21Q; }
+const _n21Render = render;
+render = function(){
+  if(ST.screen==='queued' && !_n21Q){
+    const now = Date.now(), ids = _n21Recent.filter(x=>now - x.at < 6000).map(x=>x.id);
+    const jobs = (ST.jobs||[]).filter(j=>ids.includes(j.id));
+    _n21Q = { jobs:new Set(jobs.map(j=>j.id)), songs:new Set(jobs.map(j=>j.songId)), done:new Set(), failed:new Set() };
+  } else if(ST.screen!=='queued' && _n21Q) _n21Q = null;
+  _n21Render();
+  if(ST.screen==='queued') nQFit();
+};
+const _n21Finished = jobFinished;
+jobFinished = function(j, songObj){
+  if(nQOn() && _n21Q.jobs.has(j.id)){ _n21Q.done.add(j.id); if(songObj) _n21Q.songs.add(songObj.id); _n21Q.mute = Date.now(); }
+  return _n21Finished.apply(this, arguments);
+};
+const _n21Failed = jobFailed;
+jobFailed = function(j){
+  if(nQOn() && _n21Q.jobs.has(j.id)) _n21Q.failed.add(j.id);
+  return _n21Failed.apply(this, arguments);
+};
+// the screen says it, so no pop-up saying the same
+const _n21Toast = toast;
+toast = function(msg){
+  if(nQOn() && _n21Q.mute && Date.now() - _n21Q.mute < 8000 && /has been added to your songs|has been updated|songs? added from/.test(String(msg||''))) return;
+  return _n21Toast.apply(this, arguments);
+};
+function nQState(){
+  const q = _n21Q; if(!q || !q.jobs.size) return 'pending';
+  const ended = q.done.size + q.failed.size;
+  if(ended < q.jobs.size) return 'pending';
+  return q.done.size ? 'done' : 'failed';
+}
+function nQName(){
+  const q = ST.queued || [];
+  const docs = q.length===1 && /^(\d+) (documents|files|songs)$/.exec(q[0]||'');
+  if(q.length > 1 || docs) return { name: (docs ? docs[1] : q.length) + (ST._queuedMulti || !docs || docs[2]==='songs' ? ' songs' : ' files'), many:true };
+  let name = q[0] || '';
+  if(_n21Q && _n21Q.songs.size===1){ const s = D.songs[[..._n21Q.songs][0]]; if(s && (s.title||'').trim() && s.title!=='Untitled song') name = s.title.trim(); }
+  if(!name || /^(your (recording|document|song|take)|the linked track|untitled song|web page)$/i.test(name)) name = '';
+  return { name, many:false };
+}
+const _n21Queued = renderQueued;
+renderQueued = function(){
+  let h = _n21Queued();
+  const st = nQState(), nm = nQName(), edit = !!ST._queuedEdit;
+  const title = nm.name || 'Your song';
+  const verb = nm.many
+    ? (st==='done' ? 'have been added' : st==='failed' ? "couldn't be added" : 'are being added')
+    : (st==='done' ? (edit ? 'has been updated' : 'has been added') : st==='failed' ? (edit ? "couldn't be updated" : "couldn't be added") : (edit ? 'is being adjusted' : 'is being added'));
+  const info = st==='done'
+    ? (nm.many ? 'They’re ready in your songs.' : 'It’s ready in your songs.')
+    : st==='failed'
+    ? 'You’ll find it in your songs marked <b style="color:#FFB3C1">FAILED</b> — tap it to see why and try again.'
+    : `No need to wait here. We'll let you know when ${nm.many ? "they're" : "it's"} ready — you'll find ${nm.many ? 'them' : 'it'} in your songs marked <b style="color:#2f8fe0">PROCESSING</b>.`;
+  h = h.replace(/<div style="font-size:64px[^"]*">Got it!<\/div>\s*<div style="font-size:22px[^"]*">[\s\S]*?<\/div>\s*<div style="font-size:15px[^"]*">[\s\S]*?<\/div>/,
+    ()=>`<div class="nq-title" id="nqTitle" data-fallback="${nm.name ? '1' : ''}">${esc(title)}</div>
+    <div class="nq-what${st==='done'?' done':st==='failed'?' fail':''}">${verb}</div>
+    <div class="nq-info">${info}</div>`);
+  if(st==='done' && !nm.many && _n21Q && _n21Q.songs.size===1){
+    const id = [..._n21Q.songs][0];
+    h = h.replace('<button class="btn btn-grey" style="height:64px" data-act="goHome">Close</button>',
+      `<button class="btn btn-dark" style="height:64px" data-act="openSongFrom" data-id="${esc(id)}" data-from="home">Open the song</button><button class="btn btn-grey" style="height:64px" data-act="goHome">Close</button>`)
+      .replace('<button class="btn btn-dark" style="height:64px" data-act="newSong">', '<button class="btn btn-grey" style="height:64px" data-act="newSong">');
+  }
+  return h;
+};
+// the name in two lines at most: smaller type (down to 22px), else "Your song"
+function nQFit(){
+  const el = document.getElementById('nqTitle'); if(!el) return;
+  const lines = px=>{ el.style.fontSize = px+'px'; const lh = parseFloat(getComputedStyle(el).lineHeight) || px*1.08; return Math.round(el.scrollHeight / lh); };
+  let px = 64;
+  while(px > 22 && lines(px) > 2) px -= 2;
+  if(lines(px) > 2 && el.dataset.fallback){ el.textContent = 'Your song'; el.dataset.fallback = ''; px = 64; while(px > 22 && lines(px) > 2) px -= 2; }
+}
+window.addEventListener('resize', ()=>{ if(ST.screen==='queued') render(); });
 
 render();
