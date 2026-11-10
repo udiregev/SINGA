@@ -585,27 +585,41 @@ def spotify_playlist(url: str = ""):
         except Exception:  # noqa: BLE001
             pass
     # 2) the playlist's public pages
+    import time
     best = {"tracks": [], "name": ""}
-    last_status = None
-    for page in ("https://open.spotify.com/embed/playlist/" + pid, "https://open.spotify.com/playlist/" + pid):
-        try:
-            r = requests.get(page, headers={"User-Agent": _PL_UA, "Accept-Language": "en"}, timeout=15)
-        except Exception as e:  # noqa: BLE001
-            last_status = str(e)
-            continue
-        last_status = r.status_code
-        if not r.ok:
-            continue
-        for blob in _page_data(r.text):
-            _find_tracks(blob, best)
-        if not best["name"]:
-            best["name"] = _og_title(r.text)
-        if best["tracks"]:
+    statuses = []
+    pages = ("https://open.spotify.com/embed/playlist/" + pid, "https://open.spotify.com/playlist/" + pid,
+             "https://open.spotify.com/embed/playlist/" + pid + "?utm_source=generator")
+    for attempt in range(2):                     # Spotify sometimes answers with an empty page: try again
+        for page in pages:
+            try:
+                r = requests.get(page, headers={"User-Agent": _PL_UA, "Accept-Language": "en",
+                                                "Accept": "text/html,application/xhtml+xml"}, timeout=15)
+            except Exception as e:  # noqa: BLE001
+                statuses.append(type(e).__name__)
+                continue
+            statuses.append(r.status_code)
+            if r.status_code == 429:
+                time.sleep(min(5, int(r.headers.get("retry-after") or 2)))
+                continue
+            if not r.ok:
+                continue
+            for blob in _page_data(r.text):
+                _find_tracks(blob, best)
+            if not best["name"]:
+                best["name"] = _og_title(r.text)
+            if best["tracks"]:
+                break
+        if best["tracks"] or (statuses and all(x == 404 for x in statuses)):
             break
+        time.sleep(1.2)
     if not best["tracks"]:
-        if last_status == 404:
+        print("Singa: playlist %s unreadable, answers: %s" % (pid, statuses), flush=True)
+        if statuses and all(x == 404 for x in statuses):
             return JSONResponse(status_code=404, content={"error": "Spotify couldn't find that playlist — is it public?"})
-        return JSONResponse(status_code=502, content={"error": "Couldn't read that playlist from Spotify"})
+        if 429 in statuses:
+            return JSONResponse(status_code=503, content={"error": "Spotify is busy right now — try refresh again in a minute"})
+        return JSONResponse(status_code=502, content={"error": "Spotify didn't send the playlist this time — try refresh again in a minute", "detail": str(statuses)})
     seen, tracks = set(), []
     for t in best["tracks"]:
         k = t["id"] or (t["title"] + "|" + t["artist"])
@@ -1098,6 +1112,28 @@ def _unshout(t: str) -> str:
     return t
 
 
+def _drop_chord_charts(text: str) -> str:
+    """Leave out chord charts ('G:320033', 'Am = x02210', 'D  xx0232') and their heading
+    ('Chords', 'Akkoorden', 'Chords used'): they show how to play a chord, they aren't sung."""
+    import re
+    fing = r"(?:[xX0-9]{6}|(?:[xX]|\d{1,2})(?:[\s.-](?:[xX]|\d{1,2})){5})"
+    one = r"[A-G][#b]?[^\s:=]{0,10}\s*[:=]?\s*" + fing
+    is_chart = re.compile(r"^\s*" + one + r"(?:[\s,;|]+" + one + r")*\s*$")
+    heading = re.compile(r"(?i)^\W*(?:chords?(?: used| in this song| diagrams?| chart)?|akkoorden|gebruikte akkoorden|acordes|accords|akkorde|accordi)\W*$")
+    lines = text.split("\n")
+    out = []
+    for i, l in enumerate(lines):
+        if is_chart.match(l):
+            continue
+        if heading.match(l):
+            nxt = next((x for x in lines[i + 1:] if x.strip()), "")
+            if not nxt or is_chart.match(nxt):
+                continue
+        out.append(l)
+    text = "\n".join(out)
+    return re.sub(r"\n{3,}", "\n\n", text).strip("\n")
+
+
 def _read_page(url: str):
     import requests
     url = (url or "").strip()
@@ -1159,6 +1195,9 @@ def _read_page(url: str):
     if not res["title"]:
         res["title"], res["artist"] = t, res["artist"] or a
     res["site"] = host
+    res["text"] = _drop_chord_charts(res["text"])
+    if not res["text"].strip():
+        return 422, {"error": "Couldn't find a song on that page"}
     if len(res["text"]) > 60000:
         res["text"] = res["text"][:60000]
     return 200, res
