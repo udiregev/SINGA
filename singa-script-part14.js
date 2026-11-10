@@ -314,4 +314,101 @@ nightify = function(html){
   return h.replace(/<svg class="n-stage n-hand"[\s\S]*?<\/svg>/, ()=>N18_STAGE_SVG).replace(/<svg class="n-stage n-horns"[\s\S]*?<\/svg>/, ()=>N18_HORNS_SVG);
 };
 
+/* ============================================================
+   ROUND 19 · Import
+   · New / Edit song: Manual · Record · Import (was Upload).
+   · Import › From a file: as before (a document or a recording).
+   · Import › From a link: paste the address of a web page with the song
+     (a chord sheet or lyrics page). Singa's server reads the page and the
+     song is made from it, like an uploaded document.
+   ============================================================ */
+(function(){
+  const css = `
+.nimp-row{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin-top:10px}
+.nimp-row .ncap-up{margin-top:0;width:180px;height:150px}
+.nimp-link{width:100%;max-width:460px;display:flex;flex-direction:column;gap:10px;margin-top:10px}
+.nimp-in{display:flex;gap:8px}
+.nimp-in input{flex:1;min-width:0;height:52px;border-radius:14px;border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.07);color:#fff;padding:0 16px;font-size:16px;outline:none}
+.nimp-in input:focus{border-color:rgba(255,255,255,.6)}
+.nimp-go{height:52px;padding:0 20px;border-radius:14px;border:0;background:#fff;color:#2A1250;font-weight:700;font-size:15px;cursor:pointer;flex:none}
+.nimp-go[disabled]{opacity:.55;pointer-events:none}
+.nimp-err{color:#FFB3C1;font-size:13px;line-height:1.4;text-align:left}
+.nimp-back{font-size:13px;color:var(--n-mute);text-decoration:underline;text-underline-offset:3px;cursor:pointer;align-self:center}
+@media (max-width:420px){ .nimp-row .ncap-up{width:calc(50% - 7px);height:130px} }
+`;
+  const st = document.createElement('style'); st.id = 'nightCss19'; st.textContent = css;
+  document.head.appendChild(st);
+})();
+const IMP_SERVER = (typeof LINK_SERVER!=='undefined' && LINK_SERVER) || 'https://singa-production-e6f3.up.railway.app';
+// the mode is called Import now
+const _n19RenderCreate = renderCreate;
+renderCreate = function(){
+  return _n19RenderCreate().replace(/(data-act="setCreateMode" data-id="file">)Upload</g, '$1Import<');
+};
+const _n19SetMode = Actions.setCreateMode;
+Actions.setCreateMode = function(d){ if(ST.phase==='idle'){ ST.impLink = false; ST.impErr = ''; } return _n19SetMode.apply(this, arguments); };
+const _n19Capture = nCaptureBody;
+nCaptureBody = function(d){
+  let html = _n19Capture(d);
+  if(ST.createMode!=='file') return html;
+  const linkOk = ST.step!=='sync';
+  if(!linkOk) ST.impLink = false;
+  const upRe = /<button class="ncap-up" data-act="startUpload">[\s\S]*?<\/button>/;
+  if(ST.impLink){
+    const busy = !!ST.impBusy;
+    html = html.replace(upRe, ()=>`<div class="nimp-link">
+      <form class="nimp-in" onsubmit="event.preventDefault();XActions.impLinkGo()">
+        <input id="nimpUrl" type="text" inputmode="url" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Paste the link to a chords or lyrics page" value="${esc(ST.impUrl||'')}" data-bind="impUrl" ${busy?'disabled':''}>
+        <button class="nimp-go" type="submit" ${busy?'disabled':''}>${busy?'Reading…':'Import'}</button>
+      </form>
+      ${ST.impErr ? `<div class="nimp-err">${esc(ST.impErr)}</div>` : ''}
+      <span class="nimp-back" data-xact="impLinkBack">Import from a file instead</span>
+    </div>`);
+    html = html.replace(/<div class="ncap-s">[\s\S]*?<\/div>/, '<div class="ncap-s">Singa reads the page and takes the title, the lyrics and the chords above each word. It works with most chord and lyrics pages, though some sites block it.</div>');
+  } else if(linkOk){
+    html = html.replace(upRe, ()=>`<div class="nimp-row">
+      <button class="ncap-up" data-act="startUpload">${icon('upload_file',36)}<span>From a file</span></button>
+      <button class="ncap-up" data-xact="impLinkOpen">${icon('link',36)}<span>From a link</span></button>
+    </div>`);
+    html = html.replace(/<div class="ncap-s">[\s\S]*?<\/div>/, (m)=>m.replace(/<div class="ncap-s">(\w)/, (x, c)=>'<div class="ncap-s">From a file: '+c.toLowerCase()).replace(/<\/div>$/, ' From a link: a web page with the song’s chords or lyrics.</div>'));
+  }
+  return html;
+};
+XActions.impLinkOpen = function(){ if(!canSync()) return; ST.impLink = true; ST.impErr = ''; render(); setTimeout(()=>{ const i = document.getElementById('nimpUrl'); if(i) i.focus(); }, 60); };
+XActions.impLinkBack = function(){ if(ST.impBusy) return; ST.impLink = false; ST.impErr = ''; render(); };
+Binds.impUrl = function(v){ ST.impUrl = v; if(ST.impErr){ ST.impErr = ''; const e = document.querySelector('.nimp-err'); if(e) e.remove(); } };
+function nImpCleanUrl(u){
+  u = String(u||'').trim();
+  const m = u.match(/https?:\/\/\S+/i);
+  if(m) u = m[0];
+  else { const d = u.match(/(?:^|\s)((?:[\w-]+\.)+[a-z]{2,}(?:\/\S*)?)/i); if(d) u = 'https://' + d[1]; }
+  return u.replace(/[)\].,;]+$/, '');
+}
+XActions.impLinkGo = async function(){
+  if(ST.impBusy || !canSync()) return;
+  const inp = document.getElementById('nimpUrl'); if(inp) ST.impUrl = inp.value;
+  const url = nImpCleanUrl(ST.impUrl);
+  if(!/^https?:\/\/[^\s/]+\.[^\s/]+/i.test(url)){ ST.impErr = 'Paste the full address of the page — it starts with https://'; render(); return; }
+  const editId = ST.editId;
+  ST.impBusy = true; ST.impErr = ''; render();
+  let j = null, err = '';
+  try{
+    const r = await fetch(IMP_SERVER + '/fetch-page', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ url }) });
+    j = await r.json().catch(()=>null);
+    if(!r.ok || !j || !j.text) err = (j && j.error) || (r.status===404 || r.status===405 ? 'Singa’s server isn’t ready for links yet — try again in a few minutes' : 'Couldn’t read that page ('+r.status+')');
+  }catch(e){ err = 'Singa’s server didn’t answer — check your connection and try again'; }
+  ST.impBusy = false;
+  if(ST.screen!=='create' || ST.editId!==editId){ render(); return; }
+  if(err){ ST.impErr = err; render(); return; }
+  const title = (j.title||'').trim(), artist = (j.artist||'').trim();
+  const head = title ? title + '\n' + (artist ? artist + '\n' : '') + '\n' : '';
+  const name = (title || (j.site||'web page')).replace(/[\\/:*?"<>|]+/g, ' ').slice(0, 80) + '.txt';
+  let file;
+  try{ file = new File([head + j.text + '\n'], name, { type:'text/plain' }); }
+  catch(e){ file = new Blob([head + j.text + '\n'], { type:'text/plain' }); file.name = name; }
+  ST.impLink = false; ST.impUrl = ''; ST.impErr = '';
+  // one page is one song: straight into the song (no "several songs" question)
+  _n18Upload([file]);
+};
+
 render();
