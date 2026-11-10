@@ -729,36 +729,108 @@ def _lyrics_containers(html: str):
     return {"text": text, "kind": "lyrics"} if text.strip() else None
 
 
+_CHORD_TOK = None
+
+
+def _line_score(l: str) -> float:
+    """1 for a line that looks like a sung line or a row of chords, else 0."""
+    import re
+    global _CHORD_TOK
+    if _CHORD_TOK is None:
+        _CHORD_TOK = re.compile(r"^[A-G][#b]?(?:m|maj|min|dim|aug|sus|add)?\d*(?:/[A-G][#b]?)?$")
+    s = l.strip()
+    if not s or len(s) > 90:
+        return 0
+    toks = s.split()
+    if all(_CHORD_TOK.match(t) for t in toks):
+        return 1
+    return 1 if 3 <= len(toks) <= 16 else (0.5 if len(toks) == 2 else 0)
+
+
+def _strip_chrome(html: str) -> str:
+    """Drop the parts of a page that are never the song: menus, headers, footers, forms."""
+    import re
+    t = re.sub(r"(?is)<(nav|header|footer|aside|form|select|button|noscript)\b.*?</\1>", "\n", html)
+    return t
+
+
+def _marked_blocks(html: str):
+    """Elements whose class or id says lyrics / chords / song / poem."""
+    import re
+    out = []
+    for m in re.finditer(r'(?is)<(div|section|article|pre|p)\b[^>]*(?:class|id)="[^"]*(?:lyric|chord|song-?text|songbody|poem|tab-?content|verse)[^"]*"[^>]*>', html):
+        tag, i, depth, j = m.group(1).lower(), m.end(), 1, len(html)
+        for t in re.finditer(r"(?is)<(/?)" + tag + r"\b[^>]*>", html[i:]):
+            depth += -1 if t.group(1) else 1
+            if depth == 0:
+                j = i + t.start(); break
+        txt = _html_text(html[i:j])
+        if sum(_line_score(l) for l in txt.split("\n")) >= 4:
+            out.append(txt)
+    return out
+
+
 def _song_block(html: str):
-    """Any other page: the longest run of short, song-like lines."""
+    """Any other page: a block marked as the lyrics, else the longest run of song-like lines."""
     import re
     body = re.search(r"(?is)<body\b[^>]*>(.*)</body>", html)
-    t = _html_text(body.group(1) if body else html)
+    page = _strip_chrome(body.group(1) if body else html)
+    marked = _marked_blocks(page)
+    if marked:
+        best = max(marked, key=lambda t: sum(_line_score(l) for l in t.split("\n")))
+        return {"text": best.strip("\n"), "kind": "text"}
+    # menus and link lists are never the song
+    page = re.sub(r"(?is)<(ul|ol|table)\b.*?</\1>", "\n", page)
+    page = re.sub(r"(?is)<a\b[^>]*>.*?</a>", " ", page)
+    t = _html_text(page)
     blocks, cur = [], []
     for l in t.split("\n"):
-        s = l.strip()
-        if len(s) > 110:                      # prose, menus run together: a break
+        if len(l.strip()) > 110:                 # prose: a break
             if cur: blocks.append(cur); cur = []
             continue
         cur.append(l)
     if cur:
         blocks.append(cur)
+    # split blocks further at runs of 3+ lines that aren't song-like (menus, labels)
+    pieces = []
+    for b in blocks:
+        cur, junk = [], 0
+        for l in b:
+            sc = _line_score(l)
+            if l.strip() and not sc:
+                junk += 1
+                if junk >= 3:
+                    if cur: pieces.append(cur); cur = []
+                    continue
+            elif sc:
+                junk = 0
+            cur.append(l)
+        if cur:
+            pieces.append(cur)
 
     def score(b):
-        return sum(1 for l in b if 0 < len(l.strip()) <= 80)
-    best = max(blocks, key=score) if blocks else []
-    if score(best) < 6:
+        return sum(_line_score(l) for l in b)
+    best = max(pieces, key=score) if pieces else []
+    if score(best) < 4:
         return None
-    text = "\n".join(best).strip("\n")
-    return {"text": text, "kind": "text"}
+    # trim leading / trailing lines that aren't part of the song
+    while best and not _line_score(best[0]):
+        best = best[1:]
+    while best and not _line_score(best[-1]):
+        best = best[:-1]
+    return {"text": "\n".join(best).strip("\n"), "kind": "text"}
 
 
-def _page_title(html: str):
+def _page_title(html: str, host: str = ""):
     import html as _h
     import re
     m = re.search(r'(?is)<meta[^>]+property="og:title"[^>]+content="([^"]*)"', html) or re.search(r"(?is)<title[^>]*>(.*?)</title>", html)
     t = _h.unescape(m.group(1)).strip() if m else ""
     t = re.sub(r"\s*[|•·]\s*[^|•·]*$", "", t).strip()          # " | Site name"
+    t = re.sub(r"\s+@\s+\S+$", "", t).strip()                    # " @ Site.com"
+    site = [p for p in (host or "").split(".") if p not in ("www", "m", "en", "com", "org", "net", "co", "uk", "io")]
+    if site:                                                    # " - Site name, the free library"
+        t = re.sub(r"\s+[–—-]\s+[^–—-]*" + re.escape(site[0]) + r"[^–—-]*$", "", t, flags=re.I).strip()
     title, artist = t, ""
     m = re.match(r"(?i)^(.*?)\s+(?:ukulele |guitar |bass )?(?:chords|tabs?|lyrics(?: and chords)?)\s+by\s+(.+)$", t)
     if m:
@@ -829,7 +901,7 @@ def _read_page(url: str):
     res = _ug_text(html) or _lyrics_containers(html) or _pre_text(html) or _song_block(html)
     if not res or not res.get("text", "").strip():
         return 422, {"error": "Couldn't find a song on that page"}
-    t, a = _page_title(html)
+    t, a = _page_title(html, host)
     res.setdefault("title", ""); res.setdefault("artist", "")
     if not res["title"]:
         res["title"], res["artist"] = t, res["artist"] or a
