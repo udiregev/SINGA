@@ -411,4 +411,70 @@ XActions.impLinkGo = async function(){
   _n18Upload([file]);
 };
 
+/* ============================================================
+   ROUND 20 · A song with nothing in it yet: artwork in the same
+   style as sign-in and "Got it!" (a blank sheet and a pencil)
+   ============================================================ */
+(function(){
+  const st = document.createElement('style'); st.id = 'nightCss20';
+  st.textContent = `.n-empty{display:block;width:min(250px,62vw);height:auto;margin:26px auto 4px}
+@media(max-height:560px) and (orientation:landscape){ .n-empty{width:150px;margin-top:10px} }`;
+  document.head.appendChild(st);
+})();
+const N20_EMPTY_SVG = `<svg class="n-stage n-empty" viewBox="0 0 320 290" style="overflow:visible">
+<defs>
+<linearGradient id="eBgL" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F01CFF"/><stop offset="1" stop-color="#9418E8"/></linearGradient>
+<linearGradient id="eBgR" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4524B8"/><stop offset="1" stop-color="#2E1A8C"/></linearGradient>
+<pattern id="eStripeH" width="10" height="10" patternUnits="userSpaceOnUse"><rect width="10" height="5" fill="#E61CFF"/></pattern>
+<pattern id="eStripeV" width="9" height="9" patternUnits="userSpaceOnUse"><rect width="4" height="9" fill="#6E14C8"/></pattern>
+<clipPath id="eHalfL"><rect x="0" y="0" width="160" height="290"/></clipPath>
+<clipPath id="eHalfR"><rect x="160" y="0" width="160" height="290"/></clipPath>
+<linearGradient id="ePaper" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#EBDDFF"/></linearGradient>
+<linearGradient id="ePencil" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#FFC27A"/><stop offset=".5" stop-color="#FFD8A8"/><stop offset="1" stop-color="#F2A65A"/></linearGradient>
+<linearGradient id="eFadeG" x1="0" y1="0" x2="0" y2="1"><stop offset="0.84" stop-color="#FFFFFF"/><stop offset="1" stop-color="#000000"/></linearGradient>
+<mask id="eFade"><rect x="-20" y="-20" width="360" height="330" fill="url(#eFadeG)"/></mask>
+</defs>
+<g mask="url(#eFade)">
+<circle cx="160" cy="150" r="128" fill="url(#eBgL)" clip-path="url(#eHalfL)"/>
+<circle cx="160" cy="150" r="128" fill="url(#eBgR)" clip-path="url(#eHalfR)"/>
+<circle cx="250" cy="70" r="44" fill="url(#eStripeH)"/>
+<circle cx="70" cy="222" r="50" fill="url(#eStripeV)" opacity="0.8"/>
+<path d="M30 120C24 92 56 76 84 86C108 96 110 126 90 140C68 154 36 146 30 120Z" fill="#5A0D9E" opacity="0.55"/>
+<path d="M214 214C222 190 258 184 276 200C292 216 282 242 258 246C232 250 208 236 214 214Z" fill="#1B0E5C" opacity="0.65"/>
+<circle cx="290" cy="146" r="7" fill="#1B0E5C"/><circle cx="40" cy="70" r="6" fill="#E61CFF" opacity="0.8"/>
+<g transform="translate(160 156) rotate(-7)">
+<rect x="-70" y="-92" width="140" height="180" rx="14" fill="#1B0E5C" opacity=".35" transform="translate(8 10)"/>
+<rect x="-70" y="-92" width="140" height="180" rx="14" fill="url(#ePaper)"/>
+<rect x="-50" y="-72" width="62" height="10" rx="5" fill="#E61CFF"/>
+<rect x="-50" y="-56" width="38" height="7" rx="3.5" fill="#B9A6FF"/>
+<g stroke="#C9B6F2" stroke-width="2">
+<path d="M-50 -32H50M-50 -24H50M-50 -16H50M-50 -8H50M-50 0H50"/>
+</g>
+<g stroke="#D9CCF7" stroke-width="5" stroke-linecap="round" stroke-dasharray="1 11">
+<path d="M-48 24H48M-48 42H48M-48 60H30"/>
+</g>
+<circle cx="-30" cy="-12" r="6" fill="#6E14C8" opacity=".18"/>
+<path d="M-24 -12V-38" stroke="#6E14C8" stroke-width="2.5" opacity=".18"/>
+</g>
+<g transform="translate(222 196) rotate(-52)">
+<rect x="-12" y="-74" width="24" height="16" rx="4" fill="#FF6B8B"/>
+<rect x="-12" y="-60" width="24" height="10" fill="#B9A6FF"/>
+<rect x="-12" y="-51" width="24" height="72" fill="url(#ePencil)"/>
+<path d="M-12 21L0 46L12 21Z" fill="#FFE7CC"/>
+<path d="M-4.5 36.4L0 46L4.5 36.4Z" fill="#2A1250"/>
+<path d="M-4 -51V21" stroke="#E8964A" stroke-width="2" opacity=".6"/>
+</g>
+<g fill="#FFD8F8">
+<g transform="translate(70 70) rotate(-12)"><ellipse cx="0" cy="22" rx="9" ry="7"/><rect x="6.5" y="-6" width="3.5" height="28" rx="1.5"/><path d="M8.5 -6c8 4 14 8 12 18c-2-6-6-8-12-9z"/></g>
+<g transform="translate(262 112) rotate(10)" opacity=".85"><ellipse cx="0" cy="18" rx="7.5" ry="6"/><ellipse cx="22" cy="12" rx="7.5" ry="6"/><rect x="5.5" y="-8" width="3" height="26" rx="1.5"/><rect x="27.5" y="-14" width="3" height="26" rx="1.5"/><path d="M5.5 -8L30.5 -14V-7L5.5 -1Z"/></g>
+</g>
+<g fill="#FFD8A8"><path d="M244 36l4 10 10 4-10 4-4 10-4-10-10-4 10-4z"/><path d="M96 246l3 7 7 3-7 3-3 7-3-7-7-3 7-3z"/></g>
+<g fill="#FFFFFF"><rect x="118" y="30" width="8" height="8" rx="2" opacity=".5"/><rect x="40" y="170" width="7" height="7" rx="1.8" opacity=".4"/></g>
+</g>
+</svg>`;
+const _n20Incomplete = renderIncomplete;
+renderIncomplete = function(){
+  return _n20Incomplete().replace(/<span class="msi" style="font-size:48px;margin-top:60px;color:#6f6f6f">folder<\/span>/, ()=>N20_EMPTY_SVG);
+};
+
 render();
