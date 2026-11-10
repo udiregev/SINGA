@@ -72,6 +72,14 @@ Endpoint:
     an official API: it can change without notice, and long playlists may
     only show their first 100 or so tracks ("partial": true).
 
+  POST /fetch-page   JSON { "url": "https://..." }   (or GET /fetch-page?url=...)
+    Reads a web page with a song on it (a chord sheet or lyrics page) for
+    the app's Import › From a link. Response 200 JSON:
+      { "title": "...", "artist": "...", "text": "chords over lyrics...",
+        "site": "tabs.ultimate-guitar.com", "kind": "ug" | "pre" | "lyrics" | "text" }
+    The app then reads the text like an uploaded .txt file. Only public
+    http(s) pages; addresses on private networks are refused.
+
   POST /convert-audio
     multipart/form-data, field "file" — any audio/video ffmpeg can read.
     Response 200: 16kHz mono WAV. The app falls back to this when the
@@ -606,6 +614,241 @@ def spotify_playlist(url: str = ""):
         seen.add(k)
         tracks.append(t)
     return {"id": pid, "name": best["name"], "source": "page", "partial": len(tracks) >= 100, "tracks": tracks}
+
+
+# ---- a song from a web page (Import › From a link) ----
+_PAGE_MAX = 4 * 1024 * 1024
+_VIDEO_HOSTS = ("youtube.com", "youtu.be", "vimeo.com", "soundcloud.com", "tiktok.com", "instagram.com", "spotify.com")
+
+
+def _public_host(host: str) -> bool:
+    import ipaddress
+    import socket
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except Exception:  # noqa: BLE001
+        return False
+    for info in infos:
+        try:
+            ip = ipaddress.ip_address(info[4][0])
+        except ValueError:
+            return False
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast or ip.is_unspecified:
+            return False
+    return True
+
+
+def _html_text(fragment: str) -> str:
+    """HTML to plain text, keeping the line breaks a song needs."""
+    import html as _h
+    import re
+    t = re.sub(r"(?is)<(script|style|noscript|svg|template)\b.*?</\1>", "", fragment)
+    t = re.sub(r"(?is)<!--.*?-->", "", t)
+    t = re.sub(r"(?i)<br\s*/?>", "\n", t)
+    t = re.sub(r"(?i)</?(p|div|li|h[1-6]|tr|section|article|header|footer|pre|blockquote)\b[^>]*>", "\n", t)
+    t = re.sub(r"(?s)<[^>]+>", "", t)
+    t = _h.unescape(t).replace(chr(160), " ").replace("\r\n", "\n").replace("\r", "\n")
+    lines = [l.rstrip() for l in t.split("\n")]
+    out, blank = [], 0
+    for l in lines:
+        if l.strip():
+            out.append(l); blank = 0
+        else:
+            blank += 1
+            if blank == 1:
+                out.append("")
+    return "\n".join(out).strip("\n")
+
+
+def _ug_text(html: str):
+    """Ultimate Guitar: the tab is JSON in <div class="js-store" data-content="...">."""
+    import html as _h
+    import json
+    import re
+    m = re.search(r'class="js-store"\s+data-content="([^"]+)"', html)
+    if not m:
+        return None
+    try:
+        store = json.loads(_h.unescape(m.group(1)))
+    except Exception:  # noqa: BLE001
+        return None
+    found = {"content": None, "song": "", "artist": ""}
+
+    def walk(n):
+        if isinstance(n, dict):
+            c = n.get("content")
+            if isinstance(c, str) and "[ch]" in c and (found["content"] is None or len(c) > len(found["content"])):
+                found["content"] = c
+            if not found["song"] and isinstance(n.get("song_name"), str):
+                found["song"] = n["song_name"]
+            if not found["artist"] and isinstance(n.get("artist_name"), str):
+                found["artist"] = n["artist_name"]
+            for v in n.values():
+                walk(v)
+        elif isinstance(n, list):
+            for v in n:
+                walk(v)
+    walk(store)
+    c = found["content"]
+    if not c:
+        return None
+    c = c.replace("\r\n", "\n").replace("\r", "\n")
+    c = re.sub(r"\[/?tab\]", "", c)
+    c = re.sub(r"\[ch\](.*?)\[/ch\]", r"\1", c)
+    return {"title": found["song"], "artist": found["artist"], "text": c.strip("\n"), "kind": "ug"}
+
+
+def _pre_text(html: str):
+    """Chord sites that put the sheet in a <pre> block."""
+    import re
+    best = ""
+    for m in re.finditer(r"(?is)<pre\b[^>]*>(.*?)</pre>", html):
+        t = _html_text(m.group(1))
+        if len([l for l in t.split("\n") if l.strip()]) >= 4 and len(t) > len(best):
+            best = t
+    return {"text": best, "kind": "pre"} if best else None
+
+
+def _lyrics_containers(html: str):
+    """Lyrics sites: Genius's data-lyrics-container blocks, AZLyrics's comment-marked block."""
+    import re
+    parts = []
+    for m in re.finditer(r'(?is)<div[^>]*data-lyrics-container="true"[^>]*>', html):
+        # take everything up to the matching </div>
+        i, depth, j = m.end(), 1, m.end()
+        for t in re.finditer(r"(?is)<(/?)div\b[^>]*>", html[i:]):
+            depth += -1 if t.group(1) else 1
+            if depth == 0:
+                j = i + t.start(); break
+        parts.append(_html_text(html[i:j]))
+    if not parts:
+        m = re.search(r"(?is)<!--\s*Usage of azlyrics\.com content.*?-->(.*?)</div>", html)
+        if m:
+            parts.append(_html_text(m.group(1)))
+    text = "\n\n".join(p for p in parts if p.strip())
+    return {"text": text, "kind": "lyrics"} if text.strip() else None
+
+
+def _song_block(html: str):
+    """Any other page: the longest run of short, song-like lines."""
+    import re
+    body = re.search(r"(?is)<body\b[^>]*>(.*)</body>", html)
+    t = _html_text(body.group(1) if body else html)
+    blocks, cur = [], []
+    for l in t.split("\n"):
+        s = l.strip()
+        if len(s) > 110:                      # prose, menus run together: a break
+            if cur: blocks.append(cur); cur = []
+            continue
+        cur.append(l)
+    if cur:
+        blocks.append(cur)
+
+    def score(b):
+        return sum(1 for l in b if 0 < len(l.strip()) <= 80)
+    best = max(blocks, key=score) if blocks else []
+    if score(best) < 6:
+        return None
+    text = "\n".join(best).strip("\n")
+    return {"text": text, "kind": "text"}
+
+
+def _page_title(html: str):
+    import html as _h
+    import re
+    m = re.search(r'(?is)<meta[^>]+property="og:title"[^>]+content="([^"]*)"', html) or re.search(r"(?is)<title[^>]*>(.*?)</title>", html)
+    t = _h.unescape(m.group(1)).strip() if m else ""
+    t = re.sub(r"\s*[|•·]\s*[^|•·]*$", "", t).strip()          # " | Site name"
+    title, artist = t, ""
+    m = re.match(r"(?i)^(.*?)\s+(?:ukulele |guitar |bass )?(?:chords|tabs?|lyrics(?: and chords)?)\s+by\s+(.+)$", t)
+    if m:
+        title, artist = m.group(1), m.group(2)
+    else:
+        m = re.match(r"^(.+?)\s+[–—-]\s+(.+?)\s+(?:lyrics|chords|tabs?)\b.*$", t, re.I)
+        if m:
+            artist, title = m.group(1), m.group(2)
+        else:
+            title = re.sub(r"(?i)\s+(?:lyrics|chords|tabs?)$", "", t)
+    title = re.sub(r"(?i)\s*\((?:official )?(?:lyrics|chords)\)\s*$", "", title).strip(" \"'“”")
+    return title.strip(), artist.strip()
+
+
+def _read_page(url: str):
+    import requests
+    url = (url or "").strip()
+    if not url.lower().startswith(("http://", "https://")):
+        return 400, {"error": "Send a link that starts with https://"}
+    host = (urllib.parse.urlparse(url).hostname or "").lower()
+    if not host:
+        return 400, {"error": "That doesn't look like a link"}
+    if any(host == h or host.endswith("." + h) for h in _VIDEO_HOSTS):
+        return 422, {"error": "That's a video or music link. Import › From a link reads web pages with lyrics or chords on them; for a recording, upload the audio file."}
+    if not _public_host(host):
+        return 400, {"error": "That address can't be reached from Singa's server"}
+    try:
+        hdrs = {"User-Agent": _PL_UA, "Accept": "text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.5", "Accept-Language": "en"}
+        r = None
+        for _hop in range(6):                     # follow redirects, checking every address
+            r = requests.get(url, headers=hdrs, timeout=15, stream=True, allow_redirects=False)
+            if r.status_code in (301, 302, 303, 307, 308) and r.headers.get("location"):
+                url = urllib.parse.urljoin(url, r.headers["location"])
+                nh = (urllib.parse.urlparse(url).hostname or "").lower()
+                if not url.lower().startswith(("http://", "https://")) or not _public_host(nh):
+                    return 400, {"error": "That address can't be reached from Singa's server"}
+                r.close()
+                continue
+            break
+        if r.status_code in (301, 302, 303, 307, 308):
+            return 502, {"error": "That page keeps redirecting"}
+        if r.status_code in (401, 403, 429, 503):
+            return 502, {"error": "That site wouldn't let Singa read the page (it blocks automatic readers). Copy the lyrics into Manual instead."}
+        if not r.ok:
+            return 502, {"error": "The page answered with an error (%s)" % r.status_code}
+        raw = r.raw.read(_PAGE_MAX + 1, decode_content=True)
+        if len(raw) > _PAGE_MAX:
+            return 413, {"error": "That page is too large to read"}
+        ctype = (r.headers.get("content-type") or "").lower()
+        enc = r.encoding if r.encoding and r.encoding.lower() != "iso-8859-1" else None
+        if not enc:
+            import re as _re
+            mm = _re.search(rb"""charset=["']?([A-Za-z0-9_-]+)""", raw[:6000])
+            enc = mm.group(1).decode("ascii") if mm else "utf-8"
+        try:
+            html = raw.decode(enc, errors="replace")
+        except LookupError:
+            html = raw.decode("utf-8", errors="replace")
+        host = (urllib.parse.urlparse(url).hostname or host).lower()
+    except requests.exceptions.Timeout:
+        return 504, {"error": "The page took too long to answer"}
+    except Exception as e:  # noqa: BLE001
+        return 502, {"error": "Couldn't open that page: " + str(e)[:200]}
+    if "text/plain" in ctype:
+        return 200, {"title": "", "artist": "", "text": html.strip(), "site": host, "kind": "text"}
+    if "html" not in ctype and "<html" not in html[:2000].lower():
+        return 422, {"error": "That link isn't a web page Singa can read"}
+    res = _ug_text(html) or _lyrics_containers(html) or _pre_text(html) or _song_block(html)
+    if not res or not res.get("text", "").strip():
+        return 422, {"error": "Couldn't find a song on that page"}
+    t, a = _page_title(html)
+    res.setdefault("title", ""); res.setdefault("artist", "")
+    if not res["title"]:
+        res["title"], res["artist"] = t, res["artist"] or a
+    res["site"] = host
+    if len(res["text"]) > 60000:
+        res["text"] = res["text"][:60000]
+    return 200, res
+
+
+@app.post("/fetch-page")
+def fetch_page(payload: dict = Body(...)):
+    code, body = _read_page(str((payload or {}).get("url") or ""))
+    return body if code == 200 else JSONResponse(status_code=code, content=body)
+
+
+@app.get("/fetch-page")
+def fetch_page_get(url: str = ""):
+    code, body = _read_page(url)
+    return body if code == 200 else JSONResponse(status_code=code, content=body)
 
 
 @app.get("/")
