@@ -1026,6 +1026,8 @@ def _render_sheet(lines) -> str:
         if t and not ln["chords"]:
             if re.fullmatch(r"[a-z]+(?:_[a-z]+)+", t):
                 continue
+            if re.search(r"(?i)\b(?:upgrade|ads?[- ]free|remove ads|sign up|log ?in|subscribe|premium|download (?:the|our) app|get now|free trial|play with audio|advertisement|cookie)", t):
+                continue
             if counts.get(t, 0) >= 4 and re.fullmatch(r"[A-Z][A-Z ]{3,}", t):
                 continue
             m = _SECTION_RE.match(t)
