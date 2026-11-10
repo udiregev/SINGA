@@ -683,3 +683,7 @@ renderList = function(){
 };
 
 render();
+
+// Later rounds live in singa-script-part14.js (loaded here, so the pages
+// don't need to change when it grows)
+(function(){ const sc = document.createElement('script'); sc.src = 'singa-script-part14.js'; document.head.appendChild(sc); })();
