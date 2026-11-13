@@ -557,3 +557,6 @@ function nQFit(){
 window.addEventListener('resize', ()=>{ if(ST.screen==='queued') render(); });
 
 render();
+
+// Round 22 on lives in singa-script-part15.js
+(function(){ const sc = document.createElement('script'); sc.src = 'singa-script-part15.js'; document.head.appendChild(sc); })();
